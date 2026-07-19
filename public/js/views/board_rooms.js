@@ -7,7 +7,7 @@ import { toast } from '../app.js';
 
 let MY_GROUPS = [];
 
-export async function renderMiroRooms() {
+export async function renderBoardRooms() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
@@ -94,7 +94,7 @@ async function loadGroups() {
 async function loadList() {
   const root = document.getElementById('mroom-list');
   try {
-    const d = await get('/api/miro/rooms');
+    const d = await get('/api/board/rooms');
     const items = d.items || [];
     if (!items.length) {
       root.innerHTML = '<div class="muted">まだ部屋がないよ。上から作ってみよう。</div>';
@@ -150,7 +150,7 @@ async function createRoom() {
   try {
     const body = { title, description: desc, bg_color: bg, visibility: vis };
     if (vis === 'group') body.owner_group_id = gid;
-    const r = await post('/api/miro/rooms', body);
+    const r = await post('/api/board/rooms', body);
     toast('部屋を作ったよ');
     navigate('/board/rooms/' +r.id);
   } catch (e) {

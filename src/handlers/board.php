@@ -3,79 +3,79 @@
 //   * ラボ全員が全部屋を閲覧・編集可 (LabPay 標準の共有カルチャ)
 //   * 各ノート = カード 2 面 (front/back text+image は共有、side は user ごと個別)
 //   * ドラッグで自由配置、拡大縮小、色変更
-//   * デフォルト色は user_settings.miro_default_color に持つ
+//   * デフォルト色は user_settings.board_default_color に持つ
 //   * ノート内で OpenAI gpt-image-1 (low) で画像生成 → 表 or 裏に差し込み
 //   * 2s poll でリアルタイム更新 (server は since=updated_at で差分返す)
 
 declare(strict_types=1);
 
-const MIRO_MAX_NOTES_PER_ROOM = 500;   // 1 部屋の上限。 miro 実質上限なしだが練習だから
-const MIRO_DEFAULT_COLOR = '#FEF9A8';
-const MIRO_IMAGE_MODEL = 'gpt-image-1';
+const BOARD_MAX_NOTES_PER_ROOM = 500;   // 1 部屋の上限。 miro 実質上限なしだが練習だから
+const BOARD_DEFAULT_COLOR = '#FEF9A8';
+const BOARD_IMAGE_MODEL = 'gpt-image-1';
 
-function route_miro(PDO $pdo, array $cfg, string $method, array $seg): void {
+function route_board(PDO $pdo, array $cfg, string $method, array $seg): void {
     $sub = $seg[1] ?? '';
-    // /api/miro/rooms ...
+    // /api/board/rooms ...
     if ($sub === 'rooms') {
         $id = (int)($seg[2] ?? 0);
-        if ($id === 0 && $method === 'GET')  { miro_rooms_list  ($pdo, $cfg); return; }
-        if ($id === 0 && $method === 'POST') { miro_rooms_create($pdo, $cfg); return; }
+        if ($id === 0 && $method === 'GET')  { board_rooms_list  ($pdo, $cfg); return; }
+        if ($id === 0 && $method === 'POST') { board_rooms_create($pdo, $cfg); return; }
         if ($id > 0) {
             $next = $seg[3] ?? '';
-            if ($next === '' && $method === 'GET')    { miro_room_detail($pdo, $cfg, $id);         return; }
-            if ($next === '' && $method === 'PATCH')  { miro_room_patch ($pdo, $cfg, $id);         return; }
-            if ($next === '' && $method === 'DELETE') { miro_room_archive($pdo, $cfg, $id);        return; }
-            if ($next === 'notes'   && $method === 'GET')  { miro_notes_list  ($pdo, $cfg, $id);   return; }
-            if ($next === 'notes'   && $method === 'POST') { miro_notes_create($pdo, $cfg, $id);   return; }
-            if ($next === 'notes-from-refs' && $method === 'POST') { miro_notes_from_refs($pdo, $cfg, $id); return; }
-            if ($next === 'notes-from-places' && $method === 'POST') { miro_notes_from_places($pdo, $cfg, $id); return; }
-            if ($next === 'updates' && $method === 'GET')  { miro_room_updates($pdo, $cfg, $id);   return; }
-            if ($next === 'cursor'  && $method === 'POST') { miro_cursor_upsert($pdo, $cfg, $id);  return; }
+            if ($next === '' && $method === 'GET')    { board_room_detail($pdo, $cfg, $id);         return; }
+            if ($next === '' && $method === 'PATCH')  { board_room_patch ($pdo, $cfg, $id);         return; }
+            if ($next === '' && $method === 'DELETE') { board_room_archive($pdo, $cfg, $id);        return; }
+            if ($next === 'notes'   && $method === 'GET')  { board_notes_list  ($pdo, $cfg, $id);   return; }
+            if ($next === 'notes'   && $method === 'POST') { board_notes_create($pdo, $cfg, $id);   return; }
+            if ($next === 'notes-from-refs' && $method === 'POST') { board_notes_from_refs($pdo, $cfg, $id); return; }
+            if ($next === 'notes-from-places' && $method === 'POST') { board_notes_from_places($pdo, $cfg, $id); return; }
+            if ($next === 'updates' && $method === 'GET')  { board_room_updates($pdo, $cfg, $id);   return; }
+            if ($next === 'cursor'  && $method === 'POST') { board_cursor_upsert($pdo, $cfg, $id);  return; }
             // v1173 手書き
-            if ($next === 'strokes' && $method === 'GET')  { miro_strokes_list($pdo, $cfg, $id);   return; }
-            if ($next === 'strokes' && $method === 'POST') { miro_stroke_create($pdo, $cfg, $id);  return; }
+            if ($next === 'strokes' && $method === 'GET')  { board_strokes_list($pdo, $cfg, $id);   return; }
+            if ($next === 'strokes' && $method === 'POST') { board_stroke_create($pdo, $cfg, $id);  return; }
         }
     }
-    // /api/miro/notes/{id} ...
+    // /api/board/notes/{id} ...
     if ($sub === 'notes') {
         $id = (int)($seg[2] ?? 0);
         if ($id > 0) {
             $next = $seg[3] ?? '';
-            if ($next === '' && $method === 'PATCH')  { miro_note_patch ($pdo, $cfg, $id);        return; }
-            if ($next === '' && $method === 'DELETE') { miro_note_delete($pdo, $cfg, $id);        return; }
-            if ($next === 'flip'           && $method === 'POST') { miro_note_flip($pdo, $cfg, $id);           return; }
-            if ($next === 'generate-image' && $method === 'POST') { miro_note_generate_image($pdo, $cfg, $id); return; }
+            if ($next === '' && $method === 'PATCH')  { board_note_patch ($pdo, $cfg, $id);        return; }
+            if ($next === '' && $method === 'DELETE') { board_note_delete($pdo, $cfg, $id);        return; }
+            if ($next === 'flip'           && $method === 'POST') { board_note_flip($pdo, $cfg, $id);           return; }
+            if ($next === 'generate-image' && $method === 'POST') { board_note_generate_image($pdo, $cfg, $id); return; }
         }
     }
     // v1173 /api/miro/strokes/{id} DELETE
     if ($sub === 'strokes') {
         $id = (int)($seg[2] ?? 0);
-        if ($id > 0 && $method === 'DELETE') { miro_stroke_delete($pdo, $cfg, $id); return; }
+        if ($id > 0 && $method === 'DELETE') { board_stroke_delete($pdo, $cfg, $id); return; }
     }
-    // /api/miro/default-color — GET/PUT
+    // /api/board/default-color — GET/PUT
     if ($sub === 'default-color') {
-        if ($method === 'GET') { miro_default_color_get($pdo, $cfg); return; }
-        if ($method === 'PUT') { miro_default_color_put($pdo, $cfg); return; }
+        if ($method === 'GET') { board_default_color_get($pdo, $cfg); return; }
+        if ($method === 'PUT') { board_default_color_put($pdo, $cfg); return; }
     }
-    throw new ApiException('not_found', "no miro route for $method $sub", 404);
+    throw new ApiException('not_found', "no board route for $method $sub", 404);
 }
 
 // ─── helpers ─────────────────────────────────────────────────────
 
-function _miro_norm_color(?string $c, string $fallback = MIRO_DEFAULT_COLOR): string {
+function _board_norm_color(?string $c, string $fallback = BOARD_DEFAULT_COLOR): string {
     $c = trim((string)$c);
     if ($c === '') return $fallback;
     if (preg_match('/^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/', $c)) return strtoupper($c);
     return $fallback;
 }
 
-function _miro_room_row(PDO $pdo, int $id): ?array {
+function _board_room_row(PDO $pdo, int $id): ?array {
     $st = $pdo->prepare("SELECT r.id, r.title, r.description, r.bg_color, r.visibility, r.owner_group_id, r.creator_user_id,
                                 r.created_at, r.updated_at, r.archived_at,
                                 u.display_name AS creator_name, u.avatar_url AS creator_avatar,
                                 g.title AS group_title,
-                                (SELECT COUNT(*) FROM miro_notes n WHERE n.room_id = r.id AND n.deleted_at IS NULL) AS note_count
-                           FROM miro_rooms r
+                                (SELECT COUNT(*) FROM board_notes n WHERE n.room_id = r.id AND n.deleted_at IS NULL) AS note_count
+                           FROM board_rooms r
                       LEFT JOIN users u ON u.id = r.creator_user_id
                       LEFT JOIN adhoc_groups g ON g.id = r.owner_group_id
                           WHERE r.id = ?");
@@ -90,7 +90,7 @@ function _miro_room_row(PDO $pdo, int $id): ?array {
 }
 
 // v1110 visibility 判定: この user はこの room を見られるか?
-function _miro_room_visible_to_user(PDO $pdo, array $room, int $uid): bool {
+function _board_room_visible_to_user(PDO $pdo, array $room, int $uid): bool {
     $vis = (string)($room['visibility'] ?? 'lab');
     if ($vis === 'lab')     return true;
     if ($vis === 'private') return (int)$room['creator_user_id'] === $uid;
@@ -109,7 +109,7 @@ function _miro_room_visible_to_user(PDO $pdo, array $room, int $uid): bool {
 // v1108 中村さん指示「隠すと見せる、自分には見えるけど、相手には見えないようにして
 //   欲しい」→ 第 2 引数は「見る側 (requester) の user_id」に。作成者本人には常に見え、
 //   is_hidden の note は他人 (作成者以外) からは隠し (裏) 状態として返す。
-function _miro_note_shape(array $r, int $requesterId): array {
+function _board_note_shape(array $r, int $requesterId): array {
     $creatorId = (int)$r['created_by_user_id'];
     $isMine    = ($creatorId === $requesterId);
     $isHidden  = (int)($r['is_hidden'] ?? 0) === 1;
@@ -142,10 +142,10 @@ function _miro_note_shape(array $r, int $requesterId): array {
     ];
 }
 
-function _miro_load_my_flips(PDO $pdo, int $userId, int $roomId): array {
+function _board_load_my_flips(PDO $pdo, int $userId, int $roomId): array {
     $st = $pdo->prepare("SELECT f.note_id, f.side
-                           FROM miro_note_flips f
-                           JOIN miro_notes n ON n.id = f.note_id
+                           FROM board_note_flips f
+                           JOIN board_notes n ON n.id = f.note_id
                           WHERE n.room_id = ? AND f.user_id = ?");
     $st->execute([$roomId, $userId]);
     $out = [];
@@ -157,8 +157,8 @@ function _miro_load_my_flips(PDO $pdo, int $userId, int $roomId): array {
 
 // ─── rooms ───────────────────────────────────────────────────────
 
-// GET /api/miro/rooms → 自分に見える部屋のみ (visibility フィルタ)
-function miro_rooms_list(PDO $pdo, array $cfg): void {
+// GET /api/board/rooms → 自分に見える部屋のみ (visibility フィルタ)
+function board_rooms_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     // visibility フィルタを SQL レベルで:
@@ -169,8 +169,8 @@ function miro_rooms_list(PDO $pdo, array $cfg): void {
                                 r.created_at, r.updated_at,
                                 u.display_name AS creator_name, u.avatar_url AS creator_avatar,
                                 g.title AS group_title,
-                                (SELECT COUNT(*) FROM miro_notes n WHERE n.room_id = r.id AND n.deleted_at IS NULL) AS note_count
-                           FROM miro_rooms r
+                                (SELECT COUNT(*) FROM board_notes n WHERE n.room_id = r.id AND n.deleted_at IS NULL) AS note_count
+                           FROM board_rooms r
                       LEFT JOIN users u ON u.id = r.creator_user_id
                       LEFT JOIN adhoc_groups g ON g.id = r.owner_group_id
                           WHERE r.archived_at IS NULL
@@ -194,8 +194,8 @@ function miro_rooms_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $items]);
 }
 
-// POST /api/miro/rooms  body: { title, description?, bg_color?, visibility?, owner_group_id? }
-function miro_rooms_create(PDO $pdo, array $cfg): void {
+// POST /api/board/rooms  body: { title, description?, bg_color?, visibility?, owner_group_id? }
+function board_rooms_create(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
     $title = trim((string)($body['title'] ?? ''));
@@ -203,7 +203,7 @@ function miro_rooms_create(PDO $pdo, array $cfg): void {
     if (mb_strlen($title) > 200) $title = mb_substr($title, 0, 200);
     $desc = trim((string)($body['description'] ?? ''));
     if (mb_strlen($desc) > 2000) $desc = mb_substr($desc, 0, 2000);
-    $bg = _miro_norm_color($body['bg_color'] ?? null, '#FAFAFA');
+    $bg = _board_norm_color($body['bg_color'] ?? null, '#FAFAFA');
     // v1110 visibility: lab / group / private
     $vis = (string)($body['visibility'] ?? 'lab');
     if (!in_array($vis, ['lab','group','private'], true)) $vis = 'lab';
@@ -216,37 +216,37 @@ function miro_rooms_create(PDO $pdo, array $cfg): void {
         $mck->execute([$gid, (int)$u['id']]);
         if (!$mck->fetchColumn()) throw new ApiException('forbidden', 'その group のメンバーではありません', 403);
     }
-    $st = $pdo->prepare("INSERT INTO miro_rooms (title, description, bg_color, visibility, owner_group_id, creator_user_id)
+    $st = $pdo->prepare("INSERT INTO board_rooms (title, description, bg_color, visibility, owner_group_id, creator_user_id)
                          VALUES (?, ?, ?, ?, ?, ?)");
     $st->execute([$title, $desc ?: null, $bg, $vis, $gid, (int)$u['id']]);
     $id = (int)$pdo->lastInsertId();
-    json_response(['id' => $id, 'room' => _miro_room_row($pdo, $id)]);
+    json_response(['id' => $id, 'room' => _board_room_row($pdo, $id)]);
 }
 
-function miro_room_detail(PDO $pdo, array $cfg, int $id): void {
+function board_room_detail(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $room = _miro_room_row($pdo, $id);
+    $room = _board_room_row($pdo, $id);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
-    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+    if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
         throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
     }
     // notes 一括 (作成者名を LEFT JOIN で拾って shape に渡す)
     $st = $pdo->prepare("SELECT n.*, u.display_name AS creator_name
-                           FROM miro_notes n
+                           FROM board_notes n
                       LEFT JOIN users u ON u.id = n.created_by_user_id
                           WHERE n.room_id = ? AND n.deleted_at IS NULL ORDER BY n.id ASC");
     $st->execute([$id]);
     $notes = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        $notes[] = _miro_note_shape($r, (int)$u['id']);
+        $notes[] = _board_note_shape($r, (int)$u['id']);
     }
     // 自分のデフォルト色
-    $defColor = _miro_default_color_of_user($pdo, (int)$u['id']);
+    $defColor = _board_default_color_of_user($pdo, (int)$u['id']);
     // v1104 他人カーソル (最終 15 秒)
     $cur = $pdo->prepare("SELECT c.user_id, c.x, c.y,
                                  UNIX_TIMESTAMP(c.updated_at) AS ts,
                                  u.display_name AS name, u.avatar_url AS avatar
-                            FROM miro_cursors c JOIN users u ON u.id = c.user_id
+                            FROM board_cursors c JOIN users u ON u.id = c.user_id
                            WHERE c.room_id = ? AND c.user_id != ?
                              AND c.updated_at > (NOW(3) - INTERVAL 15 SECOND)");
     $cur->execute([$id, (int)$u['id']]);
@@ -262,7 +262,7 @@ function miro_room_detail(PDO $pdo, array $cfg, int $id): void {
         ];
     }
     // v1173 手書きストローク一括
-    $strokes = _miro_load_strokes($pdo, $id);
+    $strokes = _board_load_strokes($pdo, $id);
     json_response([
         'room'          => $room,
         'notes'         => $notes,
@@ -273,9 +273,9 @@ function miro_room_detail(PDO $pdo, array $cfg, int $id): void {
     ]);
 }
 
-function _miro_load_strokes(PDO $pdo, int $roomId): array {
+function _board_load_strokes(PDO $pdo, int $roomId): array {
     $st = $pdo->prepare("SELECT id, points_json, color, width, created_by_user_id, created_at
-                           FROM miro_strokes
+                           FROM board_strokes
                           WHERE room_id = ? AND deleted_at IS NULL
                           ORDER BY id ASC");
     $st->execute([$roomId]);
@@ -295,21 +295,21 @@ function _miro_load_strokes(PDO $pdo, int $roomId): array {
     return $out;
 }
 
-function miro_strokes_list(PDO $pdo, array $cfg, int $roomId): void {
+function board_strokes_list(PDO $pdo, array $cfg, int $roomId): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $room = _miro_room_row($pdo, $roomId);
+    $room = _board_room_row($pdo, $roomId);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
-    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+    if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
         throw new ApiException('forbidden', '権限なし', 403);
     }
-    json_response(['strokes' => _miro_load_strokes($pdo, $roomId)]);
+    json_response(['strokes' => _board_load_strokes($pdo, $roomId)]);
 }
 
-function miro_stroke_create(PDO $pdo, array $cfg, int $roomId): void {
+function board_stroke_create(PDO $pdo, array $cfg, int $roomId): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $room = _miro_room_row($pdo, $roomId);
+    $room = _board_room_row($pdo, $roomId);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
-    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+    if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
         throw new ApiException('forbidden', '権限なし', 403);
     }
     $body = read_json_body();
@@ -330,13 +330,13 @@ function miro_stroke_create(PDO $pdo, array $cfg, int $roomId): void {
         $clean[] = ['x' => $x, 'y' => $y];
     }
     if (count($clean) < 2) throw new ApiException('bad_request', 'valid points が 2 点未満', 400);
-    $color = _miro_norm_color((string)($body['color'] ?? '#111827'), '#111827');
+    $color = _board_norm_color((string)($body['color'] ?? '#111827'), '#111827');
     $width = isset($body['width']) ? max(0.5, min(20.0, (float)$body['width'])) : 2.0;
-    $ins = $pdo->prepare("INSERT INTO miro_strokes (room_id, points_json, color, width, created_by_user_id)
+    $ins = $pdo->prepare("INSERT INTO board_strokes (room_id, points_json, color, width, created_by_user_id)
                           VALUES (?, ?, ?, ?, ?)");
     $ins->execute([$roomId, json_encode($clean), $color, $width, (int)$u['id']]);
     $sid = (int)$pdo->lastInsertId();
-    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
     json_response([
         'ok'                 => true,
         'stroke' => [
@@ -350,30 +350,30 @@ function miro_stroke_create(PDO $pdo, array $cfg, int $roomId): void {
     ]);
 }
 
-function miro_stroke_delete(PDO $pdo, array $cfg, int $strokeId): void {
+function board_stroke_delete(PDO $pdo, array $cfg, int $strokeId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $st = $pdo->prepare("SELECT s.id, s.room_id, s.created_by_user_id
-                           FROM miro_strokes s
+                           FROM board_strokes s
                           WHERE s.id = ? AND s.deleted_at IS NULL");
     $st->execute([$strokeId]);
     $s = $st->fetch(PDO::FETCH_ASSOC);
     if (!$s) throw new ApiException('not_found', 'stroke なし', 404);
-    $room = _miro_room_row($pdo, (int)$s['room_id']);
+    $room = _board_room_row($pdo, (int)$s['room_id']);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
-    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+    if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
         throw new ApiException('forbidden', '権限なし', 403);
     }
     // 削除は 作成者 or admin or room 参加者 (共同編集 モデル)
-    $pdo->prepare("UPDATE miro_strokes SET deleted_at = NOW() WHERE id = ?")->execute([$strokeId]);
-    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$s['room_id']]);
+    $pdo->prepare("UPDATE board_strokes SET deleted_at = NOW() WHERE id = ?")->execute([$strokeId]);
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$s['room_id']]);
     json_response(['ok' => true]);
 }
 
-function miro_room_patch(PDO $pdo, array $cfg, int $id): void {
+function board_room_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $r = _miro_room_row($pdo, $id);
+    $r = _board_room_row($pdo, $id);
     if (!$r) throw new ApiException('not_found', 'room なし', 404);
-    if (!_miro_room_visible_to_user($pdo, $r, (int)$u['id'])) {
+    if (!_board_room_visible_to_user($pdo, $r, (int)$u['id'])) {
         throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
     }
     $body = read_json_body();
@@ -390,7 +390,7 @@ function miro_room_patch(PDO $pdo, array $cfg, int $id): void {
         $sets[] = 'description = ?'; $params[] = $d ?: null;
     }
     if (array_key_exists('bg_color', $body)) {
-        $sets[] = 'bg_color = ?'; $params[] = _miro_norm_color((string)$body['bg_color'], '#FAFAFA');
+        $sets[] = 'bg_color = ?'; $params[] = _board_norm_color((string)$body['bg_color'], '#FAFAFA');
     }
     // v1110 visibility 切替は作成者のみ
     if (array_key_exists('visibility', $body)) {
@@ -412,30 +412,30 @@ function miro_room_patch(PDO $pdo, array $cfg, int $id): void {
     }
     if (!$sets) { json_response(['ok' => true]); return; }
     $params[] = $id;
-    $pdo->prepare("UPDATE miro_rooms SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
-    json_response(['ok' => true, 'room' => _miro_room_row($pdo, $id)]);
+    $pdo->prepare("UPDATE board_rooms SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
+    json_response(['ok' => true, 'room' => _board_room_row($pdo, $id)]);
 }
 
-function miro_room_archive(PDO $pdo, array $cfg, int $id): void {
+function board_room_archive(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $r = _miro_room_row($pdo, $id);
+    $r = _board_room_row($pdo, $id);
     if (!$r) throw new ApiException('not_found', 'room なし', 404);
     // 誰でも削除だと事故なので、作成者 or admin
     $isAdmin = (string)($u['role'] ?? '') === 'admin';
     if ((int)$r['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
         throw new ApiException('forbidden', '作成者 or admin のみアーカイブ可能', 403);
     }
-    $pdo->prepare("UPDATE miro_rooms SET archived_at = NOW() WHERE id = ?")->execute([$id]);
+    $pdo->prepare("UPDATE board_rooms SET archived_at = NOW() WHERE id = ?")->execute([$id]);
     json_response(['ok' => true]);
 }
 
-// GET /api/miro/rooms/{id}/updates?since=YYYY-MM-DD%20HH:MM:SS
+// GET /api/board/rooms/{id}/updates?since=YYYY-MM-DD%20HH:MM:SS
 //   → 差分 (updated_at > since の notes + 全削除済 id)
-function miro_room_updates(PDO $pdo, array $cfg, int $id): void {
+function board_room_updates(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $room = _miro_room_row($pdo, $id);
+    $room = _board_room_row($pdo, $id);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
-    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+    if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
         throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
     }
     $since = (string)($_GET['since'] ?? '1970-01-01 00:00:00');
@@ -444,7 +444,7 @@ function miro_room_updates(PDO $pdo, array $cfg, int $id): void {
     }
     // 更新/新規 (deleted 含む)
     $st = $pdo->prepare("SELECT n.*, u.display_name AS creator_name
-                           FROM miro_notes n
+                           FROM board_notes n
                       LEFT JOIN users u ON u.id = n.created_by_user_id
                           WHERE n.room_id = ? AND n.updated_at > ? ORDER BY n.id ASC");
     $st->execute([$id, $since]);
@@ -453,14 +453,14 @@ function miro_room_updates(PDO $pdo, array $cfg, int $id): void {
         if ($r['deleted_at'] !== null) {
             $deletes[] = (int)$r['id'];
         } else {
-            $upserts[] = _miro_note_shape($r, (int)$u['id']);
+            $upserts[] = _board_note_shape($r, (int)$u['id']);
         }
     }
     // v1104 他人のカーソル (最終 15 秒以内、自分は除外)
     $cur = $pdo->prepare("SELECT c.user_id, c.x, c.y,
                                  UNIX_TIMESTAMP(c.updated_at) AS ts,
                                  u.display_name AS name, u.avatar_url AS avatar
-                            FROM miro_cursors c JOIN users u ON u.id = c.user_id
+                            FROM board_cursors c JOIN users u ON u.id = c.user_id
                            WHERE c.room_id = ? AND c.user_id != ?
                              AND c.updated_at > (NOW(3) - INTERVAL 15 SECOND)");
     $cur->execute([$id, (int)$u['id']]);
@@ -477,7 +477,7 @@ function miro_room_updates(PDO $pdo, array $cfg, int $id): void {
     }
     // v1173 手書きストローク: since より新しい (or 削除) を返す
     $stS = $pdo->prepare("SELECT id, points_json, color, width, created_by_user_id, created_at, deleted_at
-                            FROM miro_strokes
+                            FROM board_strokes
                            WHERE room_id = ? AND created_at > ?");
     $stS->execute([$id, $since]);
     $strokeUpserts = []; $strokeDeletes = [];
@@ -498,7 +498,7 @@ function miro_room_updates(PDO $pdo, array $cfg, int $id): void {
         }
     }
     // 削除された古いストローク (deleted_at > since) も検出
-    $stD = $pdo->prepare("SELECT id FROM miro_strokes WHERE room_id = ? AND deleted_at IS NOT NULL AND deleted_at > ? AND created_at <= ?");
+    $stD = $pdo->prepare("SELECT id FROM board_strokes WHERE room_id = ? AND deleted_at IS NOT NULL AND deleted_at > ? AND created_at <= ?");
     $stD->execute([$id, $since, $since]);
     foreach ($stD->fetchAll(PDO::FETCH_COLUMN) as $sid) $strokeDeletes[] = (int)$sid;
     json_response([
@@ -512,20 +512,20 @@ function miro_room_updates(PDO $pdo, array $cfg, int $id): void {
     ]);
 }
 
-// POST /api/miro/rooms/{id}/cursor  body: { x, y }
+// POST /api/board/rooms/{id}/cursor  body: { x, y }
 //   自分のカーソル位置 (world 座標) を upsert。 room_updated_at は bump しない。
-function miro_cursor_upsert(PDO $pdo, array $cfg, int $roomId): void {
+function board_cursor_upsert(PDO $pdo, array $cfg, int $roomId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
     $x = (float)($body['x'] ?? 0);
     $y = (float)($body['y'] ?? 0);
     // v1110 visibility 確認 (部屋自体が見えない相手には位置報告もさせない)
-    $room = _miro_room_row($pdo, $roomId);
+    $room = _board_room_row($pdo, $roomId);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
-    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+    if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
         throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
     }
-    $pdo->prepare("INSERT INTO miro_cursors (room_id, user_id, x, y) VALUES (?, ?, ?, ?)
+    $pdo->prepare("INSERT INTO board_cursors (room_id, user_id, x, y) VALUES (?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y), updated_at = CURRENT_TIMESTAMP(3)")
         ->execute([$roomId, (int)$u['id'], $x, $y]);
     // 空応答 (呼び出し側は捨てる)
@@ -534,50 +534,50 @@ function miro_cursor_upsert(PDO $pdo, array $cfg, int $roomId): void {
 
 // ─── notes ───────────────────────────────────────────────────────
 
-// GET /api/miro/rooms/{id}/notes (詳細と同じ、便宜用)
-function miro_notes_list(PDO $pdo, array $cfg, int $roomId): void {
-    miro_room_detail($pdo, $cfg, $roomId);
+// GET /api/board/rooms/{id}/notes (詳細と同じ、便宜用)
+function board_notes_list(PDO $pdo, array $cfg, int $roomId): void {
+    board_room_detail($pdo, $cfg, $roomId);
 }
 
-// POST /api/miro/rooms/{id}/notes  body: { x?, y?, color?, front_text?, width?, height? }
-function miro_notes_create(PDO $pdo, array $cfg, int $roomId): void {
+// POST /api/board/rooms/{id}/notes  body: { x?, y?, color?, front_text?, width?, height? }
+function board_notes_create(PDO $pdo, array $cfg, int $roomId): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $room = _miro_room_row($pdo, $roomId);
+    $room = _board_room_row($pdo, $roomId);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
-    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+    if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
         throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
     }
     // 上限チェック
-    $cnt = (int)$pdo->query("SELECT COUNT(*) FROM miro_notes WHERE room_id = " . (int)$roomId . " AND deleted_at IS NULL")->fetchColumn();
-    if ($cnt >= MIRO_MAX_NOTES_PER_ROOM) {
-        throw new ApiException('bad_request', 'この部屋は上限 ' . MIRO_MAX_NOTES_PER_ROOM . ' 枚に達しています', 400);
+    $cnt = (int)$pdo->query("SELECT COUNT(*) FROM board_notes WHERE room_id = " . (int)$roomId . " AND deleted_at IS NULL")->fetchColumn();
+    if ($cnt >= BOARD_MAX_NOTES_PER_ROOM) {
+        throw new ApiException('bad_request', 'この部屋は上限 ' . BOARD_MAX_NOTES_PER_ROOM . ' 枚に達しています', 400);
     }
     $body = read_json_body();
     $x = (float)($body['x'] ?? 0);
     $y = (float)($body['y'] ?? 0);
     $w = max(80.0, min(1200.0, (float)($body['width']  ?? 220)));
     $h = max(80.0, min(1200.0, (float)($body['height'] ?? 220)));
-    $color = _miro_norm_color($body['color'] ?? null, _miro_default_color_of_user($pdo, (int)$u['id']));
+    $color = _board_norm_color($body['color'] ?? null, _board_default_color_of_user($pdo, (int)$u['id']));
     $frontText = trim((string)($body['front_text'] ?? ''));
     if (mb_strlen($frontText) > 4000) $frontText = mb_substr($frontText, 0, 4000);
-    $z = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM miro_notes WHERE room_id = " . (int)$roomId)->fetchColumn() + 1;
-    $st = $pdo->prepare("INSERT INTO miro_notes
+    $z = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM board_notes WHERE room_id = " . (int)$roomId)->fetchColumn() + 1;
+    $st = $pdo->prepare("INSERT INTO board_notes
         (room_id, x, y, width, height, color, front_text, z_index, created_by_user_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $st->execute([$roomId, $x, $y, $w, $h, $color, $frontText ?: null, $z, (int)$u['id']]);
     $id = (int)$pdo->lastInsertId();
     // 部屋の updated_at を bump (poll 側の部屋更新判定用)
-    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
-    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
+    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM board_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
     $rr->execute([$id]);
     $note = $rr->fetch(PDO::FETCH_ASSOC);
-    json_response(['id' => $id, 'note' => _miro_note_shape($note, (int)$u['id'])]);
+    json_response(['id' => $id, 'note' => _board_note_shape($note, (int)$u['id'])]);
 }
 
-// PATCH /api/miro/notes/{id}  body: { x?, y?, width?, height?, rotation?, color?, front_text?, back_text?, is_hidden?, z_bump? }
-function miro_note_patch(PDO $pdo, array $cfg, int $id): void {
+// PATCH /api/board/notes/{id}  body: { x?, y?, width?, height?, rotation?, color?, front_text?, back_text?, is_hidden?, z_bump? }
+function board_note_patch(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT * FROM miro_notes WHERE id = ? AND deleted_at IS NULL");
+    $st = $pdo->prepare("SELECT * FROM board_notes WHERE id = ? AND deleted_at IS NULL");
     $st->execute([$id]);
     $n = $st->fetch(PDO::FETCH_ASSOC);
     if (!$n) throw new ApiException('not_found', 'note なし', 404);
@@ -604,7 +604,7 @@ function miro_note_patch(PDO $pdo, array $cfg, int $id): void {
         $sets[] = 'rotation = ?'; $params[] = fmod((float)$body['rotation'], 360.0);
     }
     if (array_key_exists('color', $body)) {
-        $sets[] = 'color = ?'; $params[] = _miro_norm_color((string)$body['color']);
+        $sets[] = 'color = ?'; $params[] = _board_norm_color((string)$body['color']);
     }
     foreach (['front_text','back_text'] as $k) {
         if (array_key_exists($k, $body)) {
@@ -620,36 +620,36 @@ function miro_note_patch(PDO $pdo, array $cfg, int $id): void {
         $sets[] = 'back_image_url = ?'; $params[] = $body['back_image_url'] ?: null;
     }
     if (!empty($body['z_bump'])) {
-        $z = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM miro_notes WHERE room_id = " . (int)$n['room_id'])->fetchColumn() + 1;
+        $z = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM board_notes WHERE room_id = " . (int)$n['room_id'])->fetchColumn() + 1;
         $sets[] = 'z_index = ?'; $params[] = $z;
     }
     if (!$sets) { json_response(['ok' => true]); return; }
     $params[] = $id;
-    $pdo->prepare("UPDATE miro_notes SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
+    $pdo->prepare("UPDATE board_notes SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
     // 部屋の updated_at を bump
-    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$n['room_id']]);
-    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$n['room_id']]);
+    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM board_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
     $rr->execute([$id]);
-    json_response(['ok' => true, 'note' => _miro_note_shape($rr->fetch(PDO::FETCH_ASSOC), (int)$u['id'])]);
+    json_response(['ok' => true, 'note' => _board_note_shape($rr->fetch(PDO::FETCH_ASSOC), (int)$u['id'])]);
 }
 
-function miro_note_delete(PDO $pdo, array $cfg, int $id): void {
+function board_note_delete(PDO $pdo, array $cfg, int $id): void {
     Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT room_id FROM miro_notes WHERE id = ? AND deleted_at IS NULL");
+    $st = $pdo->prepare("SELECT room_id FROM board_notes WHERE id = ? AND deleted_at IS NULL");
     $st->execute([$id]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if (!$r) throw new ApiException('not_found', 'note なし', 404);
-    $pdo->prepare("UPDATE miro_notes SET deleted_at = NOW(), updated_at = NOW() WHERE id = ?")->execute([$id]);
-    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$r['room_id']]);
+    $pdo->prepare("UPDATE board_notes SET deleted_at = NOW(), updated_at = NOW() WHERE id = ?")->execute([$id]);
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$r['room_id']]);
     json_response(['ok' => true]);
 }
 
-// POST /api/miro/notes/{id}/flip  → 自分の side をトグル (1↔2)
+// POST /api/board/notes/{id}/flip  → 自分の side をトグル (1↔2)
 // v1108 /flip は per-user 状態から per-note is_hidden トグルに転換。
 //   作成者本人だけが叩ける (403 それ以外)。更新後の note を返す。
-function miro_note_flip(PDO $pdo, array $cfg, int $id): void {
+function board_note_flip(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $st = $pdo->prepare("SELECT id, room_id, created_by_user_id, is_hidden FROM miro_notes WHERE id = ? AND deleted_at IS NULL");
+    $st = $pdo->prepare("SELECT id, room_id, created_by_user_id, is_hidden FROM board_notes WHERE id = ? AND deleted_at IS NULL");
     $st->execute([$id]);
     $n = $st->fetch(PDO::FETCH_ASSOC);
     if (!$n) throw new ApiException('not_found', 'note なし', 404);
@@ -657,52 +657,52 @@ function miro_note_flip(PDO $pdo, array $cfg, int $id): void {
         throw new ApiException('forbidden', '隠す / 見せるは作成者本人だけ', 403);
     }
     $next = ((int)$n['is_hidden'] === 1) ? 0 : 1;
-    $pdo->prepare("UPDATE miro_notes SET is_hidden = ?, updated_at = NOW() WHERE id = ?")->execute([$next, $id]);
+    $pdo->prepare("UPDATE board_notes SET is_hidden = ?, updated_at = NOW() WHERE id = ?")->execute([$next, $id]);
     // 部屋の updated_at も bump (poll で他人が拾えるように)
-    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$n['room_id']]);
-    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$n['room_id']]);
+    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM board_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
     $rr->execute([$id]);
-    json_response(['ok' => true, 'note' => _miro_note_shape($rr->fetch(PDO::FETCH_ASSOC), (int)$u['id'])]);
+    json_response(['ok' => true, 'note' => _board_note_shape($rr->fetch(PDO::FETCH_ASSOC), (int)$u['id'])]);
 }
 
 // ─── default color (user_settings) ─────────────────────────────
 
-function _miro_default_color_of_user(PDO $pdo, int $userId): string {
-    $st = $pdo->prepare("SELECT v FROM user_settings WHERE user_id = ? AND k = 'miro_default_color'");
+function _board_default_color_of_user(PDO $pdo, int $userId): string {
+    $st = $pdo->prepare("SELECT v FROM user_settings WHERE user_id = ? AND k = 'board_default_color'");
     $st->execute([$userId]);
     $v = $st->fetchColumn();
-    if ($v === false || $v === null) return MIRO_DEFAULT_COLOR;
+    if ($v === false || $v === null) return BOARD_DEFAULT_COLOR;
     $decoded = json_decode((string)$v, true);
     $c = is_string($decoded) ? $decoded : (string)$v;
-    return _miro_norm_color($c);
+    return _board_norm_color($c);
 }
 
-function miro_default_color_get(PDO $pdo, array $cfg): void {
+function board_default_color_get(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
-    json_response(['color' => _miro_default_color_of_user($pdo, (int)$u['id'])]);
+    json_response(['color' => _board_default_color_of_user($pdo, (int)$u['id'])]);
 }
 
-function miro_default_color_put(PDO $pdo, array $cfg): void {
+function board_default_color_put(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
-    $c = _miro_norm_color((string)($body['color'] ?? ''));
-    $pdo->prepare("INSERT INTO user_settings (user_id, k, v) VALUES (?, 'miro_default_color', ?)
+    $c = _board_norm_color((string)($body['color'] ?? ''));
+    $pdo->prepare("INSERT INTO user_settings (user_id, k, v) VALUES (?, 'board_default_color', ?)
                     ON DUPLICATE KEY UPDATE v = VALUES(v), updated_at = NOW()")
         ->execute([(int)$u['id'], json_encode($c)]);
     json_response(['ok' => true, 'color' => $c]);
 }
 
 // ─── v1110 refs → miro note の一括展開 ─────────────────────────
-// POST /api/miro/rooms/{roomId}/notes-from-refs
+// POST /api/board/rooms/{roomId}/notes-from-refs
 //   body: { ref_ids: [int,...], center_x?: number, center_y?: number }
 //   → 各 ref から front_text を組み立てて note を生成、center 付近にグリッド配置。
 //     配置: 220x220 + 20px gap、cols = ceil(sqrt(N))、self default color、
 //     front_text = "Title\n\nAuthor+ (Year) VenueShort"
-function miro_notes_from_refs(PDO $pdo, array $cfg, int $roomId): void {
+function board_notes_from_refs(PDO $pdo, array $cfg, int $roomId): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $room = _miro_room_row($pdo, $roomId);
+    $room = _board_room_row($pdo, $roomId);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
-    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+    if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
         throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
     }
     $body = read_json_body();
@@ -712,9 +712,9 @@ function miro_notes_from_refs(PDO $pdo, array $cfg, int $roomId): void {
     if (!$ids) throw new ApiException('bad_request', 'ref_ids 必要', 400);
     if (count($ids) > 50) throw new ApiException('bad_request', '一度に貼れるのは 50 本まで', 400);
     // 上限
-    $existing = (int)$pdo->query("SELECT COUNT(*) FROM miro_notes WHERE room_id = " . (int)$roomId . " AND deleted_at IS NULL")->fetchColumn();
-    if ($existing + count($ids) > MIRO_MAX_NOTES_PER_ROOM) {
-        throw new ApiException('bad_request', 'この部屋の note 上限 ' . MIRO_MAX_NOTES_PER_ROOM . ' を超えます', 400);
+    $existing = (int)$pdo->query("SELECT COUNT(*) FROM board_notes WHERE room_id = " . (int)$roomId . " AND deleted_at IS NULL")->fetchColumn();
+    if ($existing + count($ids) > BOARD_MAX_NOTES_PER_ROOM) {
+        throw new ApiException('bad_request', 'この部屋の note 上限 ' . BOARD_MAX_NOTES_PER_ROOM . ' を超えます', 400);
     }
     $cx = isset($body['center_x']) ? (float)$body['center_x'] : 0.0;
     $cy = isset($body['center_y']) ? (float)$body['center_y'] : 0.0;
@@ -729,7 +729,7 @@ function miro_notes_from_refs(PDO $pdo, array $cfg, int $roomId): void {
     $ordered = [];
     foreach ($ids as $id) if (isset($refs[$id])) $ordered[] = $refs[$id];
 
-    $defColor = _miro_default_color_of_user($pdo, (int)$u['id']);
+    $defColor = _board_default_color_of_user($pdo, (int)$u['id']);
     $W = 240; $H = 220; $GAP = 20;
     $cols = max(1, (int)ceil(sqrt(count($ordered))));
     $rows = (int)ceil(count($ordered) / $cols);
@@ -738,9 +738,9 @@ function miro_notes_from_refs(PDO $pdo, array $cfg, int $roomId): void {
     $x0 = $cx - $totalW / 2;
     $y0 = $cy - $totalH / 2;
 
-    $zBase = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM miro_notes WHERE room_id = " . (int)$roomId)->fetchColumn();
+    $zBase = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM board_notes WHERE room_id = " . (int)$roomId)->fetchColumn();
     // v1171 link_url に refs 詳細ページへのハッシュリンクを保存 (Miro UI 側で 🔗 コーナー表示)
-    $ins = $pdo->prepare("INSERT INTO miro_notes
+    $ins = $pdo->prepare("INSERT INTO board_notes
         (room_id, x, y, width, height, color, front_text, link_url, z_index, created_by_user_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $createdIds = [];
@@ -749,22 +749,22 @@ function miro_notes_from_refs(PDO $pdo, array $cfg, int $roomId): void {
         $row = intdiv($i, $cols);
         $x = $x0 + $col * ($W + $GAP);
         $y = $y0 + $row * ($H + $GAP);
-        $frontText = _miro_ref_to_note_text($r);
+        $frontText = _board_ref_to_note_text($r);
         $z = $zBase + $i + 1;
         $linkUrl = '#/refs/' . (int)$r['id'];
         $ins->execute([$roomId, $x, $y, $W, $H, $defColor, $frontText ?: null, $linkUrl, $z, (int)$u['id']]);
         $createdIds[] = (int)$pdo->lastInsertId();
     }
-    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
     // 作成した note を返す
     $out = [];
     if ($createdIds) {
         $place2 = implode(',', array_fill(0, count($createdIds), '?'));
         $q = $pdo->prepare("SELECT n.*, u.display_name AS creator_name
-                              FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id
+                              FROM board_notes n LEFT JOIN users u ON u.id = n.created_by_user_id
                              WHERE n.id IN ($place2)");
         $q->execute($createdIds);
-        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) $out[] = _miro_note_shape($r, (int)$u['id']);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) $out[] = _board_note_shape($r, (int)$u['id']);
     }
     json_response(['ok' => true, 'created' => count($createdIds), 'notes' => $out]);
 }
@@ -773,11 +773,11 @@ function miro_notes_from_refs(PDO $pdo, array $cfg, int $roomId): void {
 //   places (食べある記) から 選んだ 場所 を miro ノート として 貼付。 image が 主役 な ので
 //   cover_image_thumb を front_image_url に、 name (と 任意で category) を front_text に、
 //   link_url は #/places/{id} に。 サイズ は 少し 大きめ (画像 主体)。
-function miro_notes_from_places(PDO $pdo, array $cfg, int $roomId): void {
+function board_notes_from_places(PDO $pdo, array $cfg, int $roomId): void {
     $u = Auth::requireUser($pdo, $cfg);
-    $room = _miro_room_row($pdo, $roomId);
+    $room = _board_room_row($pdo, $roomId);
     if (!$room) throw new ApiException('not_found', 'room なし', 404);
-    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+    if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
         throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
     }
     $body = read_json_body();
@@ -786,9 +786,9 @@ function miro_notes_from_places(PDO $pdo, array $cfg, int $roomId): void {
     $ids = array_values(array_unique($ids));
     if (!$ids) throw new ApiException('bad_request', 'place_ids 必要', 400);
     if (count($ids) > 50) throw new ApiException('bad_request', '一度に貼れるのは 50 件まで', 400);
-    $existing = (int)$pdo->query("SELECT COUNT(*) FROM miro_notes WHERE room_id = " . (int)$roomId . " AND deleted_at IS NULL")->fetchColumn();
-    if ($existing + count($ids) > MIRO_MAX_NOTES_PER_ROOM) {
-        throw new ApiException('bad_request', 'この部屋の note 上限 ' . MIRO_MAX_NOTES_PER_ROOM . ' を超えます', 400);
+    $existing = (int)$pdo->query("SELECT COUNT(*) FROM board_notes WHERE room_id = " . (int)$roomId . " AND deleted_at IS NULL")->fetchColumn();
+    if ($existing + count($ids) > BOARD_MAX_NOTES_PER_ROOM) {
+        throw new ApiException('bad_request', 'この部屋の note 上限 ' . BOARD_MAX_NOTES_PER_ROOM . ' を超えます', 400);
     }
     $cx = isset($body['center_x']) ? (float)$body['center_x'] : 0.0;
     $cy = isset($body['center_y']) ? (float)$body['center_y'] : 0.0;
@@ -808,7 +808,7 @@ function miro_notes_from_places(PDO $pdo, array $cfg, int $roomId): void {
     $ordered = [];
     foreach ($ids as $id) if (isset($places[$id])) $ordered[] = $places[$id];
 
-    $defColor = _miro_default_color_of_user($pdo, (int)$u['id']);
+    $defColor = _board_default_color_of_user($pdo, (int)$u['id']);
     // 画像 主体 なので 少し 大きめ の 正方形
     $W = 260; $H = 260; $GAP = 20;
     $cols = max(1, (int)ceil(sqrt(count($ordered))));
@@ -818,8 +818,8 @@ function miro_notes_from_places(PDO $pdo, array $cfg, int $roomId): void {
     $x0 = $cx - $totalW / 2;
     $y0 = $cy - $totalH / 2;
 
-    $zBase = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM miro_notes WHERE room_id = " . (int)$roomId)->fetchColumn();
-    $ins = $pdo->prepare("INSERT INTO miro_notes
+    $zBase = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM board_notes WHERE room_id = " . (int)$roomId)->fetchColumn();
+    $ins = $pdo->prepare("INSERT INTO board_notes
         (room_id, x, y, width, height, color, front_text, front_image_url, link_url, z_index, created_by_user_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $createdIds = [];
@@ -837,22 +837,22 @@ function miro_notes_from_places(PDO $pdo, array $cfg, int $roomId): void {
         $ins->execute([$roomId, $x, $y, $W, $H, $defColor, $t ?: null, $img ?: null, $linkUrl, $z, (int)$u['id']]);
         $createdIds[] = (int)$pdo->lastInsertId();
     }
-    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
     $out = [];
     if ($createdIds) {
         $place2 = implode(',', array_fill(0, count($createdIds), '?'));
         $q = $pdo->prepare("SELECT n.*, u.display_name AS creator_name
-                              FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id
+                              FROM board_notes n LEFT JOIN users u ON u.id = n.created_by_user_id
                              WHERE n.id IN ($place2)");
         $q->execute($createdIds);
-        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) $out[] = _miro_note_shape($r, (int)$u['id']);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) $out[] = _board_note_shape($r, (int)$u['id']);
     }
     json_response(['ok' => true, 'created' => count($createdIds), 'notes' => $out]);
 }
 
 // venue 省略化: "Proceedings of the CHI Conference..." → "CHI"、
 //   "ACM Transactions on Graphics" → "ACM TOG" 相当を簡易ルールで。
-function _miro_shorten_venue(?string $v): string {
+function _board_shorten_venue(?string $v): string {
     $v = trim((string)$v);
     if ($v === '') return '';
     $short = $v;
@@ -875,7 +875,7 @@ function _miro_shorten_venue(?string $v): string {
     return $short;
 }
 
-function _miro_ref_to_note_text(array $r): string {
+function _board_ref_to_note_text(array $r): string {
     $title = trim((string)($r['title'] ?? ''));
     if (mb_strlen($title) > 140) $title = mb_substr($title, 0, 137) . '…';
     $authors = json_decode((string)($r['authors_json'] ?? '[]'), true);
@@ -893,7 +893,7 @@ function _miro_ref_to_note_text(array $r): string {
         if ($n > 1) $first .= '+';
     }
     $year = !empty($r['year']) ? (int)$r['year'] : null;
-    $venue = _miro_shorten_venue($r['venue'] ?? null);
+    $venue = _board_shorten_venue($r['venue'] ?? null);
     $meta = [];
     if ($first !== '') $meta[] = $first;
     if ($year)         $meta[] = '(' . $year . ')';
@@ -904,13 +904,13 @@ function _miro_ref_to_note_text(array $r): string {
 
 // ─── image generation (OpenAI gpt-image-1) ─────────────────────
 
-// POST /api/miro/notes/{id}/generate-image  body: { prompt, side: 'front'|'back' (default 'front') }
-function miro_note_generate_image(PDO $pdo, array $cfg, int $id): void {
+// POST /api/board/notes/{id}/generate-image  body: { prompt, side: 'front'|'back' (default 'front') }
+function board_note_generate_image(PDO $pdo, array $cfg, int $id): void {
     $u = Auth::requireUser($pdo, $cfg);
     if (empty($cfg['openai']['api_key'])) {
         throw new ApiException('server_error', 'OpenAI API key 未設定', 500);
     }
-    $st = $pdo->prepare("SELECT id, room_id FROM miro_notes WHERE id = ? AND deleted_at IS NULL");
+    $st = $pdo->prepare("SELECT id, room_id FROM board_notes WHERE id = ? AND deleted_at IS NULL");
     $st->execute([$id]);
     $n = $st->fetch(PDO::FETCH_ASSOC);
     if (!$n) throw new ApiException('not_found', 'note なし', 404);
@@ -922,7 +922,7 @@ function miro_note_generate_image(PDO $pdo, array $cfg, int $id): void {
 
     // OpenAI Images API (gpt-image-1)
     $payload = json_encode([
-        'model'   => MIRO_IMAGE_MODEL,
+        'model'   => BOARD_IMAGE_MODEL,
         'prompt'  => $prompt,
         'n'       => 1,
         'size'    => '1024x1024',
@@ -963,16 +963,16 @@ function miro_note_generate_image(PDO $pdo, array $cfg, int $id): void {
 
     // ノートに反映
     $col = $side === 'back' ? 'back_image_url' : 'front_image_url';
-    $pdo->prepare("UPDATE miro_notes SET {$col} = ?, updated_at = NOW() WHERE id = ?")->execute([$rel, $id]);
-    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$n['room_id']]);
+    $pdo->prepare("UPDATE board_notes SET {$col} = ?, updated_at = NOW() WHERE id = ?")->execute([$rel, $id]);
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$n['room_id']]);
 
     // 全体レコード返す
-    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
+    $rr = $pdo->prepare("SELECT n.*, u.display_name AS creator_name FROM board_notes n LEFT JOIN users u ON u.id = n.created_by_user_id WHERE n.id = ?");
     $rr->execute([$id]);
     json_response([
         'ok'        => true,
         'side'      => $side,
         'image_url' => $rel,
-        'note'      => _miro_note_shape($rr->fetch(PDO::FETCH_ASSOC), (int)$u['id']),
+        'note'      => _board_note_shape($rr->fetch(PDO::FETCH_ASSOC), (int)$u['id']),
     ]);
 }

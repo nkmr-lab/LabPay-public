@@ -4,7 +4,7 @@
 //   ・zoom = ホイール (ctrl 不要) / pinch
 //   ・ノート = 空間内 absolute 配置、ドラッグで移動、右下ハンドルでリサイズ、ダブルタップで編集
 //   ・オモテウラ (side) はユーザごと個別 (miro_note_flips)
-//   ・🎨 画像生成 = OpenAI gpt-image-1 low → /uploads/miro/... に保存 → 表 or 裏に貼る
+//   ・🎨 画像生成 = OpenAI gpt-image-1 low → /uploads/board/... に保存 → 表 or 裏に貼る
 //   ・2 s poll で他人の編集を取り込み
 
 import { get, post, patch, put, del } from '../api.js';
@@ -48,7 +48,7 @@ let CURRENT_STROKE = null;  // 描画中: { points:[{x,y},...], color, width }
 let PEN_COLOR = '#111827';  // 黒デフォルト
 let PEN_WIDTH = 2.5;
 
-export async function renderMiroCanvas({ params }) {
+export async function renderBoardCanvas({ params }) {
   ROOM_ID = parseInt(params?.id, 10);
   if (!ROOM_ID) { navigate('/board'); return; }
   const app = document.getElementById('app');
@@ -78,63 +78,63 @@ export async function renderMiroCanvas({ params }) {
 function shellHtml() {
   return `
     <style>
-      #miro-shell .mnote-body::-webkit-scrollbar,
-      #miro-shell .mnote-editta::-webkit-scrollbar { display:none }
-      #miro-shell .mnote-body,
-      #miro-shell .mnote-editta { scrollbar-width:none; -ms-overflow-style:none }
+      #board-shell .bnote-body::-webkit-scrollbar,
+      #board-shell .bnote-editta::-webkit-scrollbar { display:none }
+      #board-shell .bnote-body,
+      #board-shell .bnote-editta { scrollbar-width:none; -ms-overflow-style:none }
     </style>
-    <div id="miro-shell" style="position:fixed; top:0; left:0; right:0; bottom:0; width:100vw; height:100vh; display:flex; flex-direction:column; background:#fafafa; z-index:100">
+    <div id="board-shell" style="position:fixed; top:0; left:0; right:0; bottom:0; width:100vw; height:100vh; display:flex; flex-direction:column; background:#fafafa; z-index:100">
       <!-- toolbar -->
-      <div id="miro-toolbar" style="display:flex; gap:6px; align-items:center; padding:6px 10px; background:#fff; border-bottom:1px solid #e5e7eb; flex-wrap:wrap">
+      <div id="board-toolbar" style="display:flex; gap:6px; align-items:center; padding:6px 10px; background:#fff; border-bottom:1px solid #e5e7eb; flex-wrap:wrap">
         <a href="#/board" class="hint" style="text-decoration:none; padding:4px 8px">← 部屋一覧</a>
-        <div id="miro-title" style="font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">…</div>
-        <button class="btn" id="miro-add" title="ノートを追加">➕ ノート</button>
-        <button class="btn" id="miro-refs" title="自分の文献ストックから貼る">📚 論文</button>
-        <button class="btn" id="miro-places" title="食べある記から貼る (画像主体)">🍜 食べある記</button>
+        <div id="board-title" style="font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">…</div>
+        <button class="btn" id="board-add" title="ノートを追加">➕ ノート</button>
+        <button class="btn" id="board-refs" title="自分の文献ストックから貼る">📚 論文</button>
+        <button class="btn" id="board-places" title="食べある記から貼る (画像主体)">🍜 食べある記</button>
         <!-- v1173 手書きモード -->
-        <div id="miro-mode-group" style="display:inline-flex; gap:2px; margin-left:6px" title="モード切替">
-          <button class="btn miro-mode" data-mode="select" title="選択/移動">🖱</button>
-          <button class="btn miro-mode" data-mode="draw" title="手書き">✏️</button>
-          <button class="btn miro-mode" data-mode="erase" title="消しゴム (ストロークをタップで削除)">🩹</button>
+        <div id="board-mode-group" style="display:inline-flex; gap:2px; margin-left:6px" title="モード切替">
+          <button class="btn board-mode" data-mode="select" title="選択/移動">🖱</button>
+          <button class="btn board-mode" data-mode="draw" title="手書き">✏️</button>
+          <button class="btn board-mode" data-mode="erase" title="消しゴム (ストロークをタップで削除)">🩹</button>
         </div>
-        <div id="miro-pen-group" style="display:none; gap:2px; align-items:center; margin-left:4px" title="ペン設定">
-          <input type="color" id="miro-pen-color" value="#111827" style="width:28px; height:28px; padding:0; border:1px solid #d1d5db; border-radius:4px; cursor:pointer">
-          <select id="miro-pen-width" style="padding:2px 4px; font-size:12px">
+        <div id="board-pen-group" style="display:none; gap:2px; align-items:center; margin-left:4px" title="ペン設定">
+          <input type="color" id="board-pen-color" value="#111827" style="width:28px; height:28px; padding:0; border:1px solid #d1d5db; border-radius:4px; cursor:pointer">
+          <select id="board-pen-width" style="padding:2px 4px; font-size:12px">
             <option value="1.5">細</option>
             <option value="2.5" selected>中</option>
             <option value="4">太</option>
             <option value="6">極太</option>
           </select>
         </div>
-        <div id="miro-palette" style="display:flex; gap:3px; align-items:center; margin-left:6px" title="デフォルト色">
-          ${PALETTE.map(c => `<button class="mpal" data-color="${c}" style="width:24px; height:24px; border-radius:6px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer" title="${c}"></button>`).join('')}
+        <div id="board-palette" style="display:flex; gap:3px; align-items:center; margin-left:6px" title="デフォルト色">
+          ${PALETTE.map(c => `<button class="bpal" data-color="${c}" style="width:24px; height:24px; border-radius:6px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer" title="${c}"></button>`).join('')}
         </div>
         <div style="display:flex; gap:3px; align-items:center; margin-left:6px">
-          <button class="btn" id="miro-zoom-out" style="padding:4px 8px">−</button>
-          <span id="miro-zoom-label" style="font-size:12px; color:#6b7280; min-width:44px; text-align:center">100%</span>
-          <button class="btn" id="miro-zoom-in" style="padding:4px 8px">＋</button>
-          <button class="btn" id="miro-zoom-fit" style="padding:4px 8px" title="全部見える倍率にリセット">⛶</button>
+          <button class="btn" id="board-zoom-out" style="padding:4px 8px">−</button>
+          <span id="board-zoom-label" style="font-size:12px; color:#6b7280; min-width:44px; text-align:center">100%</span>
+          <button class="btn" id="board-zoom-in" style="padding:4px 8px">＋</button>
+          <button class="btn" id="board-zoom-fit" style="padding:4px 8px" title="全部見える倍率にリセット">⛶</button>
         </div>
       </div>
       <!-- viewport -->
-      <div id="miro-viewport" style="flex:1; overflow:hidden; position:relative; touch-action:none; cursor:grab; background:#fafafa">
-        <div id="miro-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform">
-          <!-- v1173 手書きストローク SVG (world 座標。 miro-layer の transform に追随) -->
-          <svg id="miro-strokes-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible"></svg>
+      <div id="board-viewport" style="flex:1; overflow:hidden; position:relative; touch-action:none; cursor:grab; background:#fafafa">
+        <div id="board-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform">
+          <!-- v1173 手書きストローク SVG (world 座標。 board-layer の transform に追随) -->
+          <svg id="board-strokes-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible"></svg>
         </div>
         <!-- v1104 他人カーソルオーバーレイ (screen 座標、変形しないので上のレイヤ) -->
-        <div id="miro-cursors" style="position:absolute; inset:0; pointer-events:none; overflow:hidden"></div>
+        <div id="board-cursors" style="position:absolute; inset:0; pointer-events:none; overflow:hidden"></div>
         <!-- v1104 minimap: 右下に全体マップ (ノート = 小さい色付き矩形、現在視野 = 枠) -->
-        <div id="miro-minimap" style="position:absolute; right:10px; bottom:10px; width:180px; height:130px; background:rgba(255,255,255,0.92); border:1px solid #d1d5db; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12); overflow:hidden; touch-action:none; cursor:pointer; z-index:5">
-          <svg id="miro-minimap-svg" width="180" height="130" viewBox="0 0 180 130" style="display:block"></svg>
-          <button id="miro-minimap-toggle" title="ミニマップを閉じる" style="position:absolute; right:2px; top:2px; width:18px; height:18px; padding:0; border:none; background:rgba(0,0,0,0.05); border-radius:4px; font-size:11px; line-height:1; cursor:pointer">×</button>
+        <div id="board-minimap" style="position:absolute; right:10px; bottom:10px; width:180px; height:130px; background:rgba(255,255,255,0.92); border:1px solid #d1d5db; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12); overflow:hidden; touch-action:none; cursor:pointer; z-index:5">
+          <svg id="board-minimap-svg" width="180" height="130" viewBox="0 0 180 130" style="display:block"></svg>
+          <button id="board-minimap-toggle" title="ミニマップを閉じる" style="position:absolute; right:2px; top:2px; width:18px; height:18px; padding:0; border:none; background:rgba(0,0,0,0.05); border-radius:4px; font-size:11px; line-height:1; cursor:pointer">×</button>
         </div>
-        <button id="miro-minimap-open" title="ミニマップを開く" style="display:none; position:absolute; right:10px; bottom:10px; width:38px; height:38px; padding:0; border:1px solid #d1d5db; background:rgba(255,255,255,0.92); border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12); font-size:18px; cursor:pointer; z-index:5">🗺</button>
+        <button id="board-minimap-open" title="ミニマップを開く" style="display:none; position:absolute; right:10px; bottom:10px; width:38px; height:38px; padding:0; border:1px solid #d1d5db; background:rgba(255,255,255,0.92); border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.12); font-size:18px; cursor:pointer; z-index:5">🗺</button>
       </div>
     </div>
 
     <!-- prompt modal for image gen (残り 1 つだけ、これは長い入力なのでモーダル) -->
-    <div id="miro-prompt-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10000; align-items:center; justify-content:center; padding:16px">
+    <div id="board-prompt-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10000; align-items:center; justify-content:center; padding:16px">
       <div style="background:#fff; border-radius:12px; padding:16px; width:100%; max-width:440px; display:flex; flex-direction:column; gap:8px">
         <div style="font-weight:700">🎨 <span id="mprompt-side-label">オモテ</span>に画像を生成</div>
         <textarea id="mprompt-text" rows="4" placeholder="例: 夕暮れの海と赤い灯台のイラスト、水彩画風" style="width:100%; box-sizing:border-box"></textarea>
@@ -147,12 +147,12 @@ function shellHtml() {
     </div>
 
     <!-- 小さな色ポップオーバー (ノートヘッダの 🎨 で開く) -->
-    <div id="miro-color-pop" style="display:none; position:fixed; z-index:10001; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); gap:4px">
-      ${PALETTE.map(c => `<button class="mcolor-pop" data-color="${c}" style="width:24px; height:24px; border-radius:5px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer"></button>`).join('')}
+    <div id="board-color-pop" style="display:none; position:fixed; z-index:10001; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); gap:4px">
+      ${PALETTE.map(c => `<button class="bcolor-pop" data-color="${c}" style="width:24px; height:24px; border-radius:5px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer"></button>`).join('')}
     </div>
 
     <!-- v1110 refs ピッカー (📚 から開く、検索 + チェックリスト) -->
-    <div id="miro-refs-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10001; align-items:center; justify-content:center; padding:16px">
+    <div id="board-refs-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10001; align-items:center; justify-content:center; padding:16px">
       <div style="background:#fff; border-radius:12px; padding:14px; width:100%; max-width:600px; max-height:90vh; display:flex; flex-direction:column; gap:8px">
         <div class="row" style="align-items:center; gap:8px">
           <div style="font-weight:700; flex:1">📚 文献ストックから貼る</div>
@@ -175,7 +175,7 @@ function shellHtml() {
     </div>
 
     <!-- v1171 places ピッカー (🍜 から開く、サムネイルグリッド) -->
-    <div id="miro-places-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10001; align-items:center; justify-content:center; padding:16px">
+    <div id="board-places-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10001; align-items:center; justify-content:center; padding:16px">
       <div style="background:#fff; border-radius:12px; padding:14px; width:100%; max-width:720px; max-height:90vh; display:flex; flex-direction:column; gap:8px">
         <div class="row" style="align-items:center; gap:8px">
           <div style="font-weight:700; flex:1">🍜 食べある記から貼る</div>
@@ -203,7 +203,7 @@ function shellHtml() {
 
 async function loadInitial() {
   try {
-    const d = await get(`/api/miro/rooms/${ROOM_ID}`);
+    const d = await get(`/api/board/rooms/${ROOM_ID}`);
     ROOM = d.room;
     MY_DEFAULT_COLOR = d.my_default_color || '#FEF9A8';
     NOTES = d.notes || [];
@@ -214,8 +214,8 @@ async function loadInitial() {
     STROKE_MAP = {};
     for (const s of STROKES) STROKE_MAP[s.id] = s;
     LAST_SERVER_TIME = d.server_time;
-    document.getElementById('miro-title').textContent = ROOM.title;
-    document.getElementById('miro-viewport').style.background = ROOM.bg_color || '#fafafa';
+    document.getElementById('board-title').textContent = ROOM.title;
+    document.getElementById('board-viewport').style.background = ROOM.bg_color || '#fafafa';
     highlightPalette();
     // v1104 初回カーソル
     const nowMs = Date.now();
@@ -224,7 +224,7 @@ async function loadInitial() {
     // 初回は中央にフィット
     fitAll();
     // マウス未動作時のオフスクリーン距離表示用に、初期カーソルを視野中央 world 座標に
-    const vp = document.getElementById('miro-viewport');
+    const vp = document.getElementById('board-viewport');
     const mid = screenToWorld(vp.getBoundingClientRect().left + vp.clientWidth / 2,
                               vp.getBoundingClientRect().top  + vp.clientHeight / 2);
     MY_CURSOR.x = mid.x; MY_CURSOR.y = mid.y;
@@ -233,7 +233,7 @@ async function loadInitial() {
     renderMinimap();
     wireMinimap();
   } catch (e) {
-    document.getElementById('miro-viewport').innerHTML =
+    document.getElementById('board-viewport').innerHTML =
       `<div style="padding:16px; color:#b91c1c">読み込み失敗: ${escapeHtml(e.message)}</div>`;
   }
 }
@@ -242,7 +242,7 @@ function startPolling() {
   stopPolling();
   POLL_TIMER = setInterval(async () => {
     try {
-      const d = await get(`/api/miro/rooms/${ROOM_ID}/updates?since=${encodeURIComponent(LAST_SERVER_TIME)}`);
+      const d = await get(`/api/board/rooms/${ROOM_ID}/updates?since=${encodeURIComponent(LAST_SERVER_TIME)}`);
       LAST_SERVER_TIME = d.server_time || LAST_SERVER_TIME;
       let dirty = false;
       for (const n of d.upserts || []) {
@@ -281,23 +281,23 @@ function stopPolling() {
 // ─── viewport transforms ──────────────────────────────────────
 
 function applyTransform() {
-  const layer = document.getElementById('miro-layer');
+  const layer = document.getElementById('board-layer');
   if (!layer) return;
   layer.style.transform = `translate(${VIEW.tx}px, ${VIEW.ty}px) scale(${VIEW.scale})`;
-  const lbl = document.getElementById('miro-zoom-label');
+  const lbl = document.getElementById('board-zoom-label');
   if (lbl) lbl.textContent = Math.round(VIEW.scale * 100) + '%';
   // v1104 視野が変わったらカーソル位置とミニマップの視野枠も動かす
   renderCursors();
   renderMinimap();
 }
 function screenToWorld(sx, sy) {
-  const rect = document.getElementById('miro-viewport').getBoundingClientRect();
+  const rect = document.getElementById('board-viewport').getBoundingClientRect();
   const x = (sx - rect.left - VIEW.tx) / VIEW.scale;
   const y = (sy - rect.top  - VIEW.ty) / VIEW.scale;
   return { x, y };
 }
 function fitAll() {
-  const vp = document.getElementById('miro-viewport');
+  const vp = document.getElementById('board-viewport');
   if (!vp) return;
   if (!NOTES.length) {
     // 空の時は原点中央
@@ -344,12 +344,12 @@ const TAP = { noteId: null, ts: 0, flipTimer: null };
 const DBLTAP_MS = 300;
 
 function wireCanvas() {
-  const vp    = document.getElementById('miro-viewport');
-  const layer = document.getElementById('miro-layer');
+  const vp    = document.getElementById('board-viewport');
+  const layer = document.getElementById('board-layer');
 
   vp.addEventListener('pointerdown', (e) => {
     // v1173 手書きモード: pointerdown で新規ストローク開始 (note/pan と分岐)
-    if (MODE === 'draw' && !e.target.closest('button, .mnote')) {
+    if (MODE === 'draw' && !e.target.closest('button, .bnote')) {
       const w = screenToWorld(e.clientX, e.clientY);
       CURRENT_STROKE = { points: [{ x: w.x, y: w.y }], color: PEN_COLOR, width: PEN_WIDTH };
       DRAG.mode = 'draw';
@@ -369,8 +369,8 @@ function wireCanvas() {
       // stroke 以外を触ったら pan は許す (下の通常分岐に fall through)
     }
     // 何に触れたか
-    const noteEl   = e.target.closest('.mnote');
-    const handleEl = e.target.closest('.mhandle');
+    const noteEl   = e.target.closest('.bnote');
+    const handleEl = e.target.closest('.bhandle');
     if (handleEl && noteEl) {
       DRAG.mode = 'resize';
       DRAG.noteId = parseInt(noteEl.dataset.id, 10);
@@ -387,7 +387,7 @@ function wireCanvas() {
       DRAG.noteStartX = n.x; DRAG.noteStartY = n.y;
       // z bump
       bringToFront(DRAG.noteId).catch(() => {});
-    } else if (!e.target.closest('button, .mmodal-color, .mpal')) {
+    } else if (!e.target.closest('button, .bmodal-color, .bpal')) {
       DRAG.mode = 'pan';
       DRAG.startX = e.clientX; DRAG.startY = e.clientY;
       DRAG.origTx = VIEW.tx; DRAG.origTy = VIEW.ty;
@@ -429,13 +429,13 @@ function wireCanvas() {
       const n = NOTE_MAP[DRAG.noteId]; if (!n) return;
       n.x = DRAG.noteStartX + dx / VIEW.scale;
       n.y = DRAG.noteStartY + dy / VIEW.scale;
-      const el = document.querySelector(`.mnote[data-id="${DRAG.noteId}"]`);
+      const el = document.querySelector(`.bnote[data-id="${DRAG.noteId}"]`);
       if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
     } else if (DRAG.mode === 'resize') {
       const n = NOTE_MAP[DRAG.noteId]; if (!n) return;
       n.width  = Math.max(80, Math.min(1200, DRAG.noteStartW + dx / VIEW.scale));
       n.height = Math.max(80, Math.min(1200, DRAG.noteStartH + dy / VIEW.scale));
-      const el = document.querySelector(`.mnote[data-id="${DRAG.noteId}"]`);
+      const el = document.querySelector(`.bnote[data-id="${DRAG.noteId}"]`);
       if (el) { el.style.width = n.width + 'px'; el.style.height = n.height + 'px'; }
     }
   });
@@ -450,7 +450,7 @@ function wireCanvas() {
       // 点が 2 未満なら破棄 (単発タップ)
       if (stroke.points.length < 2) { renderCurrentStroke(); return; }
       try {
-        const r = await post(`/api/miro/rooms/${ROOM_ID}/strokes`, {
+        const r = await post(`/api/board/rooms/${ROOM_ID}/strokes`, {
           points: stroke.points, color: stroke.color, width: stroke.width,
         });
         if (r && r.stroke) {
@@ -474,8 +474,8 @@ function wireCanvas() {
       const n = NOTE_MAP[nid];
       if (n) {
         try {
-          if (mode === 'note')   await patch(`/api/miro/notes/${nid}`, { x: n.x, y: n.y });
-          if (mode === 'resize') await patch(`/api/miro/notes/${nid}`, { width: n.width, height: n.height });
+          if (mode === 'note')   await patch(`/api/board/notes/${nid}`, { x: n.x, y: n.y });
+          if (mode === 'resize') await patch(`/api/board/notes/${nid}`, { width: n.width, height: n.height });
         } catch (err) { toast('保存失敗: ' + err.message); }
       }
     } else if (mode === 'note' && !moved && nid) {
@@ -506,7 +506,7 @@ function wireCanvas() {
 
 function zoomAtScreen(sx, sy, newScale) {
   const s = Math.max(0.1, Math.min(4, newScale));
-  const rect = document.getElementById('miro-viewport').getBoundingClientRect();
+  const rect = document.getElementById('board-viewport').getBoundingClientRect();
   const px = sx - rect.left, py = sy - rect.top;
   const wx = (px - VIEW.tx) / VIEW.scale;
   const wy = (py - VIEW.ty) / VIEW.scale;
@@ -517,36 +517,36 @@ function zoomAtScreen(sx, sy, newScale) {
 }
 
 function wireToolbar() {
-  document.getElementById('miro-add').addEventListener('click', createNoteAtCenter);
-  document.getElementById('miro-refs').addEventListener('click', openRefsPicker);
-  document.getElementById('miro-places').addEventListener('click', openPlacesPicker);
+  document.getElementById('board-add').addEventListener('click', createNoteAtCenter);
+  document.getElementById('board-refs').addEventListener('click', openRefsPicker);
+  document.getElementById('board-places').addEventListener('click', openPlacesPicker);
   // v1173 モード切替
-  document.querySelectorAll('.miro-mode').forEach(b => {
+  document.querySelectorAll('.board-mode').forEach(b => {
     b.addEventListener('click', () => setMode(b.dataset.mode));
   });
-  document.getElementById('miro-pen-color').addEventListener('input', (e) => { PEN_COLOR = e.target.value; });
-  document.getElementById('miro-pen-width').addEventListener('change', (e) => { PEN_WIDTH = Number(e.target.value) || 2.5; });
+  document.getElementById('board-pen-color').addEventListener('input', (e) => { PEN_COLOR = e.target.value; });
+  document.getElementById('board-pen-width').addEventListener('change', (e) => { PEN_WIDTH = Number(e.target.value) || 2.5; });
   setMode('select');
-  document.getElementById('miro-zoom-in').addEventListener('click', () => {
-    const vp = document.getElementById('miro-viewport');
+  document.getElementById('board-zoom-in').addEventListener('click', () => {
+    const vp = document.getElementById('board-viewport');
     zoomAtScreen(vp.clientWidth / 2 + vp.getBoundingClientRect().left,
                  vp.clientHeight / 2 + vp.getBoundingClientRect().top,
                  VIEW.scale * 1.2);
   });
-  document.getElementById('miro-zoom-out').addEventListener('click', () => {
-    const vp = document.getElementById('miro-viewport');
+  document.getElementById('board-zoom-out').addEventListener('click', () => {
+    const vp = document.getElementById('board-viewport');
     zoomAtScreen(vp.clientWidth / 2 + vp.getBoundingClientRect().left,
                  vp.clientHeight / 2 + vp.getBoundingClientRect().top,
                  VIEW.scale / 1.2);
   });
-  document.getElementById('miro-zoom-fit').addEventListener('click', () => { fitAll(); });
+  document.getElementById('board-zoom-fit').addEventListener('click', () => { fitAll(); });
   // palette (デフォルト色)
-  document.querySelectorAll('#miro-palette .mpal').forEach(el => {
+  document.querySelectorAll('#board-palette .bpal').forEach(el => {
     el.addEventListener('click', async () => {
       MY_DEFAULT_COLOR = el.dataset.color;
       highlightPalette();
       try {
-        await put('/api/miro/default-color', { color: MY_DEFAULT_COLOR });
+        await put('/api/board/default-color', { color: MY_DEFAULT_COLOR });
         toast('デフォルト色を保存 (' + MY_DEFAULT_COLOR + ')');
       } catch (_) {}
     });
@@ -554,7 +554,7 @@ function wireToolbar() {
 }
 
 function highlightPalette() {
-  document.querySelectorAll('#miro-palette .mpal').forEach(el => {
+  document.querySelectorAll('#board-palette .bpal').forEach(el => {
     el.style.borderColor = (el.dataset.color === MY_DEFAULT_COLOR) ? '#4a106d' : 'transparent';
   });
 }
@@ -568,7 +568,7 @@ let EDITING_NOTE_ID = null;  // 現在インライン編集中の note.id
 let EDITING_ORIG    = '';    // Esc で戻す用の元テキスト
 
 function renderAll() {
-  const layer = document.getElementById('miro-layer');
+  const layer = document.getElementById('board-layer');
   if (!layer) return;
   applyTransform();
   // v1173 手書きストロークも同時に描画
@@ -581,7 +581,7 @@ function renderAll() {
   let editingSnapshot = null;
   const wasEditing = EDITING_NOTE_ID;
   if (wasEditing) {
-    const ta = document.querySelector(`.mnote[data-id="${wasEditing}"] .mnote-editta`);
+    const ta = document.querySelector(`.bnote[data-id="${wasEditing}"] .bnote-editta`);
     if (ta) editingSnapshot = { value: ta.value, start: ta.selectionStart, end: ta.selectionEnd };
     EDITING_NOTE_ID = null;
   }
@@ -665,7 +665,7 @@ function noteHtml(n) {
 
   let body;
   if (hiddenForMe) {
-    body = `<div class="mnote-body" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; user-select:none; gap:6px; opacity:0.55">
+    body = `<div class="bnote-body" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; user-select:none; gap:6px; opacity:0.55">
               <div style="font-size:42px">🙈</div>
               <div style="font-size:11px; color:rgba(0,0,0,0.5); font-weight:600">隠されています</div>
             </div>`;
@@ -673,9 +673,9 @@ function noteHtml(n) {
     const img = n.front_image_url;
     const imgBlock = img ? `<img src="${escapeHtml(img)}" style="max-width:100%; max-height:70%; object-fit:contain; border-radius:4px; margin-bottom:4px" alt="">` : '';
     const fpx = dynamicFontSize(n.front_text || '', n.width, n.height);
-    body = `<div class="mnote-body" style="flex:1; overflow:hidden; white-space:pre-wrap; word-break:break-word; padding-top:4px; display:flex; flex-direction:column">
+    body = `<div class="bnote-body" style="flex:1; overflow:hidden; white-space:pre-wrap; word-break:break-word; padding-top:4px; display:flex; flex-direction:column">
               ${imgBlock}
-              <div class="mnote-text" style="font-size:${fpx}px; line-height:1.25; text-align:center; display:flex; align-items:center; justify-content:center; flex:1">${escapeHtml(n.front_text || '')}</div>
+              <div class="bnote-text" style="font-size:${fpx}px; line-height:1.25; text-align:center; display:flex; align-items:center; justify-content:center; flex:1">${escapeHtml(n.front_text || '')}</div>
             </div>`;
   }
   // v1109 自分だけ見えてる (= ウラ) 時の視覚ヒント: 破線ボーダー + 少しグレイアウト
@@ -683,7 +683,7 @@ function noteHtml(n) {
   const extraBorder = (isMine && isHidden) ? '; border:2px dashed rgba(124,58,237,0.55)' : '';
   const extraFilter = (isMine && isHidden) ? '; filter:saturate(0.45) opacity(0.82)' : '';
   return `
-    <div class="mnote" data-id="${n.id}"
+    <div class="bnote" data-id="${n.id}"
          style="position:absolute; left:${n.x}px; top:${n.y}px; width:${n.width}px; height:${n.height}px;
                 background:${bg}; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.15)${extraBorder}${extraFilter};
                 transform:rotate(${n.rotation || 0}deg); transform-origin:center; padding:8px;
@@ -691,12 +691,12 @@ function noteHtml(n) {
                 box-sizing:border-box; font-family:'Segoe UI', system-ui, sans-serif">
       ${header}
       ${body}
-      ${n.link_url && !hiddenForMe ? `<a href="${escapeHtml(n.link_url)}" class="mnote-link" data-note-link title="元ページを開く"
+      ${n.link_url && !hiddenForMe ? `<a href="${escapeHtml(n.link_url)}" class="bnote-link" data-note-link title="元ページを開く"
               onclick="event.stopPropagation()"
               onpointerdown="event.stopPropagation()"
               onmousedown="event.stopPropagation()"
               style="position:absolute; left:4px; bottom:4px; width:22px; height:22px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.85); color:#0369a1; border-radius:50%; text-decoration:none; font-size:13px; line-height:1; box-shadow:0 1px 2px rgba(0,0,0,0.15); z-index:2">🔗</a>` : ''}
-      <div class="mhandle" style="position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; background:linear-gradient(135deg, transparent 40%, rgba(0,0,0,0.25) 50%, transparent 60%)"></div>
+      <div class="bhandle" style="position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; background:linear-gradient(135deg, transparent 40%, rgba(0,0,0,0.25) 50%, transparent 60%)"></div>
     </div>
   `;
 }
@@ -704,12 +704,12 @@ function noteHtml(n) {
 // ─── actions ──────────────────────────────────────────────────
 
 async function createNoteAtCenter() {
-  const vp = document.getElementById('miro-viewport');
+  const vp = document.getElementById('board-viewport');
   const cx = vp.clientWidth / 2, cy = vp.clientHeight / 2;
   const rect = vp.getBoundingClientRect();
   const world = screenToWorld(rect.left + cx, rect.top + cy);
   try {
-    const r = await post(`/api/miro/rooms/${ROOM_ID}/notes`, {
+    const r = await post(`/api/board/rooms/${ROOM_ID}/notes`, {
       x: world.x - 110, y: world.y - 110,
       width: 220, height: 220,
       color: MY_DEFAULT_COLOR,
@@ -723,7 +723,7 @@ async function createNoteAtCenter() {
 
 async function bringToFront(id) {
   try {
-    const r = await patch(`/api/miro/notes/${id}`, { z_bump: true });
+    const r = await patch(`/api/board/notes/${id}`, { z_bump: true });
     if (r.note) NOTE_MAP[id].z_index = r.note.z_index;
   } catch (_) {}
 }
@@ -731,7 +731,7 @@ async function bringToFront(id) {
 // v1108 flip = 作成者本人が is_hidden をトグル (他人には裏に見える / 自分にはずっと見える)
 async function flipNote(id) {
   try {
-    const r = await post(`/api/miro/notes/${id}/flip`, {});
+    const r = await post(`/api/board/notes/${id}/flip`, {});
     if (r.note && NOTE_MAP[id]) NOTE_MAP[id] = r.note;
     renderAll();
   } catch (e) { toast('切替失敗: ' + e.message); }
@@ -741,11 +741,11 @@ async function flipNote(id) {
 
 function enterInlineEdit(id, snapshot) {
   const n = NOTE_MAP[id]; if (!n) return;
-  const el = document.querySelector(`.mnote[data-id="${id}"]`);
+  const el = document.querySelector(`.bnote[data-id="${id}"]`);
   if (!el) return;
   EDITING_NOTE_ID = id;
   EDITING_ORIG = n.front_text || '';
-  const body = el.querySelector('.mnote-body');
+  const body = el.querySelector('.bnote-body');
   if (!body) return;
   // 画像は残しつつ、テキスト部分だけを textarea に差し替え
   const imgHtml = n.front_image_url
@@ -756,14 +756,14 @@ function enterInlineEdit(id, snapshot) {
   const fpx = dynamicFontSize(initVal, n.width, n.height);
   body.innerHTML = `
     ${imgHtml}
-    <textarea class="mnote-editta" placeholder="ここに書く…"
+    <textarea class="bnote-editta" placeholder="ここに書く…"
       style="flex:1; width:100%; box-sizing:border-box; border:none; outline:none; background:transparent;
              resize:none; overflow:hidden; scrollbar-width:none;
              font-size:${fpx}px; line-height:1.25; text-align:center; font-family:inherit; padding:0; color:inherit; user-select:text"
       >${escapeHtml(initVal)}</textarea>
     <div class="hint-sm" style="font-size:10px; color:#6b7280; margin-top:2px; opacity:0.7">Enter で改行 / Esc で取消 / 外をタップで保存</div>
   `;
-  const ta = body.querySelector('.mnote-editta');
+  const ta = body.querySelector('.bnote-editta');
   ta.focus();
   // 入力しながらフォントサイズを再計算
   ta.addEventListener('input', () => {
@@ -795,12 +795,12 @@ function enterInlineEdit(id, snapshot) {
 async function commitInlineEdit() {
   const id = EDITING_NOTE_ID;
   if (!id) return;
-  const el = document.querySelector(`.mnote[data-id="${id}"] .mnote-editta`);
+  const el = document.querySelector(`.bnote[data-id="${id}"] .bnote-editta`);
   const v  = el ? el.value : '';
   EDITING_NOTE_ID = null;
   if (v === EDITING_ORIG) { renderAll(); return; }   // 差分なし
   try {
-    const r = await patch(`/api/miro/notes/${id}`, { front_text: v });
+    const r = await patch(`/api/board/notes/${id}`, { front_text: v });
     if (r.note && NOTE_MAP[id]) {
       Object.assign(NOTE_MAP[id], r.note);
     }
@@ -815,7 +815,7 @@ function cancelInlineEdit() {
 async function deleteNote(id) {
   if (!confirm('このノートを削除するよ?')) return;
   try {
-    await del(`/api/miro/notes/${id}`);
+    await del(`/api/board/notes/${id}`);
     delete NOTE_MAP[id];
     NOTES = Object.values(NOTE_MAP);
     renderAll();
@@ -824,7 +824,7 @@ async function deleteNote(id) {
 
 async function clearImageFor(id) {
   try {
-    const r = await patch(`/api/miro/notes/${id}`, { front_image_url: '' });
+    const r = await patch(`/api/board/notes/${id}`, { front_image_url: '' });
     if (r.note && NOTE_MAP[id]) {
       Object.assign(NOTE_MAP[id], r.note);
     }
@@ -838,21 +838,21 @@ let COLOR_POP_NOTE_ID = null;
 
 function openColorPop(id, anchorEl) {
   COLOR_POP_NOTE_ID = id;
-  const pop = document.getElementById('miro-color-pop');
+  const pop = document.getElementById('board-color-pop');
   const r = anchorEl.getBoundingClientRect();
   pop.style.display = 'flex';
   pop.style.left = Math.max(4, r.left) + 'px';
   pop.style.top  = (r.bottom + 4) + 'px';
   // 現在色を強調
   const cur = NOTE_MAP[id]?.color || '#FEF9A8';
-  pop.querySelectorAll('.mcolor-pop').forEach(el => {
+  pop.querySelectorAll('.bcolor-pop').forEach(el => {
     el.style.borderColor = (el.dataset.color === cur) ? '#4a106d' : 'transparent';
     el.onclick = async (e) => {
       e.stopPropagation();
       const newColor = el.dataset.color;
       pop.style.display = 'none';
       try {
-        const rr = await patch(`/api/miro/notes/${id}`, { color: newColor });
+        const rr = await patch(`/api/board/notes/${id}`, { color: newColor });
         if (rr.note && NOTE_MAP[id]) {
           Object.assign(NOTE_MAP[id], rr.note);
         }
@@ -881,8 +881,8 @@ function openImagePromptFor(id) {
   const n = NOTE_MAP[id]; if (!n) return;
   document.getElementById('mprompt-side-label').textContent = 'オモテ';
   document.getElementById('mprompt-text').value = '';
-  document.getElementById('miro-prompt-modal').style.display = 'flex';
-  const close = () => { document.getElementById('miro-prompt-modal').style.display = 'none'; PROMPT_NOTE_ID = null; };
+  document.getElementById('board-prompt-modal').style.display = 'flex';
+  const close = () => { document.getElementById('board-prompt-modal').style.display = 'none'; PROMPT_NOTE_ID = null; };
   document.getElementById('mprompt-cancel').onclick = close;
   document.getElementById('mprompt-go').onclick = async () => {
     const prompt = document.getElementById('mprompt-text').value.trim();
@@ -890,7 +890,7 @@ function openImagePromptFor(id) {
     const btn = document.getElementById('mprompt-go');
     btn.disabled = true; btn.textContent = '生成中… (最大 2 分)';
     try {
-      const r = await post(`/api/miro/notes/${PROMPT_NOTE_ID}/generate-image`, { prompt, side: 'front' });
+      const r = await post(`/api/board/notes/${PROMPT_NOTE_ID}/generate-image`, { prompt, side: 'front' });
       if (r.note && NOTE_MAP[PROMPT_NOTE_ID]) {
         Object.assign(NOTE_MAP[PROMPT_NOTE_ID], r.note);
       }
@@ -944,7 +944,7 @@ function scheduleCursorPost() {
 }
 function postCursor() {
   if (!ROOM_ID) return;
-  post(`/api/miro/rooms/${ROOM_ID}/cursor`, { x: MY_CURSOR.x, y: MY_CURSOR.y }).catch(() => {});
+  post(`/api/board/rooms/${ROOM_ID}/cursor`, { x: MY_CURSOR.x, y: MY_CURSOR.y }).catch(() => {});
 }
 
 // user_id からユニークな色を作る (HSL の hue を hash から)。
@@ -954,7 +954,7 @@ function colorForUser(uid) {
 }
 
 function worldToScreen(wx, wy) {
-  const rect = document.getElementById('miro-viewport').getBoundingClientRect();
+  const rect = document.getElementById('board-viewport').getBoundingClientRect();
   return {
     x: wx * VIEW.scale + VIEW.tx,
     y: wy * VIEW.scale + VIEW.ty,
@@ -964,7 +964,7 @@ function worldToScreen(wx, wy) {
 }
 
 function renderCursors() {
-  const root = document.getElementById('miro-cursors');
+  const root = document.getElementById('board-cursors');
   if (!root) return;
   const nowMs = Date.now();
   // 期限切れを間引き
@@ -973,7 +973,7 @@ function renderCursors() {
   }
   const list = Object.values(CURSORS);
   if (!list.length) { root.innerHTML = ''; return; }
-  const rect = document.getElementById('miro-viewport').getBoundingClientRect();
+  const rect = document.getElementById('board-viewport').getBoundingClientRect();
   const vw = rect.width, vh = rect.height;
   root.innerHTML = list.map(c => {
     const s = worldToScreen(c.x, c.y);
@@ -1021,9 +1021,9 @@ function renderCursors() {
 // ─── v1104 minimap render + interaction ───────────────────────
 
 function renderMinimap() {
-  const mm = document.getElementById('miro-minimap');
-  const svg = document.getElementById('miro-minimap-svg');
-  const open = document.getElementById('miro-minimap-open');
+  const mm = document.getElementById('board-minimap');
+  const svg = document.getElementById('board-minimap-svg');
+  const open = document.getElementById('board-minimap-open');
   if (!mm || !svg || !open) return;
   mm.style.display = MINIMAP_OPEN ? 'block' : 'none';
   open.style.display = MINIMAP_OPEN ? 'none' : 'block';
@@ -1031,7 +1031,7 @@ function renderMinimap() {
   const W = 180, H = 130, PAD = 6;
   // world 範囲 = 全ノート + 現在の視野
   const notes = Object.values(NOTE_MAP);
-  const rect = document.getElementById('miro-viewport').getBoundingClientRect();
+  const rect = document.getElementById('board-viewport').getBoundingClientRect();
   const vw = rect.width || 800, vh = rect.height || 600;
   // 視野の world 左上・右下
   const vTL = { x: (-VIEW.tx) / VIEW.scale, y: (-VIEW.ty) / VIEW.scale };
@@ -1067,9 +1067,9 @@ function renderMinimap() {
 }
 
 function wireMinimap() {
-  const svg = document.getElementById('miro-minimap-svg');
-  const toggle = document.getElementById('miro-minimap-toggle');
-  const opener = document.getElementById('miro-minimap-open');
+  const svg = document.getElementById('board-minimap-svg');
+  const toggle = document.getElementById('board-minimap-toggle');
+  const opener = document.getElementById('board-minimap-open');
   if (!svg || !toggle || !opener) return;
   const panTo = (e) => {
     const t = svg.__mm_transform; if (!t) return;
@@ -1079,7 +1079,7 @@ function wireMinimap() {
     const wx = (mx - t.ox) / t.s;
     const wy = (my - t.oy) / t.s;
     // wx/wy を viewport の中央に来るようにパン
-    const vp = document.getElementById('miro-viewport');
+    const vp = document.getElementById('board-viewport');
     VIEW.tx = vp.clientWidth  / 2 - wx * VIEW.scale;
     VIEW.ty = vp.clientHeight / 2 - wy * VIEW.scale;
     applyTransform();
@@ -1100,7 +1100,7 @@ const PLACES_SELECTED = new Set();
 
 function openRefsPicker() {
   REFS_SELECTED.clear();
-  const modal = document.getElementById('miro-refs-modal');
+  const modal = document.getElementById('board-refs-modal');
   modal.style.display = 'flex';
   document.getElementById('mrefs-close').onclick  = closeRefsPicker;
   document.getElementById('mrefs-cancel').onclick = closeRefsPicker;
@@ -1112,7 +1112,7 @@ function openRefsPicker() {
   loadRefs('');
 }
 function closeRefsPicker() {
-  document.getElementById('miro-refs-modal').style.display = 'none';
+  document.getElementById('board-refs-modal').style.display = 'none';
 }
 
 async function loadRefs(query) {
@@ -1174,10 +1174,10 @@ async function commitRefsPicker() {
   btn.disabled = true; btn.textContent = '貼っています…';
   try {
     // 現在の視野中央 (world 座標) を center に
-    const vp = document.getElementById('miro-viewport');
+    const vp = document.getElementById('board-viewport');
     const rect = vp.getBoundingClientRect();
     const mid = screenToWorld(rect.left + vp.clientWidth / 2, rect.top + vp.clientHeight / 2);
-    const r = await post(`/api/miro/rooms/${ROOM_ID}/notes-from-refs`, {
+    const r = await post(`/api/board/rooms/${ROOM_ID}/notes-from-refs`, {
       ref_ids: ids,
       center_x: mid.x,
       center_y: mid.y,
@@ -1196,7 +1196,7 @@ async function commitRefsPicker() {
 // ─── v1171 places picker ───────────────────────
 function openPlacesPicker() {
   PLACES_SELECTED.clear();
-  const modal = document.getElementById('miro-places-modal');
+  const modal = document.getElementById('board-places-modal');
   modal.style.display = 'flex';
   document.getElementById('mplc-close').onclick  = closePlacesPicker;
   document.getElementById('mplc-cancel').onclick = closePlacesPicker;
@@ -1208,7 +1208,7 @@ function openPlacesPicker() {
   loadPlaces();
 }
 function closePlacesPicker() {
-  document.getElementById('miro-places-modal').style.display = 'none';
+  document.getElementById('board-places-modal').style.display = 'none';
 }
 
 async function loadPlaces() {
@@ -1273,10 +1273,10 @@ async function commitPlacesPicker() {
   const btn = document.getElementById('mplc-go');
   btn.disabled = true; btn.textContent = '貼っています…';
   try {
-    const vp = document.getElementById('miro-viewport');
+    const vp = document.getElementById('board-viewport');
     const rect = vp.getBoundingClientRect();
     const mid = screenToWorld(rect.left + vp.clientWidth / 2, rect.top + vp.clientHeight / 2);
-    const r = await post(`/api/miro/rooms/${ROOM_ID}/notes-from-places`, {
+    const r = await post(`/api/board/rooms/${ROOM_ID}/notes-from-places`, {
       place_ids: ids, center_x: mid.x, center_y: mid.y,
     });
     for (const n of (r.notes || [])) NOTE_MAP[n.id] = n;
@@ -1301,28 +1301,28 @@ function debounce(fn, ms) {
 // ─── v1173 手書き ───────────────────────────────────────
 function setMode(m) {
   MODE = m;
-  document.querySelectorAll('.miro-mode').forEach(b => {
+  document.querySelectorAll('.board-mode').forEach(b => {
     const active = b.dataset.mode === m;
     b.style.background = active ? '#7b3fa0' : '';
     b.style.color      = active ? '#fff'   : '';
   });
-  const pen = document.getElementById('miro-pen-group');
+  const pen = document.getElementById('board-pen-group');
   if (pen) pen.style.display = (m === 'draw') ? 'inline-flex' : 'none';
-  const svg = document.getElementById('miro-strokes-svg');
+  const svg = document.getElementById('board-strokes-svg');
   if (svg) {
     // draw モードでは stroke SVG を pointer 透過に (下の viewport で drawing 開始できるように)
     // erase モードでは pointer を受けて stroke タップ削除
     // select モードでも stroke は当たり判定不要 (下の note/pan を邪魔しない)
     svg.style.pointerEvents = (m === 'erase') ? 'auto' : 'none';
   }
-  const vp = document.getElementById('miro-viewport');
+  const vp = document.getElementById('board-viewport');
   if (vp) {
     vp.style.cursor = m === 'draw' ? 'crosshair' : m === 'erase' ? 'not-allowed' : 'grab';
   }
 }
 
 function renderStrokes() {
-  const svg = document.getElementById('miro-strokes-svg');
+  const svg = document.getElementById('board-strokes-svg');
   if (!svg) return;
   const parts = [];
   for (const s of Object.values(STROKE_MAP)) {
@@ -1338,10 +1338,10 @@ function renderStrokes() {
 }
 
 function renderCurrentStroke() {
-  // 描画中の暫定 stroke を専用の path として付ける (id=miro-current-stroke)
-  const svg = document.getElementById('miro-strokes-svg');
+  // 描画中の暫定 stroke を専用の path として付ける (id=board-current-stroke)
+  const svg = document.getElementById('board-strokes-svg');
   if (!svg) return;
-  let cur = svg.querySelector('#miro-current-stroke');
+  let cur = svg.querySelector('#board-current-stroke');
   if (!CURRENT_STROKE || CURRENT_STROKE.points.length < 2) {
     if (cur) cur.remove();
     return;
@@ -1349,7 +1349,7 @@ function renderCurrentStroke() {
   const d = CURRENT_STROKE.points.map((p, i) => (i === 0 ? 'M' : 'L') + (p.x + 10000).toFixed(1) + ',' + (p.y + 10000).toFixed(1)).join(' ');
   if (!cur) {
     cur = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    cur.id = 'miro-current-stroke';
+    cur.id = 'board-current-stroke';
     cur.setAttribute('fill', 'none');
     cur.setAttribute('stroke-linecap', 'round');
     cur.setAttribute('stroke-linejoin', 'round');
@@ -1361,7 +1361,7 @@ function renderCurrentStroke() {
 }
 
 async function deleteStroke(sid) {
-  await del(`/api/miro/strokes/${sid}`);
+  await del(`/api/board/strokes/${sid}`);
   delete STROKE_MAP[sid];
   STROKES = Object.values(STROKE_MAP);
   renderStrokes();

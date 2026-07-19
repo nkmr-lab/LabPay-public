@@ -538,8 +538,8 @@ route('/kanban/boards/:id',     lazy(() => import('./views/kanban.js'), 'renderK
 // v1100 Miro 的な共同ポストイット空間 (v1172 で「Board」にリネーム、URL も /#/board/*、
 //   v1174 でファイル名も miro_*.js → board_*.js にリネーム。 export 関数名は互換のため
 //   renderMiroRooms/renderMiroCanvas のまま残す)
-route('/board',                 lazy(() => import('./views/board_rooms.js'), 'renderMiroRooms'));
-route('/board/rooms/:id',       lazy(() => import('./views/board_canvas.js'), 'renderMiroCanvas'));
+route('/board',                 lazy(() => import('./views/board_rooms.js'), 'renderBoardRooms'));
+route('/board/rooms/:id',       lazy(() => import('./views/board_canvas.js'), 'renderBoardCanvas'));
 // v1172 旧 URL 互換: /#/miro → /#/board にリダイレクト (既存のブックマークやチャット投稿が壊れないよう)
 route('/miro',                  () => { window.location.hash = '#/board'; });
 route('/miro/rooms/:id',        (ctx) => { window.location.hash = '#/board/rooms/' + ctx.params.id; });
