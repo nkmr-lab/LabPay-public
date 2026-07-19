@@ -216,31 +216,42 @@ export async function renderExpRecruitDetail({ params }) {
   `;
 
   const slotsView = document.getElementById('er-slots-view');
-  slotsView.innerHTML = slots.map(s => {
-    // v1164 capacity=0 は無制限 → 満員判定は常に false、定員表示は ∞ 記号
+  // v1167 中村さん指示「日程の一覧性が低いのでもう少し小さく表示して」
+  //   → 1 枠 = 1 行 (grid: name / 定員 / 参加者 chip / action)。 padding 大幅減、
+  //     行区切りは薄い border だけ、参加者は 20px アバター + 名前で極小化。
+  const slotsHtml = slots.map(s => {
     const unlimited = s.capacity === 0;
     const full = !unlimited && (s.filled >= s.capacity);
     const joinable = !locked && !s.is_me_in && !full;
-    const capText = unlimited ? `${s.filled} / ∞` : `${s.filled} / ${s.capacity}`;
+    const capText = unlimited ? `${s.filled}/∞` : `${s.filled}/${s.capacity}`;
+    const capColor = full ? '#c00' : (s.is_me_in ? '#0369a1' : '#666');
+    const parts = s.participants.map(p => `
+      <span style="display:inline-flex; align-items:center; gap:3px; padding:1px 6px 1px 2px; background:${p.is_me ? '#fef3c7' : '#f3f4f6'}; border-radius:10px; font-size:11px; line-height:1.4">
+        ${avatarHtml(p.user_name, p.user_avatar, 'xs')}
+        <span>${escapeHtml(p.user_name)}${p.source === 'assigned_by_creator' ? '＊' : ''}</span>
+        ${(isMine || p.is_me) && !locked ? `<button class="er-remove" data-slot-id="${s.id}" data-user-id="${p.user_id}" data-is-me="${p.is_me ? 1 : 0}" style="border:none; background:none; color:#c00; cursor:pointer; padding:0 2px; font-size:11px">✕</button>` : ''}
+      </span>`).join('');
+    const action = joinable
+      ? `<button class="er-join btn primary" data-slot-id="${s.id}" style="padding:3px 10px; font-size:12px">＋入る</button>`
+      : (s.is_me_in && !locked ? `<span style="color:#0369a1; font-size:11px; font-weight:600">✓ 参加中</span>` : '');
     return `
-      <div class="card" data-slot="${s.id}" style="padding:12px">
-        <div style="display:flex; align-items:baseline; gap:8px">
-          <div style="flex:1; font-weight:700; font-size:15px">${escapeHtml(s.name)}</div>
-          <div class="muted" style="font-size:12px">${capText}${full ? ' <span style="color:#c00">満員</span>' : ''}</div>
+      <div class="er-slot-row" data-slot="${s.id}" style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-bottom:1px solid #eee; flex-wrap:wrap">
+        <div style="flex:1 1 180px; min-width:0; font-weight:600; font-size:13px; ${s.is_me_in ? 'color:#0369a1' : ''}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+          ${escapeHtml(s.name)}
         </div>
-        <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px">
-          ${s.participants.map(p => `
-            <div style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:${p.is_me ? '#fef3c7' : '#f3f4f6'}; border-radius:12px; font-size:12px">
-              ${avatarHtml(p.user_name, p.user_avatar, 'xs')}
-              <span>${escapeHtml(p.user_name)}</span>
-              ${p.source === 'assigned_by_creator' ? `<span class="muted" style="font-size:10px">代理</span>` : ''}
-              ${(isMine || p.is_me) && !locked ? `<button class="er-remove" data-slot-id="${s.id}" data-user-id="${p.user_id}" data-is-me="${p.is_me ? 1 : 0}" style="border:none; background:none; color:#c00; cursor:pointer; padding:0 2px">✕</button>` : ''}
-            </div>`).join('') || '<span class="muted" style="font-size:12px">まだ誰もいません</span>'}
+        <div style="flex:none; font-size:12px; color:${capColor}; font-variant-numeric:tabular-nums; min-width:40px; text-align:right">
+          ${capText}${full ? ' 満' : ''}
         </div>
-        ${joinable ? `<div style="margin-top:8px"><button class="er-join btn primary" data-slot-id="${s.id}">この枠に入る</button></div>` : ''}
-        ${(!locked && s.is_me_in) ? `<div style="margin-top:8px"><span class="muted" style="font-size:12px">あなたはこの枠に参加中です</span></div>` : ''}
+        <div style="flex:2 1 200px; display:flex; flex-wrap:wrap; gap:3px; min-width:0">
+          ${parts || '<span class="muted" style="font-size:11px">—</span>'}
+        </div>
+        ${action ? `<div style="flex:none">${action}</div>` : ''}
       </div>`;
-  }).join('') || '<div class="card muted">枠がありません</div>';
+  }).join('');
+  slotsView.innerHTML = slots.length
+    ? `<div class="card" style="padding:0; overflow:hidden">${slotsHtml}</div>
+       <div class="hint-sm" style="margin-top:4px; font-size:11px; padding:0 4px">＊=実施者による代理追加</div>`
+    : '<div class="card muted">枠がありません</div>';
 
   // wire join
   slotsView.querySelectorAll('.er-join').forEach(b => {
