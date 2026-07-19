@@ -9,7 +9,7 @@ import { loadLeaflet } from './group_map.js';
 import { openImageLightbox as openSharedLightbox } from '../lightbox.js';  // v785 #383 回転付き lightbox
 
 // v1143 複数画像を「おしゃれ」レイアウトで描画。 1 枚=大 / 2 枚=横並び 1:1 / 3 枚=大 + 小2 縦積み /
-//   4 枚=2x2 / 5+ 枚=3x3 に 「他 N 枚」 chip オーバーレイ (最大 10 枚表示)。 全て cursor:zoom-in で lightbox。
+//   4 枚=2x2 / 5+ 枚=3x3 に「他 N 枚」 chip オーバーレイ (最大 10 枚表示)。全て cursor:zoom-in で lightbox。
 function renderImagesLayout(p, canRotImage) {
   const imgs = Array.isArray(p.images) ? p.images : [];
   if (!imgs.length) return '';
@@ -45,7 +45,7 @@ function renderImagesLayout(p, canRotImage) {
     return wrap(cell(0, 'aspect-ratio:1/1') + cell(1, 'aspect-ratio:1/1') + cell(2, 'aspect-ratio:1/1') + cell(3, 'aspect-ratio:1/1'),
       'grid-template-columns:1fr 1fr; max-width:520px');
   }
-  // 5+ 枚: 3x3 モザイク、 最後の セル に 「+N」 オーバーレイ (imgs 全部を lightbox で見られる)
+  // 5+ 枚: 3x3 モザイク、最後のセルに「+N」オーバーレイ (imgs 全部を lightbox で見られる)
   const shown = Math.min(n, 9);
   const remaining = n - shown;
   const cells = [];
@@ -676,7 +676,7 @@ function bindComposer(parentId) {
         return;
       }
     }
-    imgStatus.innerHTML = `<span style="color:#0e7c63">✓ ${composerImageUrls.length} 枚 アップロード完了</span>`;
+    imgStatus.innerHTML = `<span style="color:#0e7c63">✓ ${composerImageUrls.length} 枚アップロード完了</span>`;
     renderComposerThumbs();
     if (submitBtn) { submitBtn.disabled = false; delete submitBtn.dataset.uploading; }
   };
@@ -688,22 +688,46 @@ function bindComposer(parentId) {
   //   Win の「Print Screen + Snipping Tool」や Mac の ⌘+Shift+4 で撮った
   //   スクショを直接貼り付けられる。画像 type で拾えれば preventDefault して
   //   テキストとしては入れない。ファイル名は clipboard-<ts>.<ext> で仮命名。
-  const taBody = document.getElementById('po-body');
-  taBody?.addEventListener('paste', async (ev) => {
-    const items = ev.clipboardData?.items || [];
+  // v1179 中村さん要望「らぼったーにクリップボードから画像を貼れるようにしたい」
+  //   従来は textarea (po-body) に focus してる時だけしか paste を拾えなかった。
+  //   textarea 外 (composer カード内) や document 全体でも拾えるように window に bind、
+  //   clipboardData.items だけでなく clipboardData.files フォールバックも対応。
+  //   composer (po-body) が DOM に存在する = らぼったータブ表示中の時だけ動作。
+  const handlePasteEvent = async (ev) => {
+    // composer が居ない (別ページ) なら無視
+    if (!document.getElementById('po-body')) return;
+    const cd = ev.clipboardData;
+    if (!cd) return;
+    let file = null;
+    // 1) items から image kind='file' を拾う
+    const items = cd.items || [];
     for (const it of items) {
       if (it.kind === 'file' && it.type && it.type.startsWith('image/')) {
-        const blob = it.getAsFile();
-        if (!blob) continue;
-        ev.preventDefault();
-        const ext = ((blob.type.split('/')[1] || 'png').toLowerCase()).replace('jpeg', 'jpg');
-        const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: blob.type });
-        toast('📋 クリップボード画像をアップロード中…');
-        await uploadComposerImage([file]);   // v1143 array 化
-        return;
+        file = it.getAsFile();
+        if (file) break;
       }
     }
-  });
+    // 2) fallback: cd.files (一部ブラウザで file を items に出さず files に入れる)
+    if (!file && cd.files && cd.files.length) {
+      for (const f of cd.files) {
+        if (f.type && f.type.startsWith('image/')) { file = f; break; }
+      }
+    }
+    if (!file) return;
+    ev.preventDefault();
+    const ext = ((file.type.split('/')[1] || 'png').toLowerCase()).replace('jpeg', 'jpg');
+    // File オブジェクトは既に file なので、そのままでも OK だが名前を clipboard-* に統一
+    const named = new File([file], `clipboard-${Date.now()}.${ext}`, { type: file.type });
+    toast('📋 クリップボード画像をアップロード中…');
+    await uploadComposerImage([named]);
+  };
+  // window に bind = document 全域で paste が反応 (textarea 外にフォーカスあっても OK)
+  // ただし render 呼び直しで再 bind されると多重になるので前回 removeEventListener してから追加
+  if (window.__po_paste_handler) {
+    window.removeEventListener('paste', window.__po_paste_handler);
+  }
+  window.__po_paste_handler = handlePasteEvent;
+  window.addEventListener('paste', handlePasteEvent);
   // v482 #69 起動時に前回の設定を復元。 ON だったなら自動で位置取得。
   const locChk = document.getElementById('po-loc');
   if (locChk && readLocPref()) {
@@ -893,13 +917,13 @@ function bindRowHandlers() {
       const postId = el.dataset.rotPostId;
       // v1149 中村さん要望「複数の画像を拡大しているときにはスワイプで次の画像に」
       //   → 同じ投稿カード内 (data-post-id が同じ) の [data-zoom-src] を全て集めて
-      //   lightbox に配列で渡す。 単発投稿は 1 枚配列で動作 (下位互換)。
+      //   lightbox に配列で渡す。単発投稿は 1 枚配列で動作 (下位互換)。
       const row = el.closest('[data-post-id]');
       const siblings = row ? [...row.querySelectorAll('[data-zoom-src]')] : [el];
       const images = siblings.map(s => s.dataset.zoomSrc);
       const startIndex = Math.max(0, siblings.indexOf(el));
       const opts = { images, index: startIndex };
-      // rotate は 1 枚目のみ (lightbox 側で index=0 以外は 非表示)
+      // rotate は 1 枚目のみ (lightbox 側で index=0 以外は非表示)
       if (postId) opts.onRotate = (degrees, idx) =>
         idx === 0
           ? post(`/api/posts/${postId}/rotate-image`, { degrees })
