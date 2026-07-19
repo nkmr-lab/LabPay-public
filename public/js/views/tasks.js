@@ -681,6 +681,34 @@ async function loadDetail(id) {
     // thank-you message (note-style).
     const myApproved = (t.my_claims || []).find(c => c.status === 'approved');
 
+    // v1165 fb#491 メンバー23さん要望「タスクで、何時で枠を確保したか引き受け後にわかるようにして欲しい」
+    //   → 自分が引き受けた claim の slot_id から task.slots を引いて時間を出す。
+    //   claimed / reported / approved のどれでも見えるように上部に「🕒 確保した枠」バーを表示。
+    const slotById = new Map((t.slots || []).map(s => [Number(s.id), s]));
+    const _fmtSlotWin = (s) => {
+      if (!s || !s.started_at || !s.ended_at) return '';
+      // "YYYY-MM-DD HH:MM:SS" → "MM/DD HH:MM-HH:MM" (同日想定)
+      const dStart = s.started_at.slice(5, 16).replace(' ', ' ');  // "07-25 10:00"
+      const tEnd   = s.ended_at.slice(11, 16);                     // "11:00"
+      return `${dStart}〜${tEnd}`;
+    };
+    let mySlotBar = '';
+    const mySlottedClaims = (t.my_claims || []).filter(c =>
+      ['claimed','reported','approved'].includes(c.status) && Number(c.slot_id) > 0);
+    if (mySlottedClaims.length) {
+      const lines = mySlottedClaims.map(c => {
+        const s = slotById.get(Number(c.slot_id));
+        const statusLabel = c.status === 'claimed' ? '引き受け中'
+                         : c.status === 'reported' ? '完了報告済 (承認待ち)'
+                         : '承認済';
+        return `<div>🕒 <strong>${escapeHtml(_fmtSlotWin(s) || '(枠情報なし)')}</strong> — ${statusLabel}</div>`;
+      }).join('');
+      mySlotBar = `<div class="card" style="background:#e0f2fe; padding:10px 12px; border:1px solid #7dd3fc">
+        <div style="font-weight:700; color:#0369a1; font-size:13px; margin-bottom:4px">✅ あなたが確保した枠</div>
+        <div style="font-size:13px; color:#0c4a6e; line-height:1.6">${lines}</div>
+      </div>`;
+    }
+
     let actions = '';
     if (!isRequester && t.status === 'open') {
       const canClaim = t.remaining > 0
@@ -807,6 +835,7 @@ async function loadDetail(id) {
 
     root.innerHTML = `
       ${pendingAlert}
+      ${mySlotBar}
 
       <div class="card">
         <div class="row center" style="gap:10px">
