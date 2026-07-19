@@ -21,8 +21,23 @@ function route_timers(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'start'  && $method === 'PATCH')  { timers_start($pdo, $cfg, $id); return; }
         if ($next === 'pause'  && $method === 'PATCH')  { timers_pause($pdo, $cfg, $id); return; }
         if ($next === 'reset'  && $method === 'PATCH')  { timers_reset($pdo, $cfg, $id); return; }
+        // v1183 中村さん要望「タイマーから離脱する機能が欲しい」→ 自分だけを participants から抜く
+        if ($next === 'leave'  && $method === 'DELETE') { timers_leave($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no timers route for $method $sub", 404);
+}
+
+// v1183 タイマー離脱 (自分を participants から外す)。 creator も抜けられる (通知面倒だが起案者フラグは維持)。
+function timers_leave(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    $stG = $pdo->prepare("SELECT id, title, status FROM timers WHERE id=? AND deleted_at IS NULL");
+    $stG->execute([$id]);
+    $g = $stG->fetch(PDO::FETCH_ASSOC);
+    if (!$g) throw new ApiException('not_found', 'timer not found', 404);
+    $stD = $pdo->prepare("DELETE FROM timer_participants WHERE timer_id=? AND user_id=?");
+    $stD->execute([$id, $uid]);
+    json_response(['ok' => true, 'removed' => $stD->rowCount()]);
 }
 
 // v446 参加者 (含起案者) 判定ヘルパ。 start/pause/reset は全員押せる。

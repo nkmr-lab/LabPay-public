@@ -352,8 +352,10 @@ export async function renderTimerDetail({ params }) {
         <button id="tmd-start" class="primary" hidden>▶ 開始</button>
         <button id="tmd-pause" class="btn"     hidden>⏸ 一時停止</button>
         <button id="tmd-reset" class="btn"     hidden>↻ リセット</button>
+        <!-- v1183 中村さん要望「タイマーから離脱する機能が欲しい」 -->
+        <button id="tmd-leave" class="btn" hidden style="margin-left:auto; color:#c00">🚪 離脱</button>
       </div>
-      <p class="hint-sm" style="margin:6px 0 0">操作は参加者全員 (起案者含む) が可能。</p>
+      <p class="hint-sm" style="margin:6px 0 0">操作は参加者全員 (起案者含む) が可能。 離脱すると自分だけ通知/表示対象から外れる。</p>
     </div>
     <div class="card" id="tmd-admin-card" hidden>
       <div class="row" style="gap:6px; flex-wrap:wrap">
@@ -493,6 +495,21 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
       `;
       document.getElementById('tmd-pcount').textContent = d.participants.length;
       document.getElementById('tmd-participants').innerHTML = d.participants.map(participantPill).join('');
+      // v1183 中村さん要望「タイマーから離脱する機能が欲しい」→ 参加者なら誰でも離脱可
+      if (d.is_participant) {
+        const leaveBtn = document.getElementById('tmd-leave');
+        if (leaveBtn) {
+          leaveBtn.hidden = false;
+          leaveBtn.addEventListener('click', async () => {
+            if (!confirm('このタイマーから離脱しますか? (通知や表示対象から外れます、 他の参加者は影響なし)')) return;
+            try {
+              await del(`/api/timers/${id}/leave`);
+              toast('離脱しました');
+              navigate('#/timers');
+            } catch (e) { toast('失敗: ' + e.message); }
+          });
+        }
+      }
       // v446 start/pause/reset は参加者 (含起案者) なら押せる。
       if (d.is_participant || d.is_creator) {
         document.getElementById('tmd-start').addEventListener('click', async () => {
