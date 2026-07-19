@@ -127,7 +127,7 @@ export const HOME_ACTIONS = [
   { id: 'labo-eats',            url: '#/labo-eats',            title: 'ラーボーイーツ', icon: '🍱', defaultVisible: false },
   { id: 'research-ai',          url: '#/research-ai',          title: '研究 AI サブスク', icon: '🔬', defaultVisible: false },
   { id: 'exp-plan',             url: '#/exp-plan',             title: '実験計画書チェック', icon: '🧪', defaultVisible: false },
-  { id: 'miro',                 url: '#/miro',                 title: 'Miro (ポストイット)', icon: '🗒', defaultVisible: false },
+  { id: 'board',                url: '#/board',                title: 'Board (ポストイット)', icon: '🗒', defaultVisible: false },
   { id: 'kanban',               url: '#/kanban',               title: 'かんばん',       icon: '📋', defaultVisible: false },
   { id: 'refs',                 url: '#/refs',                 title: '文献管理',       icon: '📚', defaultVisible: false },
   { id: 'joint-events',         url: '#/joint-events',         title: '合同研究会投票', icon: '🎪', defaultVisible: false },
@@ -212,7 +212,7 @@ const SHORTCUT_CARDS_DEFS = [
   { id: 'sc-labo-eats',     title: '🍱 ラーボーイーツ',  url: '#/labo-eats',     desc: '研究室にいる人が外にいる人に「ついで買い」を頼む。基本料 50pt + 距離' },
   { id: 'sc-research-ai',   title: '🔬 研究 AI サブスク', url: '#/research-ai',  desc: '研究特化の AI チャット (トークン制、スレッド共有、 PDF / 画像添付)' },
   { id: 'sc-exp-plan',      title: '🧪 実験計画書チェック', url: '#/exp-plan',   desc: 'RQ / 仮説 / 実験対応 / 統計 / サンプルサイズを AI で精査' },
-  { id: 'sc-miro',          title: '🗒 Miro (ポストイット)', url: '#/miro',      desc: 'ポストイット空間 + 他人カーソル + オモテウラ表示' },
+  { id: 'sc-board',         title: '🗒 Board (ポストイット)', url: '#/board',    desc: 'ポストイット空間 + 他人カーソル + オモテウラ表示' },
   { id: 'sc-kanban',        title: '📋 かんばん',        url: '#/kanban',        desc: 'Trello 的タスクボード。 D&D、担当、ラベル、チェックリスト、コメント' },
   { id: 'sc-refs',          title: '📚 文献管理',        url: '#/refs',          desc: 'Zotero 的、 DOI / arXiv / PDF から自動取込、コレクション、ハイライト' },
   { id: 'sc-joint-events',  title: '🎪 合同研究会投票', url: '#/joint-events',  desc: '合同研究会でセッションごとに相手ラボ発表を評価' },
@@ -311,7 +311,7 @@ const NEW_DEFAULT_HIDDEN = [
   // v1152 追加した SHORTCUT カード全部 (default OFF)
   'sc-bokete', 'sc-setlog', 'sc-profile-book', 'sc-trading-cards',
   'sc-tomorrow-lab', 'sc-pres-order', 'sc-tickets', 'sc-labo-eats',
-  'sc-research-ai', 'sc-exp-plan', 'sc-miro', 'sc-kanban', 'sc-refs',
+  'sc-research-ai', 'sc-exp-plan', 'sc-board', 'sc-kanban', 'sc-refs',
   'sc-joint-events', 'sc-public-polls', 'sc-expenses', 'sc-buy-requests',
   'sc-my-games', 'sc-quotes', 'sc-news', 'sc-pomodoro', 'sc-power', 'sc-walk-mode',
 ];

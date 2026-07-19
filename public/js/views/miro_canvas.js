@@ -42,7 +42,7 @@ let MINIMAP_OPEN = true;
 
 export async function renderMiroCanvas({ params }) {
   ROOM_ID = parseInt(params?.id, 10);
-  if (!ROOM_ID) { navigate('/miro'); return; }
+  if (!ROOM_ID) { navigate('/board'); return; }
   const app = document.getElementById('app');
   app.innerHTML = shellHtml();
   // v1104 miro モードは画面いっぱいで使いたい (トップバー / タブバーを隠す)
@@ -78,7 +78,7 @@ function shellHtml() {
     <div id="miro-shell" style="position:fixed; top:0; left:0; right:0; bottom:0; width:100vw; height:100vh; display:flex; flex-direction:column; background:#fafafa; z-index:100">
       <!-- toolbar -->
       <div id="miro-toolbar" style="display:flex; gap:6px; align-items:center; padding:6px 10px; background:#fff; border-bottom:1px solid #e5e7eb; flex-wrap:wrap">
-        <a href="#/miro" class="hint" style="text-decoration:none; padding:4px 8px">← 部屋一覧</a>
+        <a href="#/board" class="hint" style="text-decoration:none; padding:4px 8px">← 部屋一覧</a>
         <div id="miro-title" style="font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">…</div>
         <button class="btn" id="miro-add" title="ノートを追加">➕ ノート</button>
         <button class="btn" id="miro-refs" title="自分の文献ストックから貼る">📚 論文</button>

@@ -11,7 +11,7 @@ export async function renderMiroRooms() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="card page-header">
-      <h2 style="margin:0">🗒 Miro (ポストイット空間)</h2>
+      <h2 style="margin:0">🗒 Board (ポストイット空間)</h2>
       <p class="hint" style="margin:6px 0 0; font-size:13px; line-height:1.6">
         グループで自由にポストイットを配置できる共有ボード。ドラッグで動かす / つまんでリサイズ / 色や表裏を変える / 🎨 で AI 画像生成もできる。
         部屋は「ラボ全員 / グループ / 自分専用」から選んで作れる。
@@ -106,7 +106,7 @@ async function loadList() {
       </div>
     `;
     root.querySelectorAll('[data-open]').forEach(el => {
-      el.addEventListener('click', () => navigate('/miro/rooms/' + el.dataset.open));
+      el.addEventListener('click', () => navigate('/board/rooms/' +el.dataset.open));
     });
   } catch (e) {
     root.innerHTML = `<div class="muted" style="color:#b91c1c">読み込み失敗: ${escapeHtml(e.message)}</div>`;
@@ -152,7 +152,7 @@ async function createRoom() {
     if (vis === 'group') body.owner_group_id = gid;
     const r = await post('/api/miro/rooms', body);
     toast('部屋を作ったよ');
-    navigate('/miro/rooms/' + r.id);
+    navigate('/board/rooms/' +r.id);
   } catch (e) {
     toast('作成失敗: ' + e.message);
   }

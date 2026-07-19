@@ -146,7 +146,7 @@ export const APPS = [
   { id: 'trading-cards', cat: 'game', url: '#/trading-cards', title: '🎴 ゼミ人トレカ + ガチャ', desc: 'ラボメンのトレカ (SSR/SR/R/N) を誰でも作成。作ると本人へ承認申請が飛び、承認されると公開 pool 入り。ガチャは 1 連 30pt / 10 連 250pt (R 以上確定)。集めよう。', defaultVisible: true },
   { id: 'pres-order', cat: 'trade', url: '#/pres-order', title: '🎪 発表順オークション', desc: '論文紹介やポスターセッションの発表順を sealed 入札で決める。全員好きな額を入れて締切 → 金額の高い順に 1 番目 / 2 番目 / … を割り当て、勝者は入札額を pot に支払う。未入札は 0pt で最下位ゾーンに並ぶ。', defaultVisible: true },
   { id: 'tomorrow-lab', cat: 'lab-mgmt', url: '#/tomorrow-lab', title: '🏫 明日、研究室に一緒に行こう', desc: '明日行くと宣言 → 誰も居ないと寂しいので集まる仕組み。最初に宣言した人が罰金 fee を設定、他の人は無料で参加。当日以降に精算 → checkin データから行かなかった人 (no-show) から罰金を徴収し、行った人 (show) で山分け。', defaultVisible: true },
-  { id: 'miro', cat: 'shared', url: '#/miro', title: '🗒 Miro (ポストイット空間)', desc: 'グループで自由にポストイットを配置できる共有ボード。ドラッグで動かす / つまんでリサイズ / 色や表裏を変える / 🎨 で AI 画像生成もできる。オモテウラ (side) はユーザごと個別、人によって見えてる面が違う。2 秒 poll で准リアルタイム。', defaultVisible: true },
+  { id: 'board', cat: 'shared', url: '#/board', title: '🗒 Board (ポストイット空間)', desc: 'グループで自由にポストイットを配置できる共有ボード。ドラッグで動かす / つまんでリサイズ / 色や表裏を変える / 🎨 で AI 画像生成 / 📚 論文 or 🍜 食べある記から一括貼付 (元ページへの 🔗 リンク付き)。 v1172 で Miro から Board にリネーム (id/URL も miro→board)。 v1173 (計画中): 手書き対応。', defaultVisible: true },
   // v925 文献管理 (Zotero-like)
   { id: 'refs', cat: 'research', url: '#/refs', title: '📚 文献管理', desc: 'Zotero的な文献管理。DOI/arXiv ID/URLからmetadata (title/authors/year/venue/abstract) を自動取得。PDF添付、タグ、BibTeX出力、検索・絞り込み、読状態、自分のnoteをラボ全員で共有。要約/全訳と相互リンク。', defaultVisible: true },
   // v821 Cosense (nkmr-lab) 連携 — 研究ノートの今日 / 昨日をロード + 編集リンク

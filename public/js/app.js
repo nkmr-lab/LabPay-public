@@ -283,9 +283,9 @@ function renderChrome() {
 // v514 #131 タブの表示順 (ユーザ要望): ホーム / グループ (ある時) / らぼったー /
 //   購入 / 販売 / 依頼 / 競売 / アプリ / 実績。食べある記・ラボにいる人はタブから外し
 //   #/apps からアクセスする形に。全員デフォルトに戻すため、 layout key を v2 に上げる。
-// v1132 中村さん要望「一旦みんなの表示タブ設定を整理しよう。 らぼったー、売買、依頼、
+// v1132 中村さん要望「一旦みんなの表示タブ設定を整理しよう。らぼったー、売買、依頼、
 //   研究、共有、運営、娯楽、アプリに限定していこう」+「購入タブを売買タブに名前を変更、
-//   そこに 購入・販売・オークション・ラーボーイーツ・チケット・発表順オークションを配置」
+//   そこに購入・販売・オークション・ラーボーイーツ・チケット・発表順オークションを配置」
 //   → id='buy' を title='売買' に rename (画面自体は購入 UI + 上部に売買アプリ集を追加)。
 //   home / groups / sell / auctions / achievements は DEFAULT_HIDDEN_TABS に (URL/apps 経由で到達可)。
 //   layout key を v3 に上げて全員のデフォルトを新配置に更新。
@@ -335,7 +335,7 @@ export function writeTabLayout(layout) {
   } catch {}
 }
 // v1136 nav の子要素を TAB_DEFS から (再) 生成。 rebuild=true なら丸ごと作り直す
-//   (title 変更をハードコードなしで反映するため)。 通常呼び出しでも「まだ何も無い」
+//   (title 変更をハードコードなしで反映するため)。通常呼び出しでも「まだ何も無い」
 //   ケース (初回) は生成する。
 function rebuildNav(nav) {
   nav.textContent = '';
@@ -535,9 +535,12 @@ route('/refs/:id',        lazy(() => import('./views/refs.js'), 'renderRefsDetai
 // v934 かんばんボード (Trello-like、ラボ共有)
 route('/kanban',                lazy(() => import('./views/kanban.js'), 'renderKanban'));
 route('/kanban/boards/:id',     lazy(() => import('./views/kanban.js'), 'renderKanbanBoard'));
-// v1100 Miro 的な共同ポストイット空間
-route('/miro',                  lazy(() => import('./views/miro_rooms.js'), 'renderMiroRooms'));
-route('/miro/rooms/:id',        lazy(() => import('./views/miro_canvas.js'), 'renderMiroCanvas'));
+// v1100 Miro 的な共同ポストイット空間 (v1172 で「Board」にリネーム、URL も /#/board/*)
+route('/board',                 lazy(() => import('./views/miro_rooms.js'), 'renderMiroRooms'));
+route('/board/rooms/:id',       lazy(() => import('./views/miro_canvas.js'), 'renderMiroCanvas'));
+// v1172 旧 URL 互換: /#/miro → /#/board にリダイレクト (既存のブックマークやチャット投稿が壊れないよう)
+route('/miro',                  () => { window.location.hash = '#/board'; });
+route('/miro/rooms/:id',        (ctx) => { window.location.hash = '#/board/rooms/' + ctx.params.id; });
 // v1119 明日、研究室に一緒に行こう
 route('/tomorrow-lab',          lazy(() => import('./views/tomorrow_lab.js'), 'renderTomorrowLab'));
 // v1120 発表順オークション
