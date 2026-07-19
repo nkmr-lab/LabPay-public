@@ -39,6 +39,14 @@ let CURSOR_LAST_POSTED = 0;
 let CURSOR_POST_ANIM = null;
 // v1104 ミニマップの開閉
 let MINIMAP_OPEN = true;
+// v1173 手書きモード
+// MODE: 'select' (デフォルト、 pan + note ドラッグ) / 'draw' (自由手書き) / 'erase' (ストロークタップで削除)
+let MODE = 'select';
+let STROKES = [];     // 全ストローク (array)
+let STROKE_MAP = {};  // id → stroke
+let CURRENT_STROKE = null;  // 描画中: { points:[{x,y},...], color, width }
+let PEN_COLOR = '#111827';  // 黒デフォルト
+let PEN_WIDTH = 2.5;
 
 export async function renderMiroCanvas({ params }) {
   ROOM_ID = parseInt(params?.id, 10);
@@ -83,6 +91,21 @@ function shellHtml() {
         <button class="btn" id="miro-add" title="ノートを追加">➕ ノート</button>
         <button class="btn" id="miro-refs" title="自分の文献ストックから貼る">📚 論文</button>
         <button class="btn" id="miro-places" title="食べある記から貼る (画像主体)">🍜 食べある記</button>
+        <!-- v1173 手書きモード -->
+        <div id="miro-mode-group" style="display:inline-flex; gap:2px; margin-left:6px" title="モード切替">
+          <button class="btn miro-mode" data-mode="select" title="選択/移動">🖱</button>
+          <button class="btn miro-mode" data-mode="draw" title="手書き">✏️</button>
+          <button class="btn miro-mode" data-mode="erase" title="消しゴム (ストロークをタップで削除)">🩹</button>
+        </div>
+        <div id="miro-pen-group" style="display:none; gap:2px; align-items:center; margin-left:4px" title="ペン設定">
+          <input type="color" id="miro-pen-color" value="#111827" style="width:28px; height:28px; padding:0; border:1px solid #d1d5db; border-radius:4px; cursor:pointer">
+          <select id="miro-pen-width" style="padding:2px 4px; font-size:12px">
+            <option value="1.5">細</option>
+            <option value="2.5" selected>中</option>
+            <option value="4">太</option>
+            <option value="6">極太</option>
+          </select>
+        </div>
         <div id="miro-palette" style="display:flex; gap:3px; align-items:center; margin-left:6px" title="デフォルト色">
           ${PALETTE.map(c => `<button class="mpal" data-color="${c}" style="width:24px; height:24px; border-radius:6px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer" title="${c}"></button>`).join('')}
         </div>
@@ -95,7 +118,10 @@ function shellHtml() {
       </div>
       <!-- viewport -->
       <div id="miro-viewport" style="flex:1; overflow:hidden; position:relative; touch-action:none; cursor:grab; background:#fafafa">
-        <div id="miro-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform"></div>
+        <div id="miro-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform">
+          <!-- v1173 手書きストローク SVG (world 座標。 miro-layer の transform に追随) -->
+          <svg id="miro-strokes-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible"></svg>
+        </div>
         <!-- v1104 他人カーソルオーバーレイ (screen 座標、変形しないので上のレイヤ) -->
         <div id="miro-cursors" style="position:absolute; inset:0; pointer-events:none; overflow:hidden"></div>
         <!-- v1104 minimap: 右下に全体マップ (ノート = 小さい色付き矩形、現在視野 = 枠) -->
@@ -183,6 +209,10 @@ async function loadInitial() {
     NOTES = d.notes || [];
     NOTE_MAP = {};
     for (const n of NOTES) NOTE_MAP[n.id] = n;
+    // v1173 手書きストローク
+    STROKES = d.strokes || [];
+    STROKE_MAP = {};
+    for (const s of STROKES) STROKE_MAP[s.id] = s;
     LAST_SERVER_TIME = d.server_time;
     document.getElementById('miro-title').textContent = ROOM.title;
     document.getElementById('miro-viewport').style.background = ROOM.bg_color || '#fafafa';
@@ -226,8 +256,12 @@ function startPolling() {
         if (NOTE_MAP[id]) { delete NOTE_MAP[id]; dirty = true; }
         if (EDITING_NOTE_ID === id) EDITING_NOTE_ID = null;   // 削除されたら編集終了
       }
+      // v1173 手書きストロークの diff
+      for (const s of d.stroke_upserts || []) { STROKE_MAP[s.id] = s; dirty = true; }
+      for (const sid of d.stroke_deletes || []) { if (STROKE_MAP[sid]) { delete STROKE_MAP[sid]; dirty = true; } }
       if (dirty) {
         NOTES = Object.values(NOTE_MAP);
+        STROKES = Object.values(STROKE_MAP);
         renderAll();
       }
       // v1104 他人カーソルを取り込む (poll ごとに全リフレッシュ、シンプル)
@@ -314,6 +348,26 @@ function wireCanvas() {
   const layer = document.getElementById('miro-layer');
 
   vp.addEventListener('pointerdown', (e) => {
+    // v1173 手書きモード: pointerdown で新規ストローク開始 (note/pan と分岐)
+    if (MODE === 'draw' && !e.target.closest('button, .mnote')) {
+      const w = screenToWorld(e.clientX, e.clientY);
+      CURRENT_STROKE = { points: [{ x: w.x, y: w.y }], color: PEN_COLOR, width: PEN_WIDTH };
+      DRAG.mode = 'draw';
+      DRAG.pointerId = e.pointerId;
+      try { vp.setPointerCapture(e.pointerId); } catch (_) {}
+      renderCurrentStroke();
+      return;
+    }
+    // v1173 消しゴムモード: pointerdown で SVG stroke path をタップしたら削除
+    if (MODE === 'erase') {
+      const path = e.target.closest('path[data-stroke-id]');
+      if (path) {
+        const sid = parseInt(path.dataset.strokeId, 10);
+        deleteStroke(sid).catch(err => toast('削除失敗: ' + err.message));
+        return;
+      }
+      // stroke 以外を触ったら pan は許す (下の通常分岐に fall through)
+    }
     // 何に触れたか
     const noteEl   = e.target.closest('.mnote');
     const handleEl = e.target.closest('.mhandle');
@@ -352,6 +406,17 @@ function wireCanvas() {
     const w = screenToWorld(e.clientX, e.clientY);
     MY_CURSOR.x = w.x; MY_CURSOR.y = w.y;
     scheduleCursorPost();
+    // v1173 手書き: 描画中は世界座標で点を追加、SVG に反映
+    if (DRAG.mode === 'draw' && CURRENT_STROKE) {
+      const last = CURRENT_STROKE.points[CURRENT_STROKE.points.length - 1];
+      // 隣接点間の距離が最低 2px 以上あるときだけ追加 (点数節約)
+      const dx = w.x - last.x, dy = w.y - last.y;
+      if (dx * dx + dy * dy > 4) {
+        CURRENT_STROKE.points.push({ x: w.x, y: w.y });
+        renderCurrentStroke();
+      }
+      return;
+    }
     if (DRAG.mode === null) return;
     const dx = e.clientX - DRAG.startX;
     const dy = e.clientY - DRAG.startY;
@@ -376,6 +441,29 @@ function wireCanvas() {
   });
 
   vp.addEventListener('pointerup', async (e) => {
+    // v1173 手書き完了: サーバ保存
+    if (DRAG.mode === 'draw' && CURRENT_STROKE) {
+      try { vp.releasePointerCapture(e.pointerId); } catch (_) {}
+      const stroke = CURRENT_STROKE;
+      CURRENT_STROKE = null;
+      DRAG.mode = null;
+      // 点が 2 未満なら破棄 (単発タップ)
+      if (stroke.points.length < 2) { renderCurrentStroke(); return; }
+      try {
+        const r = await post(`/api/miro/rooms/${ROOM_ID}/strokes`, {
+          points: stroke.points, color: stroke.color, width: stroke.width,
+        });
+        if (r && r.stroke) {
+          STROKE_MAP[r.stroke.id] = r.stroke;
+          STROKES = Object.values(STROKE_MAP);
+        }
+      } catch (err) {
+        toast('保存失敗: ' + err.message);
+      }
+      renderCurrentStroke();
+      renderStrokes();
+      return;
+    }
     const mode = DRAG.mode;
     const nid  = DRAG.noteId;
     const moved = DRAG.moved;
@@ -432,6 +520,13 @@ function wireToolbar() {
   document.getElementById('miro-add').addEventListener('click', createNoteAtCenter);
   document.getElementById('miro-refs').addEventListener('click', openRefsPicker);
   document.getElementById('miro-places').addEventListener('click', openPlacesPicker);
+  // v1173 モード切替
+  document.querySelectorAll('.miro-mode').forEach(b => {
+    b.addEventListener('click', () => setMode(b.dataset.mode));
+  });
+  document.getElementById('miro-pen-color').addEventListener('input', (e) => { PEN_COLOR = e.target.value; });
+  document.getElementById('miro-pen-width').addEventListener('change', (e) => { PEN_WIDTH = Number(e.target.value) || 2.5; });
+  setMode('select');
   document.getElementById('miro-zoom-in').addEventListener('click', () => {
     const vp = document.getElementById('miro-viewport');
     zoomAtScreen(vp.clientWidth / 2 + vp.getBoundingClientRect().left,
@@ -476,6 +571,8 @@ function renderAll() {
   const layer = document.getElementById('miro-layer');
   if (!layer) return;
   applyTransform();
+  // v1173 手書きストロークも同時に描画
+  renderStrokes();
   // z_index でソート
   const sorted = [...Object.values(NOTE_MAP)].sort((a, b) => (a.z_index || 0) - (b.z_index || 0));
   // 編集中ノートの現在値を保存 (再描画で消えるので後で戻す)。 EDITING_NOTE_ID を
@@ -1199,4 +1296,73 @@ function debounce(fn, ms) {
     if (t) clearTimeout(t);
     t = setTimeout(() => { t = null; fn(...args); }, ms);
   };
+}
+
+// ─── v1173 手書き ───────────────────────────────────────
+function setMode(m) {
+  MODE = m;
+  document.querySelectorAll('.miro-mode').forEach(b => {
+    const active = b.dataset.mode === m;
+    b.style.background = active ? '#7b3fa0' : '';
+    b.style.color      = active ? '#fff'   : '';
+  });
+  const pen = document.getElementById('miro-pen-group');
+  if (pen) pen.style.display = (m === 'draw') ? 'inline-flex' : 'none';
+  const svg = document.getElementById('miro-strokes-svg');
+  if (svg) {
+    // draw モードでは stroke SVG を pointer 透過に (下の viewport で drawing 開始できるように)
+    // erase モードでは pointer を受けて stroke タップ削除
+    // select モードでも stroke は当たり判定不要 (下の note/pan を邪魔しない)
+    svg.style.pointerEvents = (m === 'erase') ? 'auto' : 'none';
+  }
+  const vp = document.getElementById('miro-viewport');
+  if (vp) {
+    vp.style.cursor = m === 'draw' ? 'crosshair' : m === 'erase' ? 'not-allowed' : 'grab';
+  }
+}
+
+function renderStrokes() {
+  const svg = document.getElementById('miro-strokes-svg');
+  if (!svg) return;
+  const parts = [];
+  for (const s of Object.values(STROKE_MAP)) {
+    if (!s || !Array.isArray(s.points) || s.points.length < 2) continue;
+    // world 座標を SVG viewBox (svg は -10000..10000 の viewport 上に絶対配置) に合わせる
+    // ため、各点に +10000 の offset を加える
+    const d = s.points.map((p, i) => (i === 0 ? 'M' : 'L') + (p.x + 10000).toFixed(1) + ',' + (p.y + 10000).toFixed(1)).join(' ');
+    // 消しゴムモードではヒット判定幅を広くしたいので pointer-events は path の stroke だけに
+    const cursorAttr = MODE === 'erase' ? ' style="cursor:pointer" ' : '';
+    parts.push(`<path data-stroke-id="${s.id}" d="${d}" stroke="${s.color}" stroke-width="${s.width}" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="stroke"${cursorAttr}/>`);
+  }
+  svg.innerHTML = parts.join('');
+}
+
+function renderCurrentStroke() {
+  // 描画中の暫定 stroke を専用の path として付ける (id=miro-current-stroke)
+  const svg = document.getElementById('miro-strokes-svg');
+  if (!svg) return;
+  let cur = svg.querySelector('#miro-current-stroke');
+  if (!CURRENT_STROKE || CURRENT_STROKE.points.length < 2) {
+    if (cur) cur.remove();
+    return;
+  }
+  const d = CURRENT_STROKE.points.map((p, i) => (i === 0 ? 'M' : 'L') + (p.x + 10000).toFixed(1) + ',' + (p.y + 10000).toFixed(1)).join(' ');
+  if (!cur) {
+    cur = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    cur.id = 'miro-current-stroke';
+    cur.setAttribute('fill', 'none');
+    cur.setAttribute('stroke-linecap', 'round');
+    cur.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(cur);
+  }
+  cur.setAttribute('d', d);
+  cur.setAttribute('stroke', CURRENT_STROKE.color);
+  cur.setAttribute('stroke-width', String(CURRENT_STROKE.width));
+}
+
+async function deleteStroke(sid) {
+  await del(`/api/miro/strokes/${sid}`);
+  delete STROKE_MAP[sid];
+  STROKES = Object.values(STROKE_MAP);
+  renderStrokes();
 }

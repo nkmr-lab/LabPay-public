@@ -31,6 +31,9 @@ function route_miro(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'notes-from-places' && $method === 'POST') { miro_notes_from_places($pdo, $cfg, $id); return; }
             if ($next === 'updates' && $method === 'GET')  { miro_room_updates($pdo, $cfg, $id);   return; }
             if ($next === 'cursor'  && $method === 'POST') { miro_cursor_upsert($pdo, $cfg, $id);  return; }
+            // v1173 手書き
+            if ($next === 'strokes' && $method === 'GET')  { miro_strokes_list($pdo, $cfg, $id);   return; }
+            if ($next === 'strokes' && $method === 'POST') { miro_stroke_create($pdo, $cfg, $id);  return; }
         }
     }
     // /api/miro/notes/{id} ...
@@ -43,6 +46,11 @@ function route_miro(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'flip'           && $method === 'POST') { miro_note_flip($pdo, $cfg, $id);           return; }
             if ($next === 'generate-image' && $method === 'POST') { miro_note_generate_image($pdo, $cfg, $id); return; }
         }
+    }
+    // v1173 /api/miro/strokes/{id} DELETE
+    if ($sub === 'strokes') {
+        $id = (int)($seg[2] ?? 0);
+        if ($id > 0 && $method === 'DELETE') { miro_stroke_delete($pdo, $cfg, $id); return; }
     }
     // /api/miro/default-color — GET/PUT
     if ($sub === 'default-color') {
@@ -253,13 +261,112 @@ function miro_room_detail(PDO $pdo, array $cfg, int $id): void {
             'ts'      => (float)$r['ts'],
         ];
     }
+    // v1173 手書きストローク一括
+    $strokes = _miro_load_strokes($pdo, $id);
     json_response([
         'room'          => $room,
         'notes'         => $notes,
+        'strokes'       => $strokes,
         'cursors'       => $cursors,
         'my_default_color' => $defColor,
         'server_time'   => (new DateTimeImmutable())->format('Y-m-d H:i:s'),
     ]);
+}
+
+function _miro_load_strokes(PDO $pdo, int $roomId): array {
+    $st = $pdo->prepare("SELECT id, points_json, color, width, created_by_user_id, created_at
+                           FROM miro_strokes
+                          WHERE room_id = ? AND deleted_at IS NULL
+                          ORDER BY id ASC");
+    $st->execute([$roomId]);
+    $out = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $pts = json_decode((string)$r['points_json'], true);
+        if (!is_array($pts)) $pts = [];
+        $out[] = [
+            'id'                 => (int)$r['id'],
+            'points'             => $pts,
+            'color'              => (string)$r['color'],
+            'width'              => (float)$r['width'],
+            'created_by_user_id' => (int)$r['created_by_user_id'],
+            'created_at'         => (string)$r['created_at'],
+        ];
+    }
+    return $out;
+}
+
+function miro_strokes_list(PDO $pdo, array $cfg, int $roomId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $room = _miro_room_row($pdo, $roomId);
+    if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', '権限なし', 403);
+    }
+    json_response(['strokes' => _miro_load_strokes($pdo, $roomId)]);
+}
+
+function miro_stroke_create(PDO $pdo, array $cfg, int $roomId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $room = _miro_room_row($pdo, $roomId);
+    if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', '権限なし', 403);
+    }
+    $body = read_json_body();
+    $pts = $body['points'] ?? null;
+    if (!is_array($pts) || count($pts) < 2) {
+        throw new ApiException('bad_request', 'points が 2 点以上必要', 400);
+    }
+    if (count($pts) > 5000) throw new ApiException('bad_request', '1 ストロークの点数上限は 5000', 400);
+    // clean: {x,y} だけを number として保存
+    $clean = [];
+    foreach ($pts as $p) {
+        if (!is_array($p)) continue;
+        $x = isset($p['x']) ? (float)$p['x'] : null;
+        $y = isset($p['y']) ? (float)$p['y'] : null;
+        if ($x === null || $y === null) continue;
+        // 世界座標の暴走を防ぐ (絶対値 1e6 まで)
+        if (abs($x) > 1e6 || abs($y) > 1e6) continue;
+        $clean[] = ['x' => $x, 'y' => $y];
+    }
+    if (count($clean) < 2) throw new ApiException('bad_request', 'valid points が 2 点未満', 400);
+    $color = _miro_norm_color((string)($body['color'] ?? '#111827'), '#111827');
+    $width = isset($body['width']) ? max(0.5, min(20.0, (float)$body['width'])) : 2.0;
+    $ins = $pdo->prepare("INSERT INTO miro_strokes (room_id, points_json, color, width, created_by_user_id)
+                          VALUES (?, ?, ?, ?, ?)");
+    $ins->execute([$roomId, json_encode($clean), $color, $width, (int)$u['id']]);
+    $sid = (int)$pdo->lastInsertId();
+    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
+    json_response([
+        'ok'                 => true,
+        'stroke' => [
+            'id'                 => $sid,
+            'points'             => $clean,
+            'color'              => $color,
+            'width'              => $width,
+            'created_by_user_id' => (int)$u['id'],
+            'created_at'         => (new DateTimeImmutable())->format('Y-m-d H:i:s'),
+        ],
+    ]);
+}
+
+function miro_stroke_delete(PDO $pdo, array $cfg, int $strokeId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT s.id, s.room_id, s.created_by_user_id
+                           FROM miro_strokes s
+                          WHERE s.id = ? AND s.deleted_at IS NULL");
+    $st->execute([$strokeId]);
+    $s = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$s) throw new ApiException('not_found', 'stroke なし', 404);
+    $room = _miro_room_row($pdo, (int)$s['room_id']);
+    if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', '権限なし', 403);
+    }
+    // 削除は 作成者 or admin or room 参加者 (共同編集 モデル)
+    $pdo->prepare("UPDATE miro_strokes SET deleted_at = NOW() WHERE id = ?")->execute([$strokeId]);
+    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$s['room_id']]);
+    json_response(['ok' => true]);
 }
 
 function miro_room_patch(PDO $pdo, array $cfg, int $id): void {
@@ -368,12 +475,40 @@ function miro_room_updates(PDO $pdo, array $cfg, int $id): void {
             'ts'      => (float)$r['ts'],
         ];
     }
+    // v1173 手書きストローク: since より新しい (or 削除) を返す
+    $stS = $pdo->prepare("SELECT id, points_json, color, width, created_by_user_id, created_at, deleted_at
+                            FROM miro_strokes
+                           WHERE room_id = ? AND created_at > ?");
+    $stS->execute([$id, $since]);
+    $strokeUpserts = []; $strokeDeletes = [];
+    foreach ($stS->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        if ($r['deleted_at'] !== null) {
+            $strokeDeletes[] = (int)$r['id'];
+        } else {
+            $pts = json_decode((string)$r['points_json'], true);
+            if (!is_array($pts)) $pts = [];
+            $strokeUpserts[] = [
+                'id'                 => (int)$r['id'],
+                'points'             => $pts,
+                'color'              => (string)$r['color'],
+                'width'              => (float)$r['width'],
+                'created_by_user_id' => (int)$r['created_by_user_id'],
+                'created_at'         => (string)$r['created_at'],
+            ];
+        }
+    }
+    // 削除された古いストローク (deleted_at > since) も検出
+    $stD = $pdo->prepare("SELECT id FROM miro_strokes WHERE room_id = ? AND deleted_at IS NOT NULL AND deleted_at > ? AND created_at <= ?");
+    $stD->execute([$id, $since, $since]);
+    foreach ($stD->fetchAll(PDO::FETCH_COLUMN) as $sid) $strokeDeletes[] = (int)$sid;
     json_response([
-        'upserts'     => $upserts,
-        'deletes'     => $deletes,
-        'cursors'     => $cursors,
-        'server_time' => (new DateTimeImmutable())->format('Y-m-d H:i:s'),
-        'room_updated_at' => $room['updated_at'],
+        'upserts'          => $upserts,
+        'deletes'          => $deletes,
+        'stroke_upserts'   => $strokeUpserts,
+        'stroke_deletes'   => $strokeDeletes,
+        'cursors'          => $cursors,
+        'server_time'      => (new DateTimeImmutable())->format('Y-m-d H:i:s'),
+        'room_updated_at'  => $room['updated_at'],
     ]);
 }
 
