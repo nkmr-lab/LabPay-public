@@ -45,6 +45,9 @@ let MODE = 'select';
 let STROKES = [];     // 全ストローク (array)
 let STROKE_MAP = {};  // id → stroke
 let CURRENT_STROKE = null;  // 描画中: { points:[{x,y},...], color, width }
+// v1182 fb#492 スマホの 2 本指 pinch 拡大縮小用の追跡
+const ACTIVE_POINTERS = new Map();  // pointerId → {x, y} (touch のみ、 mouse は追跡しない)
+let PINCH_STATE = null;  // { d0, scale0 } / null なら pinch 中でない
 let PEN_COLOR = '#111827';  // 黒デフォルト
 let PEN_WIDTH = 2.5;
 
@@ -363,6 +366,21 @@ function wireCanvas() {
   const layer = document.getElementById('board-layer');
 
   vp.addEventListener('pointerdown', (e) => {
+    // v1182 スマホの 2 本指 pinch 拡大縮小 (fb#492 中村さん要望)
+    if (e.pointerType === 'touch') {
+      ACTIVE_POINTERS.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ACTIVE_POINTERS.size === 2) {
+        // 2 本目が着地 = pinch モード開始。既存の 1 本指 drag/draw をキャンセル
+        const [a, b] = [...ACTIVE_POINTERS.values()];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        PINCH_STATE = { d0: Math.sqrt(dx * dx + dy * dy), scale0: VIEW.scale };
+        // 進行中の pan/note/draw を停止 (drag mode 解除、未保存 stroke 廃棄)
+        DRAG.mode = null;
+        if (CURRENT_STROKE) { CURRENT_STROKE = null; renderCurrentStroke(); }
+        try { vp.releasePointerCapture(e.pointerId); } catch (_) {}
+        return;
+      }
+    }
     // v1173 手書きモード: pointerdown で新規ストローク開始 (note/pan と分岐)
     if (MODE === 'draw' && !e.target.closest('button, .bnote')) {
       e.preventDefault();  // v1178 マウス drag → text-selection や dragstart を確実に抑止
@@ -418,6 +436,21 @@ function wireCanvas() {
   });
 
   vp.addEventListener('pointermove', (e) => {
+    // v1182 2 本指 pinch 追跡
+    if (e.pointerType === 'touch' && ACTIVE_POINTERS.has(e.pointerId)) {
+      ACTIVE_POINTERS.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (PINCH_STATE && ACTIVE_POINTERS.size >= 2) {
+        const [a, b] = [...ACTIVE_POINTERS.values()];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > 0) {
+          const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+          const newScale = PINCH_STATE.scale0 * (d / PINCH_STATE.d0);
+          zoomAtScreen(cx, cy, newScale);
+        }
+        return;
+      }
+    }
     // v1104 自分のカーソル位置 (world 座標) を常時追跡してスロットル送信
     const w = screenToWorld(e.clientX, e.clientY);
     MY_CURSOR.x = w.x; MY_CURSOR.y = w.y;
@@ -457,6 +490,13 @@ function wireCanvas() {
   });
 
   vp.addEventListener('pointerup', async (e) => {
+    // v1182 2 本指 pinch: pointer を外す
+    if (e.pointerType === 'touch' && ACTIVE_POINTERS.has(e.pointerId)) {
+      ACTIVE_POINTERS.delete(e.pointerId);
+      if (ACTIVE_POINTERS.size < 2) PINCH_STATE = null;
+      if (ACTIVE_POINTERS.size === 0) DRAG.mode = null;
+      return;
+    }
     // v1173 手書き完了: サーバ保存
     if (DRAG.mode === 'draw' && CURRENT_STROKE) {
       try { vp.releasePointerCapture(e.pointerId); } catch (_) {}
@@ -508,6 +548,14 @@ function wireCanvas() {
           TAP.noteId = nid; TAP.ts = now;
         }
       }
+    }
+  });
+
+  // v1182 pointercancel も pinch 状態を掃除 (touch interrupt 対策)
+  vp.addEventListener('pointercancel', (e) => {
+    if (e.pointerType === 'touch' && ACTIVE_POINTERS.has(e.pointerId)) {
+      ACTIVE_POINTERS.delete(e.pointerId);
+      if (ACTIVE_POINTERS.size < 2) PINCH_STATE = null;
     }
   });
 
