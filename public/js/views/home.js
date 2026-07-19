@@ -116,7 +116,7 @@ export const HOME_ACTIONS = [
   // v1152 中村さん指摘「アイコンの設定にそれぞれのものがあるかチェック。今存在しないものは
   //   デフォルトで出さなくて良いけど、表示として追加できるように」
   //   → apps.js にはあるが HOME_ACTIONS に未登録だった 23 機能を defaultVisible:false で追加
-  //   (設定 → ホーム上部のクイックボタン から個別 ON 可能に)
+  //   (設定 → ホーム上部のクイックボタンから個別 ON 可能に)
   { id: 'bokete',               url: '#/bokete',               title: 'ぼけて',         icon: '😆', defaultVisible: false },
   { id: 'setlog',               url: '#/setlog',               title: 'setlog',         icon: '📸', defaultVisible: false },
   { id: 'profile-book',         url: '#/profile-book',         title: 'プロフ帳',       icon: '🎀', defaultVisible: false },
@@ -200,29 +200,29 @@ const SHORTCUT_CARDS_DEFS = [
   { id: 'sc-exercise',     title: '🏃 運動 (歩数)',     url: '#/exercise',     desc: 'ラボ内歩数ランキング' },
   { id: 'sc-auctions',     title: '🏷 オークション',    url: '#/auctions',     desc: '出品 + 入札 + 締切で落札' },
   // v1152 中村さん指摘「ウィジェットの設定にそれぞれのものがあるかチェック」→
-  //   apps.js にあるが ホームウィジェットに登録されていなかった新機能を リンク型ウィジェット
-  //   として追加。 defaultVisible:false なので 設定 → ホームウィジェット から個別 ON。
+  //   apps.js にあるがホームウィジェットに登録されていなかった新機能をリンク型ウィジェット
+  //   として追加。 defaultVisible:false なので設定 → ホームウィジェットから個別 ON。
   { id: 'sc-bokete',        title: '😆 ぼけて (bokete)', url: '#/bokete',        desc: '画像大喜利。お題を出してみんなでボケる → ⭐ で評価 → ランキング' },
   { id: 'sc-setlog',        title: '📸 setlog',         url: '#/setlog',        desc: '1 日を短いクリップ (画像 + 短キャプション) で断片記録するラボ内 Vlog' },
   { id: 'sc-profile-book',  title: '🎀 プロフ帳',        url: '#/profile-book',  desc: '基本情報 + 心理テスト + 匿名質問。閲覧 pt / 回答 pt' },
   { id: 'sc-trading-cards', title: '🎴 ゼミ人トレカ',    url: '#/trading-cards', desc: 'ラボメンのトレカを作成 → 本人承認 → ガチャで集める' },
   { id: 'sc-tomorrow-lab',  title: '🏫 明日ラボ行こう',  url: '#/tomorrow-lab',  desc: '明日行くと宣言 + 罰金設定 → 行かなかった人が行った人へ pt を送る' },
   { id: 'sc-pres-order',    title: '🎪 発表順オークション', url: '#/pres-order',  desc: 'ゼミ発表の順番を sealed 入札で決める' },
-  { id: 'sc-tickets',       title: '🎫 チケット',        url: '#/tickets',       desc: '「◯◯します / できる権利」を pt で売買。 例: 運転しますチケット' },
-  { id: 'sc-labo-eats',     title: '🍱 ラーボーイーツ',  url: '#/labo-eats',     desc: '研究室にいる人が外にいる人に「ついで買い」を頼む。 基本料 50pt + 距離' },
+  { id: 'sc-tickets',       title: '🎫 チケット',        url: '#/tickets',       desc: '「◯◯します / できる権利」を pt で売買。例: 運転しますチケット' },
+  { id: 'sc-labo-eats',     title: '🍱 ラーボーイーツ',  url: '#/labo-eats',     desc: '研究室にいる人が外にいる人に「ついで買い」を頼む。基本料 50pt + 距離' },
   { id: 'sc-research-ai',   title: '🔬 研究 AI サブスク', url: '#/research-ai',  desc: '研究特化の AI チャット (トークン制、スレッド共有、 PDF / 画像添付)' },
   { id: 'sc-exp-plan',      title: '🧪 実験計画書チェック', url: '#/exp-plan',   desc: 'RQ / 仮説 / 実験対応 / 統計 / サンプルサイズを AI で精査' },
   { id: 'sc-miro',          title: '🗒 Miro (ポストイット)', url: '#/miro',      desc: 'ポストイット空間 + 他人カーソル + オモテウラ表示' },
   { id: 'sc-kanban',        title: '📋 かんばん',        url: '#/kanban',        desc: 'Trello 的タスクボード。 D&D、担当、ラベル、チェックリスト、コメント' },
   { id: 'sc-refs',          title: '📚 文献管理',        url: '#/refs',          desc: 'Zotero 的、 DOI / arXiv / PDF から自動取込、コレクション、ハイライト' },
   { id: 'sc-joint-events',  title: '🎪 合同研究会投票', url: '#/joint-events',  desc: '合同研究会でセッションごとに相手ラボ発表を評価' },
-  { id: 'sc-public-polls',  title: '🗳 公開投票',        url: '#/public-polls',  desc: 'login 不要の 公開 URL で誰でも投票' },
-  { id: 'sc-expenses',      title: '💰 家計簿',          url: '#/expenses',      desc: '領収書を写真から OCR で 金額 / 店 / カテゴリ 自動抽出' },
+  { id: 'sc-public-polls',  title: '🗳 公開投票',        url: '#/public-polls',  desc: 'login 不要の公開 URL で誰でも投票' },
+  { id: 'sc-expenses',      title: '💰 家計簿',          url: '#/expenses',      desc: '領収書を写真から OCR で金額 / 店 / カテゴリ自動抽出' },
   { id: 'sc-buy-requests',  title: '🛒 購入依頼',        url: '#/buy-requests',  desc: '「これ買ってほしい」を中村さんに投げる (#want_to_buy の後継)' },
   { id: 'sc-my-games',      title: '🎮 自作ゲーム管理',  url: '#/my-games',      desc: 'cg2 用の自作 2 人対戦 JS をアップロード / 編集' },
   { id: 'sc-quotes',        title: '💬 名言集',          url: '#/quotes',        desc: '偉人 / 漫画 / アニメの名言 (ラボメン投稿も可)' },
   { id: 'sc-news',          title: '📰 LabPay ニュース', url: '#/news',          desc: 'LabPay の更新情報 / 新機能案内' },
-  { id: 'sc-pomodoro',      title: '🍅 ポモドーロ',      url: '#/pomodoro',      desc: '25 分集中 + 5 分休憩の 繰り返しタイマー' },
+  { id: 'sc-pomodoro',      title: '🍅 ポモドーロ',      url: '#/pomodoro',      desc: '25 分集中 + 5 分休憩の繰り返しタイマー' },
   { id: 'sc-power',         title: '📐 検定力 / 標本数', url: '#/power',         desc: 'G*Power 相当 + LMM/GLMM シミュ + ベイズ + 予算試算' },
   { id: 'sc-walk-mode',     title: '🚶 散歩モード',      url: '#/walk-mode',     desc: '全画面マップ + GPS 5 秒 polling で軌跡 polyline 記録' },
 ];
@@ -302,10 +302,10 @@ const DEFAULT_ORDER = [
 //   DEFAULT_HIDDEN_HOME_CARDS に含まれているなら、 hidden に自動マージ。
 //   既存ユーザが「明示的に ON にした」場合 (= order に含まれる) は尊重。
 // v1152 中村さん報告「ホームウィジェット、表示されてないのが ON になってる」
-//   root cause: v1152 で SHORTCUT_CARDS_DEFS に 23 個追加した際、 既存ユーザーの
+//   root cause: v1152 で SHORTCUT_CARDS_DEFS に 23 個追加した際、既存ユーザーの
 //   localStorage の hidden にはそれらの id が入っておらず、 merge ロジックで
-//   「未知の id は デフォルト visible」扱いになっていた。 → NEW_DEFAULT_HIDDEN に
-//   全部追加、 既存ユーザーの order にも無ければ hidden セットに自動 マージ。
+//   「未知の id はデフォルト visible」扱いになっていた。 → NEW_DEFAULT_HIDDEN に
+//   全部追加、既存ユーザーの order にも無ければ hidden セットに自動マージ。
 const NEW_DEFAULT_HIDDEN = [
   'weather', 'bingo', 'quote', // v605 / v809
   // v1152 追加した SHORTCUT カード全部 (default OFF)
@@ -1134,7 +1134,11 @@ async function renderPresence() {
 //     Google に If-None-Match で revalidate。全 cal 変更なしなら
 //     {not_modified:true} で返り cache を続投、変更あれば新 items + 新 etags。
 const CAL_CACHE_KEY = 'labpay-cal-events-cache';
-const CAL_CACHE_TTL_MS = 5 * 60 * 1000;
+// v1170 中村さん指摘「フロントページのロードがやや重い、特にカレンダーっぽい」
+//   → TTL を 5 → 15 min、かつ SWR (stale-while-revalidate) を導入。
+//   ロード時に cache があれば齢に関係なく即描画 + 裏で etag 検証再取得、
+//   応答で差分があれば DOM を静かに差し替える。ネットワーク待ちの体感 0。
+const CAL_CACHE_TTL_MS = 15 * 60 * 1000;
 function readCalCache() {
   try {
     const raw = localStorage.getItem(CAL_CACHE_KEY);
@@ -1438,37 +1442,52 @@ async function renderCalendarEvents({ force = false } = {}) {
     });
   }
   let items = null;
+  // v1170 SWR ヘルパ: 実際の GCal fetch + cache 更新。 items は「返された予定」を返す。
+  //   force=true は cache を無視、 etags も送らない (= 完全 fresh 取得)。
+  const _fetchCalendarNow = async (forceFetch) => {
+    const cache = forceFetch ? null : readCalCache();
+    const etagsQuery = (!forceFetch && cache && cache.etags && Object.keys(cache.etags).length)
+      ? JSON.stringify(cache.etags) : undefined;
+    const params = { tz: localTzInfo().iana };
+    if (etagsQuery) params.etags = etagsQuery;
+    const data = await get('/api/me/calendar/events', params);
+    if (data && data.not_modified && cache) {
+      writeCalCache(cache.items, cache.etags);
+      return cache.items;
+    }
+    const fresh_items = (data && data.items) || [];
+    if (cache && Array.isArray(cache.items) && cache.items.length > 0 && fresh_items.length === 0) {
+      writeCalCache(cache.items, cache.etags || {});
+      return cache.items;
+    }
+    writeCalCache(fresh_items, (data && data.etags) || {});
+    return fresh_items;
+  };
   try {
     const cache = force ? null : readCalCache();
-    const fresh = cache && (Date.now() - cache.timestamp < CAL_CACHE_TTL_MS);
-    if (fresh) {
+    if (cache && !force) {
+      // v1170 SWR: cache があれば齢に関係なく即返し、 stale なら裏で再取得。
       items = cache.items;
-    } else {
-      const etagsQuery = (!force && cache && cache.etags && Object.keys(cache.etags).length)
-        ? JSON.stringify(cache.etags) : undefined;
-      // 滞在 TZ をサーバに伝え、「今日」をその TZ で計算してもらう。
-      const params = { tz: localTzInfo().iana };
-      if (etagsQuery) params.etags = etagsQuery;
-      const data = await get('/api/me/calendar/events', params);
-      if (data && data.not_modified && cache) {
-        writeCalCache(cache.items, cache.etags); // bump timestamp
-        items = cache.items;
-      } else {
-        const fresh_items = (data && data.items) || [];
-        // v449 「予定が消える」対策: cache にあった id が新応答に 1 件も居ない
-        // 場合だけかなり怪しい (= GCal 側 1 カレンダーの re-fetch 失敗で落ちた
-        // 可能性)。件数が "0 になった" 時限定で旧 cache を維持 (5 分後に
-        // もう一度試す)。本当に全部消えた (= GCal 側で削除) ケースは
-        // 🔄 再取得を押せば cache を飛ばして反映。
-        if (cache && Array.isArray(cache.items) && cache.items.length > 0 && fresh_items.length === 0) {
-          // keep old items, bump timestamp to avoid hammering
-          items = cache.items;
-          writeCalCache(items, cache.etags || {});
-        } else {
-          items = fresh_items;
-          writeCalCache(items, (data && data.etags) || {});
-        }
+      const isStale = (Date.now() - cache.timestamp) >= CAL_CACHE_TTL_MS;
+      if (isStale) {
+        (async () => {
+          try {
+            const fresh = await _fetchCalendarNow(false);
+            // 差分が無ければ何もしない。数だけでの判定は弱いが、内容が
+            // 変わっていれば次回 poll で表示更新される仕組みなので、
+            // ここで厳密な diff を取る必要はなく、単純に再 render。
+            const prevJson = JSON.stringify(items || []);
+            const nextJson = JSON.stringify(fresh || []);
+            if (prevJson !== nextJson) {
+              // Recursion 回避のため force なしで静かに再 render (今度は
+              // 上で writeCalCache 済みなので stale フラグは立たず fetch は走らない)。
+              renderCalendarEvents({ force: false });
+            }
+          } catch (_) { /* silent, next poll will retry */ }
+        })();
       }
+    } else {
+      items = await _fetchCalendarNow(force);
     }
   } catch (e) {
     // 未連携 / fetch 失敗 / offline などはここに来る。

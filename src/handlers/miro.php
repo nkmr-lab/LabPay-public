@@ -28,6 +28,7 @@ function route_miro(PDO $pdo, array $cfg, string $method, array $seg): void {
             if ($next === 'notes'   && $method === 'GET')  { miro_notes_list  ($pdo, $cfg, $id);   return; }
             if ($next === 'notes'   && $method === 'POST') { miro_notes_create($pdo, $cfg, $id);   return; }
             if ($next === 'notes-from-refs' && $method === 'POST') { miro_notes_from_refs($pdo, $cfg, $id); return; }
+            if ($next === 'notes-from-places' && $method === 'POST') { miro_notes_from_places($pdo, $cfg, $id); return; }
             if ($next === 'updates' && $method === 'GET')  { miro_room_updates($pdo, $cfg, $id);   return; }
             if ($next === 'cursor'  && $method === 'POST') { miro_cursor_upsert($pdo, $cfg, $id);  return; }
         }
@@ -120,6 +121,8 @@ function _miro_note_shape(array $r, int $requesterId): array {
         // back_* は互換のため残すが UI では未使用
         'back_text'         => (string)($r['back_text']  ?? ''),
         'back_image_url'    => $r['back_image_url']  ?: null,
+        // v1171 refs/places から貼ったノートは link_url に元ページへのリンクを持つ
+        'link_url'          => $hiddenForMe ? null : ($r['link_url'] ?? null),
         'z_index'           => (int)$r['z_index'],
         'is_hidden'         => $isHidden,
         'hidden_for_me'     => $hiddenForMe,
@@ -601,9 +604,10 @@ function miro_notes_from_refs(PDO $pdo, array $cfg, int $roomId): void {
     $y0 = $cy - $totalH / 2;
 
     $zBase = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM miro_notes WHERE room_id = " . (int)$roomId)->fetchColumn();
+    // v1171 link_url に refs 詳細ページへのハッシュリンクを保存 (Miro UI 側で 🔗 コーナー表示)
     $ins = $pdo->prepare("INSERT INTO miro_notes
-        (room_id, x, y, width, height, color, front_text, z_index, created_by_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        (room_id, x, y, width, height, color, front_text, link_url, z_index, created_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $createdIds = [];
     foreach ($ordered as $i => $r) {
         $col = $i % $cols;
@@ -612,11 +616,93 @@ function miro_notes_from_refs(PDO $pdo, array $cfg, int $roomId): void {
         $y = $y0 + $row * ($H + $GAP);
         $frontText = _miro_ref_to_note_text($r);
         $z = $zBase + $i + 1;
-        $ins->execute([$roomId, $x, $y, $W, $H, $defColor, $frontText ?: null, $z, (int)$u['id']]);
+        $linkUrl = '#/refs/' . (int)$r['id'];
+        $ins->execute([$roomId, $x, $y, $W, $H, $defColor, $frontText ?: null, $linkUrl, $z, (int)$u['id']]);
         $createdIds[] = (int)$pdo->lastInsertId();
     }
     $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
     // 作成した note を返す
+    $out = [];
+    if ($createdIds) {
+        $place2 = implode(',', array_fill(0, count($createdIds), '?'));
+        $q = $pdo->prepare("SELECT n.*, u.display_name AS creator_name
+                              FROM miro_notes n LEFT JOIN users u ON u.id = n.created_by_user_id
+                             WHERE n.id IN ($place2)");
+        $q->execute($createdIds);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) $out[] = _miro_note_shape($r, (int)$u['id']);
+    }
+    json_response(['ok' => true, 'created' => count($createdIds), 'notes' => $out]);
+}
+
+// v1171 中村さん要望「Miro に、たべあるきから張り込む機能もほしい (サムネ画像を積極的に使いたい)」
+//   places (食べある記) から 選んだ 場所 を miro ノート として 貼付。 image が 主役 な ので
+//   cover_image_thumb を front_image_url に、 name (と 任意で category) を front_text に、
+//   link_url は #/places/{id} に。 サイズ は 少し 大きめ (画像 主体)。
+function miro_notes_from_places(PDO $pdo, array $cfg, int $roomId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $room = _miro_room_row($pdo, $roomId);
+    if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_miro_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
+    }
+    $body = read_json_body();
+    $ids = [];
+    foreach ((array)($body['place_ids'] ?? []) as $x) if (ctype_digit((string)$x) || is_int($x)) $ids[] = (int)$x;
+    $ids = array_values(array_unique($ids));
+    if (!$ids) throw new ApiException('bad_request', 'place_ids 必要', 400);
+    if (count($ids) > 50) throw new ApiException('bad_request', '一度に貼れるのは 50 件まで', 400);
+    $existing = (int)$pdo->query("SELECT COUNT(*) FROM miro_notes WHERE room_id = " . (int)$roomId . " AND deleted_at IS NULL")->fetchColumn();
+    if ($existing + count($ids) > MIRO_MAX_NOTES_PER_ROOM) {
+        throw new ApiException('bad_request', 'この部屋の note 上限 ' . MIRO_MAX_NOTES_PER_ROOM . ' を超えます', 400);
+    }
+    $cx = isset($body['center_x']) ? (float)$body['center_x'] : 0.0;
+    $cy = isset($body['center_y']) ? (float)$body['center_y'] : 0.0;
+    // places を取得 (image_url + latest_image を使って cover を決定、 places.php と同ロジック)
+    $place = implode(',', array_fill(0, count($ids), '?'));
+    $rs = $pdo->prepare("
+        SELECT p.id, p.title, p.category, p.image_url,
+               (SELECT c.image_url FROM place_comments c
+                 WHERE c.place_id = p.id AND c.image_url IS NOT NULL
+                 ORDER BY c.id DESC LIMIT 1) AS latest_image
+          FROM places p
+         WHERE p.id IN ($place)");
+    $rs->execute($ids);
+    $places = [];
+    foreach ($rs->fetchAll(PDO::FETCH_ASSOC) as $r) $places[(int)$r['id']] = $r;
+    if (!$places) throw new ApiException('not_found', '指定した places が見つかりません', 404);
+    $ordered = [];
+    foreach ($ids as $id) if (isset($places[$id])) $ordered[] = $places[$id];
+
+    $defColor = _miro_default_color_of_user($pdo, (int)$u['id']);
+    // 画像 主体 なので 少し 大きめ の 正方形
+    $W = 260; $H = 260; $GAP = 20;
+    $cols = max(1, (int)ceil(sqrt(count($ordered))));
+    $rows = (int)ceil(count($ordered) / $cols);
+    $totalW = $cols * $W + ($cols - 1) * $GAP;
+    $totalH = $rows * $H + ($rows - 1) * $GAP;
+    $x0 = $cx - $totalW / 2;
+    $y0 = $cy - $totalH / 2;
+
+    $zBase = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM miro_notes WHERE room_id = " . (int)$roomId)->fetchColumn();
+    $ins = $pdo->prepare("INSERT INTO miro_notes
+        (room_id, x, y, width, height, color, front_text, front_image_url, link_url, z_index, created_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $createdIds = [];
+    foreach ($ordered as $i => $r) {
+        $col = $i % $cols;
+        $row = intdiv($i, $cols);
+        $x = $x0 + $col * ($W + $GAP);
+        $y = $y0 + $row * ($H + $GAP);
+        // タイトル + カテゴリ簡易ラベル
+        $t = trim((string)$r['title']);
+        if ($r['category']) $t .= "\n" . '(' . (string)$r['category'] . ')';
+        $img = $r['image_url'] ?: $r['latest_image'];
+        $z = $zBase + $i + 1;
+        $linkUrl = '#/places/' . (int)$r['id'];
+        $ins->execute([$roomId, $x, $y, $W, $H, $defColor, $t ?: null, $img ?: null, $linkUrl, $z, (int)$u['id']]);
+        $createdIds[] = (int)$pdo->lastInsertId();
+    }
+    $pdo->prepare("UPDATE miro_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
     $out = [];
     if ($createdIds) {
         $place2 = implode(',', array_fill(0, count($createdIds), '?'));

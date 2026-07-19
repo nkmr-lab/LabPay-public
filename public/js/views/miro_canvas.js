@@ -75,13 +75,14 @@ function shellHtml() {
       #miro-shell .mnote-body,
       #miro-shell .mnote-editta { scrollbar-width:none; -ms-overflow-style:none }
     </style>
-    <div id="miro-shell" style="position:fixed; inset:0; display:flex; flex-direction:column; background:#fafafa; z-index:100">
+    <div id="miro-shell" style="position:fixed; top:0; left:0; right:0; bottom:0; width:100vw; height:100vh; display:flex; flex-direction:column; background:#fafafa; z-index:100">
       <!-- toolbar -->
       <div id="miro-toolbar" style="display:flex; gap:6px; align-items:center; padding:6px 10px; background:#fff; border-bottom:1px solid #e5e7eb; flex-wrap:wrap">
         <a href="#/miro" class="hint" style="text-decoration:none; padding:4px 8px">← 部屋一覧</a>
         <div id="miro-title" style="font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">…</div>
         <button class="btn" id="miro-add" title="ノートを追加">➕ ノート</button>
         <button class="btn" id="miro-refs" title="自分の文献ストックから貼る">📚 論文</button>
+        <button class="btn" id="miro-places" title="食べある記から貼る (画像主体)">🍜 食べある記</button>
         <div id="miro-palette" style="display:flex; gap:3px; align-items:center; margin-left:6px" title="デフォルト色">
           ${PALETTE.map(c => `<button class="mpal" data-color="${c}" style="width:24px; height:24px; border-radius:6px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer" title="${c}"></button>`).join('')}
         </div>
@@ -142,6 +143,29 @@ function shellHtml() {
           <div class="row" style="gap:6px">
             <button class="btn" id="mrefs-cancel">キャンセル</button>
             <button class="btn primary" id="mrefs-go" disabled>選んだ論文を貼る</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- v1171 places ピッカー (🍜 から開く、サムネイルグリッド) -->
+    <div id="miro-places-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10001; align-items:center; justify-content:center; padding:16px">
+      <div style="background:#fff; border-radius:12px; padding:14px; width:100%; max-width:720px; max-height:90vh; display:flex; flex-direction:column; gap:8px">
+        <div class="row" style="align-items:center; gap:8px">
+          <div style="font-weight:700; flex:1">🍜 食べある記から貼る</div>
+          <button class="btn" id="mplc-close">×</button>
+        </div>
+        <div class="row" style="gap:6px">
+          <input type="text" id="mplc-q" placeholder="店名 / カテゴリで絞り込み" style="flex:1; padding:6px 8px">
+        </div>
+        <div id="mplc-grid" style="flex:1; overflow-y:auto; border:1px solid #e5e7eb; border-radius:6px; padding:6px; min-height:220px; max-height:50vh; display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:6px">
+          <div class="muted">読み込み中…</div>
+        </div>
+        <div class="row" style="gap:6px; align-items:center; justify-content:space-between">
+          <div class="hint-sm" id="mplc-count" style="font-size:12px; color:#6b7280">0 件選択中</div>
+          <div class="row" style="gap:6px">
+            <button class="btn" id="mplc-cancel">キャンセル</button>
+            <button class="btn primary" id="mplc-go" disabled>選んだ店を貼る</button>
           </div>
         </div>
       </div>
@@ -407,6 +431,7 @@ function zoomAtScreen(sx, sy, newScale) {
 function wireToolbar() {
   document.getElementById('miro-add').addEventListener('click', createNoteAtCenter);
   document.getElementById('miro-refs').addEventListener('click', openRefsPicker);
+  document.getElementById('miro-places').addEventListener('click', openPlacesPicker);
   document.getElementById('miro-zoom-in').addEventListener('click', () => {
     const vp = document.getElementById('miro-viewport');
     zoomAtScreen(vp.clientWidth / 2 + vp.getBoundingClientRect().left,
@@ -569,6 +594,11 @@ function noteHtml(n) {
                 box-sizing:border-box; font-family:'Segoe UI', system-ui, sans-serif">
       ${header}
       ${body}
+      ${n.link_url && !hiddenForMe ? `<a href="${escapeHtml(n.link_url)}" class="mnote-link" data-note-link title="元ページを開く"
+              onclick="event.stopPropagation()"
+              onpointerdown="event.stopPropagation()"
+              onmousedown="event.stopPropagation()"
+              style="position:absolute; left:4px; bottom:4px; width:22px; height:22px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.85); color:#0369a1; border-radius:50%; text-decoration:none; font-size:13px; line-height:1; box-shadow:0 1px 2px rgba(0,0,0,0.15); z-index:2">🔗</a>` : ''}
       <div class="mhandle" style="position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; background:linear-gradient(135deg, transparent 40%, rgba(0,0,0,0.25) 50%, transparent 60%)"></div>
     </div>
   `;
@@ -967,6 +997,9 @@ function wireMinimap() {
 
 let REFS_CACHE = [];              // 読み込んだ refs (直近クエリの結果)
 const REFS_SELECTED = new Set();  // 選択中 ref_id
+// v1171 places picker 用
+let PLACES_CACHE = [];
+const PLACES_SELECTED = new Set();
 
 function openRefsPicker() {
   REFS_SELECTED.clear();
@@ -1060,6 +1093,103 @@ async function commitRefsPicker() {
   } catch (e) {
     toast('貼付失敗: ' + e.message);
     btn.disabled = false; btn.textContent = '選んだ論文を貼る';
+  }
+}
+
+// ─── v1171 places picker ───────────────────────
+function openPlacesPicker() {
+  PLACES_SELECTED.clear();
+  const modal = document.getElementById('miro-places-modal');
+  modal.style.display = 'flex';
+  document.getElementById('mplc-close').onclick  = closePlacesPicker;
+  document.getElementById('mplc-cancel').onclick = closePlacesPicker;
+  document.getElementById('mplc-go').onclick     = commitPlacesPicker;
+  const q = document.getElementById('mplc-q');
+  q.value = '';
+  q.oninput = debounce(() => { renderPlacesGrid(q.value.trim()); }, 200);
+  updatePlacesFooter();
+  loadPlaces();
+}
+function closePlacesPicker() {
+  document.getElementById('miro-places-modal').style.display = 'none';
+}
+
+async function loadPlaces() {
+  const root = document.getElementById('mplc-grid');
+  root.innerHTML = '<div class="muted">読み込み中…</div>';
+  try {
+    const d = await get('/api/places');
+    PLACES_CACHE = d.items || d.places || [];
+    if (!PLACES_CACHE.length) {
+      root.innerHTML = '<div class="muted">食べある記のデータがありません。</div>';
+      return;
+    }
+    renderPlacesGrid('');
+  } catch (e) {
+    root.innerHTML = `<div class="muted" style="color:#b91c1c">読み込み失敗: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderPlacesGrid(query) {
+  const root = document.getElementById('mplc-grid');
+  const q = query.toLowerCase();
+  const filtered = PLACES_CACHE.filter(p =>
+    !q || (p.title || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q)
+  );
+  if (!filtered.length) { root.innerHTML = '<div class="muted">見つかりません</div>'; return; }
+  root.innerHTML = filtered.map(p => {
+    const sel = PLACES_SELECTED.has(p.id);
+    const thumb = p.cover_image_thumb || p.cover_image || p.image_url || '';
+    const thumbHtml = thumb
+      ? `<div style="width:100%; height:80px; background-image:url('${escapeHtml(thumb)}'); background-size:cover; background-position:center; border-radius:6px"></div>`
+      : `<div style="width:100%; height:80px; background:#f3f4f6; border-radius:6px; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:22px">🍽</div>`;
+    return `
+      <label style="display:flex; flex-direction:column; gap:4px; padding:4px; border:2px solid ${sel ? '#7b3fa0' : 'transparent'}; border-radius:8px; cursor:pointer; background:${sel ? '#faf5ff' : '#fff'}" data-pid="${p.id}">
+        ${thumbHtml}
+        <div style="font-size:12px; font-weight:600; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(p.title || '')}</div>
+        <div class="muted" style="font-size:10px">${escapeHtml(p.category || '')}</div>
+        <input type="checkbox" data-pid="${p.id}" ${sel ? 'checked' : ''} style="display:none">
+      </label>`;
+  }).join('');
+  root.querySelectorAll('label[data-pid]').forEach(el => {
+    el.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const pid = parseInt(el.dataset.pid, 10);
+      if (PLACES_SELECTED.has(pid)) PLACES_SELECTED.delete(pid); else PLACES_SELECTED.add(pid);
+      renderPlacesGrid(document.getElementById('mplc-q').value.trim());
+      updatePlacesFooter();
+    });
+  });
+}
+
+function updatePlacesFooter() {
+  const n = PLACES_SELECTED.size;
+  document.getElementById('mplc-count').textContent = `${n} 件選択中` + (n > 50 ? ' (50 件までにしてね)' : '');
+  const btn = document.getElementById('mplc-go');
+  btn.disabled = n === 0 || n > 50;
+  btn.textContent = n === 0 ? '選んだ店を貼る' : `選んだ ${n} 件を貼る`;
+}
+
+async function commitPlacesPicker() {
+  const ids = [...PLACES_SELECTED];
+  if (!ids.length) return;
+  const btn = document.getElementById('mplc-go');
+  btn.disabled = true; btn.textContent = '貼っています…';
+  try {
+    const vp = document.getElementById('miro-viewport');
+    const rect = vp.getBoundingClientRect();
+    const mid = screenToWorld(rect.left + vp.clientWidth / 2, rect.top + vp.clientHeight / 2);
+    const r = await post(`/api/miro/rooms/${ROOM_ID}/notes-from-places`, {
+      place_ids: ids, center_x: mid.x, center_y: mid.y,
+    });
+    for (const n of (r.notes || [])) NOTE_MAP[n.id] = n;
+    NOTES = Object.values(NOTE_MAP);
+    renderAll();
+    toast(`${r.created} 件を貼ったよ`);
+    closePlacesPicker();
+  } catch (e) {
+    toast('貼付失敗: ' + e.message);
+    btn.disabled = false; btn.textContent = '選んだ店を貼る';
   }
 }
 
