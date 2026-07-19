@@ -599,7 +599,7 @@ require_once __DIR__ . '/handlers/conquest.php';     // v860 #445 制覇リス�
 require_once __DIR__ . '/handlers/habits.php';       // v870 #452 Habit Tracker
 require_once __DIR__ . '/handlers/buzzer.php';       // v872 #454 早押しクイズ
 require_once __DIR__ . '/handlers/overleaf.php';     // v886 Overleaf プロジェクト追跡
-require_once __DIR__ . '/handlers/miro.php';         // v1100 Miro 的な共同ポストイット空間
+// v1174 handlers/miro.php を handlers/board.php に rename (下の bokete.php の後で require)
 require_once __DIR__ . '/handlers/tomorrow_lab.php'; // v1119 明日、研究室に一緒に行こう
 require_once __DIR__ . '/handlers/pres_order.php';   // v1120 発表順オークション
 require_once __DIR__ . '/handlers/trading_cards.php'; // v1121 ゼミ人トレカ + ガチャ
@@ -610,3 +610,4 @@ require_once __DIR__ . '/handlers/research_ai.php';  // v1125 研究特化 AI �
 require_once __DIR__ . '/handlers/setlog.php';        // v1126 setlog (LabPay 版 Vlog)
 require_once __DIR__ . '/handlers/bokete.php';        // v1147 bokete (画像大喜利)
 require_once __DIR__ . '/handlers/exp_recruits.php';  // v1164 実験協力者募集
+require_once __DIR__ . '/handlers/board.php';         // v1100 Board (旧 Miro), v1174 でファイル名を rename
