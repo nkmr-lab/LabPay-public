@@ -89,8 +89,20 @@ function shellHtml() {
         <a href="#/board" class="hint" style="text-decoration:none; padding:4px 8px">← 部屋一覧</a>
         <div id="board-title" style="font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">…</div>
         <button class="btn" id="board-add" title="ノートを追加">➕ ノート</button>
-        <button class="btn" id="board-refs" title="自分の文献ストックから貼る">📚 論文</button>
-        <button class="btn" id="board-places" title="食べある記から貼る (画像主体)">🍜 食べある記</button>
+        <!-- v1177 中村さん指示「論文/食べ歩きはデフォルトで出ておく必要ない、
+             インポートというボタン → 論文/食べ歩き/画像ファイル群/動画を選べる」 -->
+        <div id="board-import-wrap" style="position:relative; display:inline-flex">
+          <button class="btn" id="board-import" title="外部素材を取り込む">📥 インポート ▾</button>
+          <div id="board-import-menu" style="display:none; position:absolute; top:100%; left:0; margin-top:2px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; min-width:200px">
+            <button class="btn board-import-item" data-import="refs"   style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">📚 論文 (文献ストックから)</button>
+            <button class="btn board-import-item" data-import="places" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🍜 食べある記 (画像主体)</button>
+            <button class="btn board-import-item" data-import="images" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🖼 画像ファイル (複数可)</button>
+            <button class="btn board-import-item" data-import="videos" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🎬 動画ファイル (複数可)</button>
+          </div>
+        </div>
+        <!-- 隠し input: インポートメニューから起動 -->
+        <input type="file" id="board-import-image-input" accept="image/*" multiple style="display:none">
+        <input type="file" id="board-import-video-input" accept="video/*" multiple style="display:none">
         <!-- v1173 手書きモード -->
         <div id="board-mode-group" style="display:inline-flex; gap:2px; margin-left:6px" title="モード切替">
           <button class="btn board-mode" data-mode="select" title="選択/移動">🖱</button>
@@ -117,7 +129,10 @@ function shellHtml() {
         </div>
       </div>
       <!-- viewport -->
-      <div id="board-viewport" style="flex:1; overflow:hidden; position:relative; touch-action:none; cursor:grab; background:#fafafa">
+      <!-- v1177 中村さん指摘「マウスで手書きできない」対策: user-select:none を viewport に。
+           マウスドラッグが text-selection に化けて pointerdown/move が期待通り走らない
+           ケースを防ぐ。 -->
+      <div id="board-viewport" style="flex:1; overflow:hidden; position:relative; touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; background:#fafafa">
         <div id="board-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform">
           <!-- v1173 手書きストローク SVG (world 座標。 board-layer の transform に追随) -->
           <svg id="board-strokes-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible"></svg>
@@ -518,8 +533,27 @@ function zoomAtScreen(sx, sy, newScale) {
 
 function wireToolbar() {
   document.getElementById('board-add').addEventListener('click', createNoteAtCenter);
-  document.getElementById('board-refs').addEventListener('click', openRefsPicker);
-  document.getElementById('board-places').addEventListener('click', openPlacesPicker);
+  // v1177 インポートメニュー
+  const importBtn = document.getElementById('board-import');
+  const importMenu = document.getElementById('board-import-menu');
+  importBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    importMenu.style.display = importMenu.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', () => { importMenu.style.display = 'none'; });
+  document.querySelectorAll('.board-import-item').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      importMenu.style.display = 'none';
+      const kind = b.dataset.import;
+      if (kind === 'refs')   openRefsPicker();
+      else if (kind === 'places') openPlacesPicker();
+      else if (kind === 'images') document.getElementById('board-import-image-input').click();
+      else if (kind === 'videos') document.getElementById('board-import-video-input').click();
+    });
+  });
+  document.getElementById('board-import-image-input').addEventListener('change', (ev) => uploadFilesAsNotes(ev.target.files, 'image'));
+  document.getElementById('board-import-video-input').addEventListener('change', (ev) => uploadFilesAsNotes(ev.target.files, 'video'));
   // v1173 モード切替
   document.querySelectorAll('.board-mode').forEach(b => {
     b.addEventListener('click', () => setMode(b.dataset.mode));
@@ -1296,6 +1330,61 @@ function debounce(fn, ms) {
     if (t) clearTimeout(t);
     t = setTimeout(() => { t = null; fn(...args); }, ms);
   };
+}
+
+// ─── v1177 ファイルアップロード → 画像ノート化 ─────────────────
+async function uploadFilesAsNotes(files, mediaType) {
+  if (!files || !files.length) return;
+  if (mediaType === 'video') {
+    toast('動画対応は次バージョン (要 /api/uploads/video 実装) で対応予定');
+    return;
+  }
+  const arr = [...files].slice(0, 20);  // 一度に 20 個まで
+  if (files.length > 20) toast('20 個を超えたので先頭 20 個だけ処理します');
+  toast(`${arr.length} 個のファイルをアップロード中…`);
+  // 視野中央 (world 座標) からグリッド配置
+  const vp = document.getElementById('board-viewport');
+  const rect = vp.getBoundingClientRect();
+  const mid = screenToWorld(rect.left + vp.clientWidth / 2, rect.top + vp.clientHeight / 2);
+  const W = 260, H = 260, GAP = 20;
+  const cols = Math.max(1, Math.ceil(Math.sqrt(arr.length)));
+  const rows = Math.ceil(arr.length / cols);
+  const totalW = cols * W + (cols - 1) * GAP;
+  const totalH = rows * H + (rows - 1) * GAP;
+  const x0 = mid.x - totalW / 2, y0 = mid.y - totalH / 2;
+  let ok = 0, fail = 0;
+  for (let i = 0; i < arr.length; i++) {
+    const file = arr[i];
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const resp = await fetch('/api/uploads/image', { method: 'POST', body: fd, credentials: 'include' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      const url = data.url || data.image_url;
+      if (!url) throw new Error('response に url なし');
+      const col = i % cols, row = Math.floor(i / cols);
+      const x = x0 + col * (W + GAP), y = y0 + row * (H + GAP);
+      // ノート作成 (画像のみ、テキストなし)
+      const r = await post(`/api/board/rooms/${ROOM_ID}/notes`, {
+        x, y, width: W, height: H,
+        front_image_url: url,
+        front_text: null,
+      });
+      if (r && r.note) {
+        NOTE_MAP[r.note.id] = r.note;
+      }
+      ok++;
+    } catch (e) {
+      console.error('upload failed', file.name, e);
+      fail++;
+    }
+  }
+  NOTES = Object.values(NOTE_MAP);
+  renderAll();
+  toast(`${ok} 個アップロード完了` + (fail ? ` (${fail} 個失敗)` : ''));
+  // input をリセット (同ファイル再選択できるように)
+  document.getElementById('board-import-image-input').value = '';
 }
 
 // ─── v1173 手書き ───────────────────────────────────────

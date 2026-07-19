@@ -560,11 +560,17 @@ function board_notes_create(PDO $pdo, array $cfg, int $roomId): void {
     $color = _board_norm_color($body['color'] ?? null, _board_default_color_of_user($pdo, (int)$u['id']));
     $frontText = trim((string)($body['front_text'] ?? ''));
     if (mb_strlen($frontText) > 4000) $frontText = mb_substr($frontText, 0, 4000);
+    // v1177 中村さん要望「インポート で画像ファイル群 を アップロード したい」→ front_image_url を作成時に受け付ける。
+    $frontImg = null;
+    if (isset($body['front_image_url']) && is_string($body['front_image_url'])) {
+        $iu = trim($body['front_image_url']);
+        if ($iu !== '' && mb_strlen($iu) <= 500) $frontImg = $iu;
+    }
     $z = (int)$pdo->query("SELECT COALESCE(MAX(z_index), 0) FROM board_notes WHERE room_id = " . (int)$roomId)->fetchColumn() + 1;
     $st = $pdo->prepare("INSERT INTO board_notes
-        (room_id, x, y, width, height, color, front_text, z_index, created_by_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $st->execute([$roomId, $x, $y, $w, $h, $color, $frontText ?: null, $z, (int)$u['id']]);
+        (room_id, x, y, width, height, color, front_text, front_image_url, z_index, created_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $st->execute([$roomId, $x, $y, $w, $h, $color, $frontText ?: null, $frontImg, $z, (int)$u['id']]);
     $id = (int)$pdo->lastInsertId();
     // 部屋の updated_at を bump (poll 側の部屋更新判定用)
     $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
