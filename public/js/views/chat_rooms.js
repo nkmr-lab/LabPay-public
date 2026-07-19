@@ -64,7 +64,7 @@ export async function renderChatRooms() {
       <div id="ch-dms"></div>
       <div style="padding:10px 14px; border-top:1px solid var(--line); display:flex; gap:6px; align-items:center">
         <select id="ch-new-dm" style="flex:1">
-          <option value="">＋ 新規 DM (相手を選ぶ)</option>
+          <option value="">＋新規 DM (相手を選ぶ)</option>
         </select>
         <button id="ch-new-dm-go" class="btn primary" style="flex:none">開く</button>
       </div>
@@ -86,7 +86,7 @@ export async function renderChatRooms() {
     const u = await get('/api/users');
     const sel = document.getElementById('ch-new-dm');
     const meId = Number(state.me?.id);
-    sel.innerHTML = '<option value="">＋ 新規 DM (相手を選ぶ)</option>' +
+    sel.innerHTML = '<option value="">＋新規 DM (相手を選ぶ)</option>' +
       (u.items || []).filter(x => x.id !== meId).map(x =>
         `<option value="${x.id}">${escapeHtml(x.display_name)}${x.grade ? ` [${escapeHtml(x.grade)}]` : ''}</option>`).join('');
     document.getElementById('ch-new-dm-go').addEventListener('click', () => {
@@ -120,7 +120,10 @@ export async function renderChatRoom({ params }) {
   cleanupMediaListener();
   _focusRoom = decodeURIComponent(params.roomKey);
   const app = document.getElementById('app');
-  app.innerHTML = `<div id="cr-shell" style="position:fixed; top:96px; left:0; right:0; bottom:0; background:#fff; z-index:2; display:flex; flex-direction:column">
+  // v1162 中村さん指摘「上と左右にあきスペースがある」。 chat-rooms は router で
+  //   app-fullscreen になり topbar/tabs は非表示なのに、 cr-shell が top:96px で
+  //   旧 topbar+tabs 分の空きを残していた → top:0 に。
+  app.innerHTML = `<div id="cr-shell" style="position:fixed; top:0; left:0; right:0; bottom:0; background:#fff; z-index:2; display:flex; flex-direction:column">
     <div class="muted" style="padding:14px">読み込み中…</div>
   </div>`;
 
@@ -165,8 +168,8 @@ export async function renderChatRoom({ params }) {
   const shell = document.getElementById('cr-shell');
   shell.innerHTML = `
     <div id="cr-topbar" style="display:flex; align-items:stretch; background:#3f0e40; color:#fff; flex:none">
-      <!-- v1150 中村さん指摘「PC で見た時は タブが不要なので、 タブ消してください。 3 つが同時に見えてるだけで OK」
-           → cr-tabs コンテナは スマホ (<900px) のみ表示、 PC では applyPaneVisibility が hidden に -->
+      <!-- v1150 中村さん指摘「PC で見た時はタブが不要なので、タブ消してください。 3 つが同時に見えてるだけで OK」
+           → cr-tabs コンテナはスマホ (<900px) のみ表示、 PC では applyPaneVisibility が hidden に -->
       <div id="cr-tabs" style="flex:1; overflow-x:auto; display:flex; gap:2px; padding:0">
         ${rooms.map(r => {
           const active = r.room_key === _focusRoom;
@@ -182,8 +185,9 @@ export async function renderChatRoom({ params }) {
           </a>`;
         }).join('')}
       </div>
-      <a href="#/" id="cr-close" title="チャットを閉じてホームへ"
-         style="display:inline-flex; align-items:center; padding:0 14px; text-decoration:none; color:#fff; font-size:20px; background:#2d0a2f; flex:none">✕</a>
+      <!-- v1162 fs-close-btn (画面右上の丸✕、 router.js が生成) と重複していたので cr-close 削除。
+           右端は router の ✕ ボタン (top:8px right:8px) を避けるためのスペーサ。 -->
+      <div style="width:56px; flex:none"></div>
     </div>
     <div id="cr-panes" style="flex:1; min-height:0; display:grid; gap:0; grid-template-columns:${isChannel ? 'repeat(' + paneRooms.length + ', 1fr)' : '1fr'}"></div>
   `;
@@ -299,7 +303,7 @@ function cssSel(s) {
 
 function applyPaneVisibility() {
   const mobile = isMobile();
-  // v1150 PC では 3 pane 同時見えるので上部タブバー不要。 スマホでは切替に必要なので表示
+  // v1150 PC では 3 pane 同時見えるので上部タブバー不要。スマホでは切替に必要なので表示
   const tabs = document.getElementById('cr-tabs');
   if (tabs) tabs.style.display = mobile ? 'flex' : 'none';
   document.querySelectorAll('[data-pane]').forEach(pane => {
