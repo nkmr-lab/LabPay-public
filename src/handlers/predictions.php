@@ -20,6 +20,10 @@ const PREDICTIONS_SCORE_WEIGHTS = [4, 3, 2, 1];
 function route_predictions(PDO $pdo, array $cfg, string $method, array $seg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
+    // v1180 中村さん指摘「game #1 (SYSTEM 起案の WC 予想) の結果を登録できない」→ SYSTEM 起案の
+    //   ゲームは作成者が login できないので誰も finalize できないバグ。 admin なら起案者
+    //   相当の権限で操作できるように isAdmin フラグを全関数に伝播。
+    $isAdmin = ($u['role'] ?? '') === 'admin';
     if (!isset($seg[1])) throw new ApiException('not_found', 'no predictions route', 404);
     if ($seg[1] === 'games' && !isset($seg[2])) {
         if ($method === 'GET')  { predictions_list($pdo, $uid); return; }
@@ -28,23 +32,23 @@ function route_predictions(PDO $pdo, array $cfg, string $method, array $seg): vo
     if ($seg[1] === 'games' && isset($seg[2])) {
         $gid = (int)$seg[2];
         $action = $seg[3] ?? '';
-        if ($action === '' && $method === 'GET')      { predictions_detail($pdo, $uid, $gid); return; }
+        if ($action === '' && $method === 'GET')      { predictions_detail($pdo, $uid, $gid, $isAdmin); return; }
         if ($action === 'predict'  && $method === 'POST') { predictions_predict($pdo, $cfg, $uid, $gid); return; }
-        if ($action === 'close'    && $method === 'POST') { predictions_close($pdo, $uid, $gid); return; }
-        if ($action === 'finalize' && $method === 'POST') { predictions_finalize($pdo, $cfg, $uid, $gid); return; }
-        if ($action === 'cancel'   && $method === 'POST') { predictions_cancel($pdo, $uid, $gid); return; }
-        if ($action === ''         && $method === 'PATCH') { predictions_patch($pdo, $uid, $gid); return; }
+        if ($action === 'close'    && $method === 'POST') { predictions_close($pdo, $uid, $gid, $isAdmin); return; }
+        if ($action === 'finalize' && $method === 'POST') { predictions_finalize($pdo, $cfg, $uid, $gid, $isAdmin); return; }
+        if ($action === 'cancel'   && $method === 'POST') { predictions_cancel($pdo, $uid, $gid, $isAdmin); return; }
+        if ($action === ''         && $method === 'PATCH') { predictions_patch($pdo, $uid, $gid, $isAdmin); return; }
     }
     json_error('not_found', "no predictions route for $method", 404);
 }
 
 // v848 #431 起案者が title / description を編集できる。〆切や候補は変えない (混乱回避)。
-function predictions_patch(PDO $pdo, int $uid, int $gid): void {
+function predictions_patch(PDO $pdo, int $uid, int $gid, bool $isAdmin = false): void {
     $st = $pdo->prepare("SELECT creator_user_id, status FROM predictions_games WHERE id=?");
     $st->execute([$gid]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'game not found', 404);
-    if ((int)$row['creator_user_id'] !== $uid) {
+    if ((int)$row['creator_user_id'] !== $uid && !$isAdmin) {
         throw new ApiException('forbidden', '起案者のみ編集可', 403);
     }
     if (in_array($row['status'], ['finished', 'cancelled'], true)) {
@@ -140,7 +144,7 @@ function predictions_list(PDO $pdo, int $uid): void {
     json_response(['items' => $rows]);
 }
 
-function predictions_detail(PDO $pdo, int $uid, int $gid): void {
+function predictions_detail(PDO $pdo, int $uid, int $gid, bool $isAdmin = false): void {
     $st = $pdo->prepare("SELECT g.*, uc.display_name AS creator_name, uc.avatar_url AS creator_avatar
                           FROM predictions_games g JOIN users uc ON uc.id = g.creator_user_id WHERE g.id = ?");
     $st->execute([$gid]);
@@ -213,7 +217,9 @@ function predictions_detail(PDO $pdo, int $uid, int $gid): void {
         'my_score'        => $me ? (int)$me['score'] : null,
         'my_payout'       => $me ? (int)$me['payout'] : null,
         'me_entered'      => (bool)$me,
-        'is_creator'      => (int)$g['creator_user_id'] === $uid,
+        // v1180 admin は起案者と同等の権限 (SYSTEM 起案 game で誰も finalize
+        //   できない問題の対応)
+        'is_creator'      => ((int)$g['creator_user_id'] === $uid) || $isAdmin,
         'entries'         => $entries,
     ]);
 }
@@ -342,29 +348,29 @@ function predictions_predict(PDO $pdo, array $cfg, int $uid, int $gid): void {
     json_response(['ok' => true]);
 }
 
-function predictions_close(PDO $pdo, int $uid, int $gid): void {
-    db_tx($pdo, function () use ($pdo, $uid, $gid) {
+function predictions_close(PDO $pdo, int $uid, int $gid, bool $isAdmin = false): void {
+    db_tx($pdo, function () use ($pdo, $uid, $gid, $isAdmin) {
         $stG = $pdo->prepare("SELECT * FROM predictions_games WHERE id = ? FOR UPDATE");
         $stG->execute([$gid]);
         $g = $stG->fetch(PDO::FETCH_ASSOC);
         if (!$g) throw new ApiException('not_found', 'not found', 404);
-        if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
+        if ((int)$g['creator_user_id'] !== $uid && !$isAdmin) throw new ApiException('forbidden', '起案者のみ', 403);
         if ($g['status'] !== 'open') throw new ApiException('bad_request', '受付中ではない', 400);
         $pdo->prepare("UPDATE predictions_games SET status='closed' WHERE id = ?")->execute([$gid]);
     });
     json_response(['ok' => true]);
 }
 
-function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
+function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid, bool $isAdmin = false): void {
     $body = read_json_body();
     $actual = $body['actual'] ?? null;
     if (!is_array($actual)) throw new ApiException('bad_request', 'actual 配列必須', 400);
-    db_tx($pdo, function () use ($pdo, $cfg, $uid, $gid, $actual) {
+    db_tx($pdo, function () use ($pdo, $cfg, $uid, $gid, $actual, $isAdmin) {
         $stG = $pdo->prepare("SELECT * FROM predictions_games WHERE id = ? FOR UPDATE");
         $stG->execute([$gid]);
         $g = $stG->fetch(PDO::FETCH_ASSOC);
         if (!$g) throw new ApiException('not_found', 'not found', 404);
-        if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
+        if ((int)$g['creator_user_id'] !== $uid && !$isAdmin) throw new ApiException('forbidden', '起案者のみ', 403);
         if (!in_array($g['status'], ['open','closed'], true)) throw new ApiException('bad_request', '既に終了', 400);
         $candidates = json_decode($g['candidates_json'] ?: '[]', true) ?: [];
         $validIds = array_column($candidates, 'id');
@@ -461,13 +467,13 @@ function predictions_finalize(PDO $pdo, array $cfg, int $uid, int $gid): void {
     json_response(['ok' => true]);
 }
 
-function predictions_cancel(PDO $pdo, int $uid, int $gid): void {
-    db_tx($pdo, function () use ($pdo, $uid, $gid) {
+function predictions_cancel(PDO $pdo, int $uid, int $gid, bool $isAdmin = false): void {
+    db_tx($pdo, function () use ($pdo, $uid, $gid, $isAdmin) {
         $stG = $pdo->prepare("SELECT * FROM predictions_games WHERE id = ? FOR UPDATE");
         $stG->execute([$gid]);
         $g = $stG->fetch(PDO::FETCH_ASSOC);
         if (!$g) throw new ApiException('not_found', 'not found', 404);
-        if ((int)$g['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ', 403);
+        if ((int)$g['creator_user_id'] !== $uid && !$isAdmin) throw new ApiException('forbidden', '起案者のみ', 403);
         if (!in_array($g['status'], ['open','closed'], true)) throw new ApiException('bad_request', '既に終了', 400);
         $fee = (int)$g['fee'];
         $stE = $pdo->prepare("SELECT user_id FROM predictions_entries WHERE game_id = ?");
