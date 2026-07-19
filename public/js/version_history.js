@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v1169', d: '2026-07-19', s: '🔗 チャットの URL の見た目を綺麗に (中村さん指示「4 連チャットのスラッグが気持ち悪いな %3A はないわ」)。 room_key は "ch:important" のような "ch:slug" 形式で、 hash fragment 中の a href 用に encodeURIComponent すると ":" が "%3A" にエンコードされて URL バーに「/#/chat-rooms/ch%3Achatter」と表示されていた。 hash fragment では ":" はそのまま合法なので、 チャネル一覧 / タブバー / navigate 呼び出しの 4 箇所から encodeURIComponent を撤去、 生の room_key を href に埋める形に。 API path (fetch/post) 側は 保険で encodeURIComponent を維持 (Apache/path で ":" に厳しい設定を回避)。 renderChatRoom は decodeURIComponent で受けるので raw / encoded どちらでも 動く互換。' },
   { v: 'v1168', d: '2026-07-19', s: '📐 実験協力者募集の chip レイアウト揃え (中村さん指示「代理でいれた場合と、自分で入れた場合とで名前の位置などがレイアウト揃ってないの気持ち悪い」)。 v1167 では 代理マーク ＊ を name の末尾に inline で 付けていた ため、 self / 代理 で name の始まり位置は揃うが name の 幅 が 変わって chip 幅 が バラついていた。 修正: chip 内を [avatar][source slot 12px 固定][name][remove slot 14px 固定] の 4 段構造 に、 代理マーク も 削除ボタン も 常に幅を予約 (自分登録 / 他者は 空の 同幅 span で 埋め)。 これで 全 chip の name 開始位置と chip 幅の 揃いが 完全 に。' },
   { v: 'v1167', d: '2026-07-19', s: '📋 実験協力者募集 の 枠一覧 を 高密度 に (中村さん指示「日程の一覧性が低いのでもう少し小さく表示して」)。 従来は 1 枠 = 1 カード (padding 12、 font 15) で 3 枠 で 縦長 だったが、 修正後は 1 枠 = 1 行 (padding 6/10、 font 13) で 枠名 / 定員 / 参加者 chip / 参加ボタン を横並び、 参加者 chip も padding と font を 半減、 実施者代理追加 は ✵ の 代わりに ＊ 記号 で 表記 (下部に 凡例)。 一覧全体 は 1 個 の card に border-bottom で 区切り、 スクロール なしで 多くの 枠 が 一度 に 目に入る。' },
   { v: 'v1166', d: '2026-07-19', s: '📋 中村さん指示「実験協力者募集は、依頼タブの一番上に入れよう」→ requests_hub.js の ITEMS 先頭 に 🧪 実験協力者募集 を追加。 apps.js の cat: research は 維持 (研究カテゴリからも到達可能)。' },

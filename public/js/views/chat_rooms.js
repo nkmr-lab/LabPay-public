@@ -45,7 +45,7 @@ export async function renderChatRooms() {
     const rooms = d.rooms || [];
     const first = rooms.find(r => r.type === 'ch') || rooms[0];
     if (first) {
-      navigate(`#/chat-rooms/${encodeURIComponent(first.room_key)}`);
+      navigate(`#/chat-rooms/${first.room_key}`);
       return;
     }
   } catch (_) {}
@@ -93,7 +93,7 @@ export async function renderChatRooms() {
       const v = Number(sel.value);
       if (!v) return;
       const a = Math.min(meId, v); const b = Math.max(meId, v);
-      navigate(`#/chat-rooms/${encodeURIComponent('dm:' + a + '-' + b)}`);
+      navigate(`#/chat-rooms/${'dm:' + a + '-' + b}`);
     });
   } catch (_) {}
 }
@@ -103,7 +103,7 @@ function roomRow(r) {
   const last = r.last_message;
   const snippet = last ? escapeHtml(String(last.body).slice(0, 50)) : '';
   return `
-    <a href="#/chat-rooms/${encodeURIComponent(r.room_key)}"
+    <a href="#/chat-rooms/${r.room_key}"
        style="display:flex; gap:8px; align-items:center; padding:8px 14px; text-decoration:none; color:inherit; ${unread ? 'background:#fff8e6' : ''}">
       <span style="font-size:18px; flex:none">${escapeHtml(r.icon || '#️⃣')}</span>
       <div style="flex:1; min-width:0">
@@ -191,7 +191,7 @@ export async function renderChatRoom({ params }) {
           const badge = unread > 0
             ? `<span style="background:#dc2626; color:#fff; font-weight:700; font-size:10px; padding:1px 6px; border-radius:9px; margin-left:4px">${unread > 99 ? '99+' : unread}</span>`
             : '';
-          return `<a href="#/chat-rooms/${encodeURIComponent(r.room_key)}"
+          return `<a href="#/chat-rooms/${r.room_key}"
              style="display:inline-flex; align-items:center; gap:4px; padding:8px 12px; text-decoration:none; color:#fff; font-size:13px; white-space:nowrap; border-bottom:3px solid ${active ? '#fff' : 'transparent'}; background:${active ? 'rgba(255,255,255,0.1)' : 'transparent'}; ${unread && !active ? 'font-weight:700' : ''}">
             <span>${escapeHtml(r.icon || '#️⃣')}</span>
             <span>${escapeHtml(r.name || r.room_key)}</span>
