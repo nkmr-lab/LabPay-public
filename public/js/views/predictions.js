@@ -221,8 +221,13 @@ function renderDetailHtml(g) {
      </div>`
   ).join('');
 
+  // v1181 中村さん指摘「〆切終了しているのに、「予想を更新する」ボタンが表示されているのはおかしい」
+  //   → status='open' のままで deadline を過ぎているケースで予想 UI を出さない (=締切扱い)。
+  //   deadlinePassed は下で計算しているが、 predictArea 判定の前に前倒しで計算。
+  const deadlinePassedForPredict = g.deadline_at
+    && new Date(String(g.deadline_at).replace(' ', 'T')).getTime() <= Date.now();
   let predictArea = '';
-  if (g.status === 'open') {
+  if (g.status === 'open' && !deadlinePassedForPredict) {
     if (g.me_entered) {
       predictArea = `
         <div class="card">
@@ -243,6 +248,13 @@ function renderDetailHtml(g) {
           <button class="btn primary" id="pred-submit" style="margin-top:10px">フィー ${g.fee}pt を支払って予想する</button>
         </div>`;
     }
+  } else if (g.status === 'open' && deadlinePassedForPredict) {
+    // v1181 open のまま deadline 過ぎ = closed 相当扱い
+    predictArea = `
+      <div class="card">
+        <h3 style="margin:0 0 4px">締切終了</h3>
+        <p class="hint" style="margin:0">締切を過ぎたので予想の追加/変更はできません。起案者による結果開示をお待ちください。</p>
+      </div>`;
   } else if (g.status === 'closed') {
     predictArea = `
       <div class="card">

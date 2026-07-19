@@ -236,7 +236,9 @@ function paintSpDetail(g) {
        </div>`);
 
   let predictArea = '';
-  if (g.status === 'open') {
+  // v1181 中村さん指摘「〆切終了しているのに、「予想を更新する」ボタンが表示されているのはおかしい」
+  //   → status='open' のままで deadline を過ぎているケースで予想 UI を出さない (=締切扱い)。
+  if (g.status === 'open' && !deadlinePassed) {
     const cur = g.my_guess || { home: 0, away: 0 };
     predictArea = `
       <div class="card">
@@ -259,6 +261,9 @@ function paintSpDetail(g) {
         </div>
         <button class="btn primary" id="sp-submit" style="width:100%">${g.me_entered ? '予想を更新する' : `フィー ${g.fee}pt を支払って予想する`}</button>
       </div>`;
+  } else if (g.status === 'open' && deadlinePassed) {
+    // v1181 open のまま deadline 過ぎ = closed 相当扱い
+    predictArea = `<div class="card"><h3 style="margin:0 0 4px">締切終了</h3><p class="hint" style="margin:0">締切を過ぎたので予想の追加/変更はできません。起案者による結果登録をお待ちください。</p></div>`;
   } else if (g.status === 'closed') {
     predictArea = `<div class="card"><h3 style="margin:0 0 4px">締切済み</h3><p class="hint" style="margin:0">起案者が結果を登録するのを待ちましょう。</p></div>`;
   } else if (g.status === 'cancelled') {
