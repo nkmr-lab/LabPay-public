@@ -116,9 +116,22 @@ function roomRow(r) {
 
 // ─── /#/chat-rooms/:roomKey (メッセージストリーム) ─
 export async function renderChatRoom({ params }) {
+  const newFocus = decodeURIComponent(params.roomKey);
+  // v1163 中村さん指摘「チャットが微妙にもっさり感がある、特にタブの切替」→ タブ (チャンネル)
+  //   切替時は URL の hash が変わって renderChatRoom が再呼び出しされるが、既に
+  //   同じパネル集合 (4 チャンネル全部) が DOM にあれば、 focus 変更だけで済ませて
+  //   fetch/再描画をスキップ。これで channel タブ切替が実質即時になる。
+  const existingShell = document.getElementById('cr-shell');
+  const existingPaneEls = existingShell ? existingShell.querySelectorAll('[data-pane]') : [];
+  const existingPaneKeys = new Set([...existingPaneEls].map(el => el.dataset.pane));
+  if (existingShell && existingPaneKeys.has(newFocus)) {
+    _focusRoom = newFocus;
+    applyPaneVisibility();
+    return;
+  }
   stopAllPolls();
   cleanupMediaListener();
-  _focusRoom = decodeURIComponent(params.roomKey);
+  _focusRoom = newFocus;
   const app = document.getElementById('app');
   // v1162 中村さん指摘「上と左右にあきスペースがある」。 chat-rooms は router で
   //   app-fullscreen になり topbar/tabs は非表示なのに、 cr-shell が top:96px で
@@ -142,12 +155,13 @@ export async function renderChatRoom({ params }) {
   const isDM = _focusRoom.startsWith('dm:');
   const isChannel = !isDM;
 
-  // 3-pane: 主要チャンネル (先頭 3 つ) を横並び。 DM 時は 1 pane。
+  // v1163 中村さん要望「重要、連絡、相談、雑談の 4 つにするかな」→ 3-pane を 4-pane に。
+  //   主要チャンネル (先頭 4 つ) を横並び。 DM 時は 1 pane。
   const paneRooms = isChannel
-    ? channels.slice(0, 3).map(r => r.room_key === _focusRoom ? r : r)
+    ? channels.slice(0, 4).map(r => r.room_key === _focusRoom ? r : r)
     : [focusRoomInfo || { room_key: _focusRoom, name: '', icon: '💬', type: 'dm' }];
 
-  // フォーカスされているチャンネルが 3-pane の先頭 3 に含まれていない場合は 3-pane の 3 番目を差し替え
+  // フォーカスされているチャンネルが 4-pane の先頭に含まれていない場合は 4 番目 (末尾) を差し替え
   if (isChannel && !paneRooms.some(r => r.room_key === _focusRoom) && focusRoomInfo) {
     paneRooms[Math.max(0, paneRooms.length - 1)] = focusRoomInfo;
   }
@@ -185,9 +199,12 @@ export async function renderChatRoom({ params }) {
           </a>`;
         }).join('')}
       </div>
-      <!-- v1162 fs-close-btn (画面右上の丸✕、 router.js が生成) と重複していたので cr-close 削除。
-           右端は router の ✕ ボタン (top:8px right:8px) を避けるためのスペーサ。 -->
-      <div style="width:56px; flex:none"></div>
+      <!-- v1163 cr-close ✕ を復活 (中村さん報告「✕ボタンを押しても閉じない」)。 v1162 で
+           fs-close-btn (router の丸✕) と重複するので cr-close を削除したが、 fs-close-btn
+           側が何らかの理由で効かない状況が発生。チャット topbar にも明示的な ✕ を再設置
+           して確実にホームへ戻れるように。 fs-close-btn と 2 個並ぶ可能性はあるが機能優先。 -->
+      <a href="#/" id="cr-close" title="チャットを閉じてホームへ"
+         style="display:inline-flex; align-items:center; padding:0 14px; text-decoration:none; color:#fff; font-size:20px; background:#2d0a2f; flex:none">✕</a>
     </div>
     <div id="cr-panes" style="flex:1; min-height:0; display:grid; gap:0; grid-template-columns:${isChannel ? 'repeat(' + paneRooms.length + ', 1fr)' : '1fr'}"></div>
   `;
@@ -196,12 +213,13 @@ export async function renderChatRoom({ params }) {
   const panesEl = document.getElementById('cr-panes');
   panesEl.innerHTML = paneRooms.map(r => paneHtml(r, isDM ? dmHeader : '')).join('');
 
-  // 各 pane を初期化 (load + polling + input)
+  // v1163 各 pane 初期化を並列化 (旧: for await で 4 チャンネル × 50-100ms シリアル。
+  //   新: Promise.all で一括、 wall-clock を 1 回分に短縮)
   for (const r of paneRooms) {
     _panes.set(r.room_key, { lastMsgId: 0, pollTimer: null, roomInfo: r });
     wirePane(r.room_key);
-    await loadMessagesFor(r.room_key, true);
   }
+  await Promise.all(paneRooms.map(r => loadMessagesFor(r.room_key, true).catch(() => {})));
 
   // 選択されている pane 以外を dim (スマホでは選択中のみ表示)
   applyPaneVisibility();
@@ -247,25 +265,63 @@ function wirePane(key) {
   // v1150 中村さん報告「タイミングによっては同じメッセージが 2 回投稿されてしまう」
   //   → 送信中は sending フラグ + button/input disable で 2 回目クリック / Ctrl+Enter 連打を弾く。
   //   POST 完了 (成功 / 失敗) で解除。
+  // v1163 中村さん指摘「書き込んだらすぐに反映されてほしいのだけど、なんかディレイがある」
+  //   → optimistic UI 化。従来は POST 完了 → 追加 GET (再取得) の 2 往復待ちで
+  //   自分の書き込みが見えなかった。修正: 入力欄クリア + ローカル bubble 描画を
+  //   同期に前倒し、 POST は裏で走らせ、完了時に pending bubble を除去して再取得。
+  //   失敗時は pending bubble を赤く塗って、入力欄に body を復元。
   let sending = false;
+  let pendingSeq = 0;
   const send = async () => {
     if (sending) return;
     const body = inputEl.value.trim();
     if (!body) return;
     sending = true;
     sendEl.disabled = true;
-    inputEl.readOnly = true;
     const origLabel = sendEl.textContent;
     sendEl.textContent = '⌛';
+    inputEl.value = '';
+    // optimistic bubble を stream 末尾に append
+    const stream = document.querySelector(`[data-pane-stream="${cssSel(key)}"]`);
+    const pid = `pending-${key}-${++pendingSeq}-${Date.now()}`;
+    if (stream) {
+      const meName = state.me?.display_name || '(自分)';
+      const meAvatar = state.me?.avatar_url || null;
+      const time = new Date().toTimeString().slice(0, 5);
+      const linkified = escapeHtml(body).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" style="color:#1264a3; text-decoration:underline">$1</a>');
+      stream.insertAdjacentHTML('beforeend', `
+        <div class="cm-row cm-pending" data-pid="${pid}" style="display:flex; gap:10px; padding:6px 0; align-items:flex-start; opacity:0.55">
+          <div style="flex:none">${avatarHtml(meName, meAvatar, 'md')}</div>
+          <div style="flex:1; min-width:0">
+            <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:2px">
+              <span style="font-weight:700; color:#1d1c1d; font-size:15px">${escapeHtml(meName)}</span>
+              <span style="color:#616061; font-size:12px">${escapeHtml(time)} ⌛ 送信中</span>
+            </div>
+            <div style="color:#1d1c1d; font-size:15px; line-height:1.46; white-space:pre-wrap; word-break:break-word">${linkified}</div>
+          </div>
+        </div>`);
+      requestAnimationFrame(() => { stream.scrollTop = stream.scrollHeight; });
+    }
     try {
       await post(`/api/chat/rooms/${encodeURIComponent(key)}/messages`, { body });
-      inputEl.value = '';
+      // pending bubble を消して本物を GET で取ってくる (重複回避)
+      stream?.querySelector(`[data-pid="${pid}"]`)?.remove();
       await loadMessagesFor(key, true);
-    } catch (e) { toast('失敗: ' + e.message); }
+    } catch (e) {
+      // 失敗: bubble を赤く塗って body を入力欄に戻す
+      const pending = stream?.querySelector(`[data-pid="${pid}"]`);
+      if (pending) {
+        pending.style.opacity = '1';
+        pending.style.background = '#ffe4e4';
+        const meta = pending.querySelector('div > div > div:first-child > span:last-child');
+        if (meta) meta.innerHTML = '⚠ 送信失敗';
+      }
+      if (!inputEl.value) inputEl.value = body;
+      toast('失敗: ' + e.message);
+    }
     finally {
       sending = false;
       sendEl.disabled = false;
-      inputEl.readOnly = false;
       sendEl.textContent = origLabel;
     }
   };
