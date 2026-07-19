@@ -225,12 +225,25 @@ export async function renderExpRecruitDetail({ params }) {
     const joinable = !locked && !s.is_me_in && !full;
     const capText = unlimited ? `${s.filled}/∞` : `${s.filled}/${s.capacity}`;
     const capColor = full ? '#c00' : (s.is_me_in ? '#0369a1' : '#666');
-    const parts = s.participants.map(p => `
-      <span style="display:inline-flex; align-items:center; gap:3px; padding:1px 6px 1px 2px; background:${p.is_me ? '#fef3c7' : '#f3f4f6'}; border-radius:10px; font-size:11px; line-height:1.4">
-        ${avatarHtml(p.user_name, p.user_avatar, 'xs')}
-        <span>${escapeHtml(p.user_name)}${p.source === 'assigned_by_creator' ? '＊' : ''}</span>
-        ${(isMine || p.is_me) && !locked ? `<button class="er-remove" data-slot-id="${s.id}" data-user-id="${p.user_id}" data-is-me="${p.is_me ? 1 : 0}" style="border:none; background:none; color:#c00; cursor:pointer; padding:0 2px; font-size:11px">✕</button>` : ''}
-      </span>`).join('');
+    // v1168 中村さん指示「代理でいれた場合と、自分で入れた場合とで名前の位置などが
+    //   レイアウト揃ってないの気持ち悪い」→ chip 内を [avatar][source slot][name][remove]
+    //   の固定順に、代理マークは name の左に width 固定 (12px) の枠を用意して全 chip 揃える。
+    //   これで自分登録 (空) も代理 (＊) も name の開始位置が完全に揃う。
+    const parts = s.participants.map(p => {
+      const srcMark = p.source === 'assigned_by_creator'
+        ? `<span title="実施者が代理追加" style="display:inline-block; width:12px; text-align:center; color:#7b3fa0; font-weight:700">＊</span>`
+        : `<span style="display:inline-block; width:12px"></span>`;
+      const removeBtn = (isMine || p.is_me) && !locked
+        ? `<button class="er-remove" data-slot-id="${s.id}" data-user-id="${p.user_id}" data-is-me="${p.is_me ? 1 : 0}" style="border:none; background:none; color:#c00; cursor:pointer; padding:0 2px; font-size:11px">✕</button>`
+        : `<span style="display:inline-block; width:14px"></span>`;
+      return `
+        <span style="display:inline-flex; align-items:center; gap:3px; padding:1px 4px; background:${p.is_me ? '#fef3c7' : '#f3f4f6'}; border-radius:10px; font-size:11px; line-height:1.4">
+          ${avatarHtml(p.user_name, p.user_avatar, 'xs')}
+          ${srcMark}
+          <span>${escapeHtml(p.user_name)}</span>
+          ${removeBtn}
+        </span>`;
+    }).join('');
     const action = joinable
       ? `<button class="er-join btn primary" data-slot-id="${s.id}" style="padding:3px 10px; font-size:12px">＋入る</button>`
       : (s.is_me_in && !locked ? `<span style="color:#0369a1; font-size:11px; font-weight:600">✓ 参加中</span>` : '');
