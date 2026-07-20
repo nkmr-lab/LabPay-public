@@ -11,7 +11,7 @@
 //   - DM を開いた時は従来通り 1 ペイン (メインチャンネルへのショートカット付き)
 
 import { get, post, patch, del } from '../api.js';
-import { escapeHtml, avatarHtml, navigate } from '../router.js';
+import { escapeHtml, avatarHtml, navigate, resetFsInnerNav } from '../router.js';
 import { state, toast } from '../app.js';
 
 const POLL_MS = 2000;
@@ -39,6 +39,8 @@ function isMobile() { return window.matchMedia(MOBILE_QUERY).matches; }
 // ─── /#/chat-rooms (ルーム一覧、 Slack 風サイドバー) ─
 // v726 #328 タブ UI に統一したので、ここを訪れたら最初のチャンネルへ自動遷移。
 export async function renderChatRooms() {
+  // v1211 ✕ 一発 で 閉じる ため fsInnerNavCount リセット
+  resetFsInnerNav();
   stopAllPolls();
   try {
     const d = await get('/api/chat/rooms');
@@ -117,6 +119,10 @@ function roomRow(r) {
 // ─── /#/chat-rooms/:roomKey (メッセージストリーム) ─
 export async function renderChatRoom({ params }) {
   const newFocus = decodeURIComponent(params.roomKey);
+  // v1211 チャンネル切替 で fsInnerNavCount が 積まれる 問題 対応:
+  //   fs-close-btn (右上 丸✕) を 1 発 で 効かせる ため、 chat-rooms に 入る度 に 0 リセット。
+  //   これで 中の チャンネル 切替 で count が 1〜3 溜まって いても、 ✕ で 一発 で 元の 場所 に 戻る。
+  resetFsInnerNav();
   // v1163 中村さん指摘「チャットが微妙にもっさり感がある、特にタブの切替」→ タブ (チャンネル)
   //   切替時は URL の hash が変わって renderChatRoom が再呼び出しされるが、既に
   //   同じパネル集合 (4 チャンネル全部) が DOM にあれば、 focus 変更だけで済ませて
@@ -199,12 +205,10 @@ export async function renderChatRoom({ params }) {
           </a>`;
         }).join('')}
       </div>
-      <!-- v1163 cr-close ✕ を復活 (中村さん報告「✕ボタンを押しても閉じない」)。 v1162 で
-           fs-close-btn (router の丸✕) と重複するので cr-close を削除したが、 fs-close-btn
-           側が何らかの理由で効かない状況が発生。チャット topbar にも明示的な ✕ を再設置
-           して確実にホームへ戻れるように。 fs-close-btn と 2 個並ぶ可能性はあるが機能優先。 -->
-      <a href="#/" id="cr-close" title="チャットを閉じてホームへ"
-         style="display:inline-flex; align-items:center; padding:0 14px; text-decoration:none; color:#fff; font-size:20px; background:#2d0a2f; flex:none">✕</a>
+      <!-- v1211 中村さん指摘「左上のバツボタンはそもそも不要」→ cr-close ✕ を撤去。
+           閉じるのは 右上の 丸 fs-close-btn (router 生成) 一つに 統一。
+           従来 fs-close-btn が 「1 発 で 閉じない」問題 は チャンネル 切替 で fsInnerNavCount が
+           積み上がって いた こと。 chat-rooms 描画時 に resetFsInnerNav() で ゼロ に 戻して 対応。 -->
     </div>
     <div id="cr-panes" style="flex:1; min-height:0; display:grid; gap:0; grid-template-columns:${isChannel ? 'repeat(' + paneRooms.length + ', 1fr)' : '1fr'}"></div>
   `;

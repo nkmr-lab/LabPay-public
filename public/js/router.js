@@ -101,6 +101,9 @@ let fsEntryHash = null;
 //   ✕ 毎 に -1、 0 に なったら 直接 fsEntryHash に jump (それ以上 は 履歴 を 消費しない)。
 let fsInnerNavCount = 0;
 let fsBackFlag = false;    // v1003 我々 が 発行 した history.back() の フラグ
+// v1211 ビュー側で 「✕ 1 発 で 直行 で 閉じたい」場合 に 使う (例: chat-rooms、
+//   チャンネル切替 で fsInnerNavCount が 積まれて ✕ が 効かない と 感じる 問題対応)
+export function resetFsInnerNav() { fsInnerNavCount = 0; }
 function closeFullscreen() {
   if (fsInnerNavCount > 0) {
     fsInnerNavCount--;
