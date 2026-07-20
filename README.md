@@ -672,6 +672,7 @@ php -S 127.0.0.1:8080 -t public public/api/index.php
 |---|---|---|
 | `/etc/cron.d/labpay-scrapbox` | `59 23 * * *` | Scrapbox-via-Slack 当日分集計 → pt 配布 |
 | `/etc/cron.d/labpay-backup` | `30 3 * * *` | `mysqldump --single-transaction` バックアップ (30 日保持) |
+| `/etc/cron.d/labpay-ai-async-poll` | `*/2 * * * *` | v1212 fb#501 対応。 processing 状態 の paper_full_translations / deep_researches を 一括 poll、 done で notify_safely を 発火。 従来 ユーザ が 結果ページ を 開いた 時 だけ 完了検知 → 通知 だった 挙動 を、 バックグラウンド で 定期的 に 完了検知 → 通知 に 変更。 |
 | `/etc/cron.d/certbot` | (certbot 自動生成) | Let's Encrypt 証明書更新 |
 | `systemd: labpay-overleaf.timer` | `OnUnitActiveSec=1h` | 📝 Overleaf 更新状況 collector — pyoverleaf で教員アカウントの全プロジェクトの文字数をスナップショット。 v896 の last_updated ETag 的 skip 最適化で変更が無いプロジェクトは .tex DL を完全省略 (典型 250 件中 5 件程度だけ実 DL) |
 
