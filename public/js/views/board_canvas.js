@@ -578,6 +578,10 @@ function wireCanvas() {
     // v1197 消しゴムモード: 手動 hit-test (SVG の pointer-events に 頼らない)
     if (MODE === 'erase') {
       const w0 = screenToWorld(e.clientX, e.clientY);
+      // v1198 diagnostic
+      const sCount = Object.keys(STROKE_MAP).length;
+      const aCount = Object.keys(ARROW_MAP).length;
+      toast(`erase: w=(${w0.x.toFixed(0)},${w0.y.toFixed(0)}) strokes=${sCount} arrows=${aCount}`, 2000);
       // まず stroke (幅 12px 以内)、 次に arrow (10px 以内) を 判定
       const sHit = hitTestStroke(w0.x, w0.y, 12);
       if (sHit) {
@@ -607,6 +611,9 @@ function wireCanvas() {
     if (MODE === 'arrow') {
       const w0 = screenToWorld(e.clientX, e.clientY);
       const nHit = hitTestNote(w0.x, w0.y);
+      // v1198 diagnostic (中村さん再報告「矢印もeraseもだめ」で 情報 が 欲しい)
+      const noteCount = Object.keys(NOTE_MAP).length;
+      toast(`arrow: w=(${w0.x.toFixed(0)},${w0.y.toFixed(0)}) notes=${noteCount} hit=${nHit ? '#'+nHit.id : 'none'}`, 2000);
       if (nHit) {
         const nid = nHit.id;
         if (!ARROW_SOURCE_NOTE_ID) {
