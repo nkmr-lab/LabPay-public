@@ -123,14 +123,15 @@ function shellHtml() {
         </div>
       </div>
 
+      <!-- v1193 中村さん指示: 左ツールバーは 上下中央 に (⋯ 削除メニュー との被り 解消) -->
       <!-- 左レール: 主要ツール (Miro 風 縦アイコン) -->
-      <div class="b-float" style="top:60px; left:8px; padding:6px; display:flex; flex-direction:column; gap:2px; width:50px">
-        <button class="b-icon-btn board-mode" data-mode="select" title="選択/移動 (V)">🖱</button>
-        <button class="b-icon-btn board-mode" data-mode="draw"   title="手書き (P)">✏️</button>
-        <button class="b-icon-btn board-mode" data-mode="arrow"  title="矢印 (A) 付箋→付箋">↗</button>
-        <button class="b-icon-btn board-mode" data-mode="erase"  title="消しゴム (E)">🩹</button>
+      <div class="b-float" style="top:50%; left:8px; transform:translateY(-50%); padding:6px; display:flex; flex-direction:column; gap:2px; width:50px">
+        <button class="b-icon-btn board-mode" data-mode="select" title="選択/移動 (Miro 風 手のひら)">🖐</button>
+        <button class="b-icon-btn board-mode" data-mode="draw"   title="手書き">✏️</button>
+        <button class="b-icon-btn board-mode" data-mode="arrow"  title="矢印 (付箋 → 付箋)">↗</button>
+        <button class="b-icon-btn board-mode" data-mode="erase"  title="消しゴム (ストローク/矢印 タップで削除)">🩹</button>
         <div class="b-sep"></div>
-        <button class="b-icon-btn" id="board-add" title="ノートを追加 (N)">➕</button>
+        <button class="b-icon-btn" id="board-add" title="ノートを追加">➕</button>
         <div id="board-import-wrap" style="position:relative">
           <button class="b-icon-btn" id="board-import" title="インポート">📥</button>
           <div id="board-import-menu" style="display:none; position:absolute; left:100%; top:0; margin-left:6px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; min-width:200px">
@@ -471,15 +472,27 @@ function wireCanvas() {
       if (path) {
         const sid = parseInt(path.dataset.strokeId, 10);
         deleteStroke(sid).catch(err => toast('削除失敗: ' + err.message));
+        updateDebug('erase:stroke');
         return;
       }
       // v1189 消しゴムモードで矢印もタップ削除
       const arrLine = e.target.closest('[data-arrow-id]');
       if (arrLine) {
         deleteArrow(parseInt(arrLine.dataset.arrowId, 10));
+        updateDebug('erase:arrow');
         return;
       }
-      // stroke/arrow 以外を触ったら pan は許す (下の通常分岐に fall through)
+      // v1193 中村さん報告「消しゴム機能せず、ドラッグアンドドロップ」対策:
+      //   ノートをタップした時 は 消しゴムモードでは 何もしない (fall-through で drag は 誤解)。
+      //   ペン/矢印 の 削除 用 なので、 note を掴んで 動かすのは 意図しない挙動。
+      const nEl0 = e.target.closest('.bnote');
+      if (nEl0) {
+        toast('消しゴムモード: ペンの線 or 矢印 をタップしてね', 1400);
+        updateDebug('erase:blocked-note');
+        return;
+      }
+      // 空白タップ は pan させる (下の通常分岐に fall through)
+      updateDebug('erase:falling-through-to-pan');
     }
     // v1189 矢印モード: ノートタップ → source, 2 本目ノートタップ → 矢印作成
     if (MODE === 'arrow') {
@@ -488,11 +501,11 @@ function wireCanvas() {
         const nid = parseInt(nEl.dataset.id, 10);
         if (!ARROW_SOURCE_NOTE_ID) {
           ARROW_SOURCE_NOTE_ID = nid;
-          toast('接続先の付箋をタップしてね');
+          toast('接続先の付箋をタップしてね', 1400);
           renderArrows();  // 選択状態 の 反映
         } else if (ARROW_SOURCE_NOTE_ID === nid) {
           ARROW_SOURCE_NOTE_ID = null;
-          toast('選択解除');
+          toast('選択解除', 900);
           renderArrows();
         } else {
           const from = ARROW_SOURCE_NOTE_ID;
@@ -500,6 +513,7 @@ function wireCanvas() {
           tryCreateArrow(from, nid);
         }
         e.preventDefault();
+        updateDebug('arrow:note=' + nid);
         return;
       }
       // 空白タップ で 選択解除 (pan は 下 に fall through で 有効)
@@ -507,6 +521,7 @@ function wireCanvas() {
         ARROW_SOURCE_NOTE_ID = null;
         renderArrows();
       }
+      updateDebug('arrow:falling-through');
     }
     // 何に触れたか
     const noteEl   = e.target.closest('.bnote');

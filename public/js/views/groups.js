@@ -21,6 +21,36 @@ async function invalidateGroupCache(_gid) {
   await invalidateContentCache('/api/groups');
 }
 
+// v1193 中村さん要望「グループに Board を作る機能」→ このグループ限定 (visibility=group)
+//   の新規 board を 作成して 直行。 タイトル は「(グループ名) のボード N」形式。
+async function createBoardForGroup(groupId) {
+  try {
+    // グループ名 と 既存の同名 board 数 を 取るため、 detail から groupTitle を 拾う
+    const g = await get(`/api/groups/${encodeURIComponent(groupId)}`);
+    const groupTitle = (g && g.title) ? g.title : ('グループ' + groupId);
+    // 既存 board のうち この グループ owner の 個数 で 連番
+    let seq = 1;
+    try {
+      const rooms = await get('/api/board/rooms');
+      const same = (rooms.items || []).filter(r => (r.visibility === 'group') && String(r.owner_group_id) === String(g.id) && (r.title || '').startsWith(groupTitle));
+      seq = same.length + 1;
+    } catch (_) {}
+    const title = seq === 1 ? `${groupTitle} のボード` : `${groupTitle} のボード ${seq}`;
+    const r = await post('/api/board/rooms', {
+      title,
+      visibility: 'group',
+      owner_group_id: g.id,
+      bg_color: '#FAFAFA',
+    });
+    if (r && r.id) {
+      toast('ボードを作りました');
+      location.hash = '#/board/rooms/' + r.id;
+    }
+  } catch (e) {
+    toast('作成失敗: ' + (e.message || 'unknown'));
+  }
+}
+
 // v340 グループ詳細ヘッダのアクションボタン 8 個の定義 (順番もここの並びを保持)。
 // feat_actions JSON 配列の値はこの id。 receipt / expense は wari に依存するので
 // feat_wari が OFF なら強制的に hidden。
@@ -414,6 +444,12 @@ export async function renderGroupDetail({ params }) {
     <div class="card">
       <a href="#/groups" class="hint">← グループ一覧</a>
       <div id="gd-head" class="muted" style="margin-top:6px">読み込み中…</div>
+      <!-- v1193 中村さん要望「グループに Board を作る機能」→ このグループのメンバー
+           限定 の board を 1 タップで 作成 して 直行 -->
+      <div class="row" style="gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px">
+        <button id="gd-new-board" class="btn">🗒 このグループのボードを作る</button>
+        <a href="#/board" class="hint" style="font-size:12px">ボード一覧 →</a>
+      </div>
     </div>
     <div class="card">
       <h3 style="margin:0">フィード</h3>
@@ -578,6 +614,8 @@ export async function renderGroupDetail({ params }) {
   //   各カードの DOM は loadDetail 時点で出来ているので片方の遅延でブロック不要。
   document.getElementById('gd-lodging-add')?.addEventListener('click', () => openLodgingModal(id, {}));
   document.getElementById('gd-flight-add')?.addEventListener('click', () => openFlightModal(id, {}));
+  // v1193 グループの新規 board 作成 (メンバー限定 = visibility=group)
+  document.getElementById('gd-new-board')?.addEventListener('click', () => createBoardForGroup(id));
   document.getElementById('gd-tr-add')?.setAttribute('href', '#/translate?group_id=' + id);
   Promise.all([loadWari(id), loadGroupTranslations(id), loadGroupFiles(id)]).catch(() => {});
   bindGroupFilesUI(id);
