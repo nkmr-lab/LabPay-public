@@ -34,6 +34,8 @@ export const APPS = [
   { id: 'rollcalls',     cat: 'lab-mgmt', url: '#/rollcalls',     title: '📣 点呼',            desc: '「いる?」「起きてる?」をワンタップで集める。締切タイマー + 未応答者に催促 push 通知。', defaultVisible: true },
   // v634 ⚾ ドラフト (v637 娯楽へ)
   { id: 'drafts',        cat: 'game', url: '#/drafts',        title: '⚾ ドラフト',         desc: 'プロ野球風順番指名 + くじ抽選。参加者と候補 (人 or 自由入力) を揃えて開始 → 1 位、 2 位と順番に指名、競合はくじで決着。', defaultVisible: true },
+  // v1208 🎤 ラボ名言集
+  { id: 'sayings',       cat: 'game', url: '#/sayings',       title: '🎤 ラボ名言集',       desc: '誰が いつ どこで 何を 言ったか を 年度別 (4月-3月) に 登録。 ❤️ で 投票、 年度末 に 得票順 で 名言/迷言 大賞。', defaultVisible: true },
   // v635 📝 フリップクイズ (v637 娯楽へ)
   { id: 'quizzes',       cat: 'game', url: '#/quizzes',       title: '📝 フリップクイズ', desc: '出題者が問題を出す → 参加者はフリップに記述回答 → 一斉開示 (タップで拡大) → 出題者が ⭕❌ 採点 → ランキング集計。連続出題 OK。', defaultVisible: true },
   { id: 'polls',         cat: 'lab-mgmt', url: '#/polls',         title: '📊 投票・アンケート', desc: '対象者・締切・選択肢を指定して投票を集める。個人の票は非公開、集計の可視タイミングは選べる。', defaultVisible: true },

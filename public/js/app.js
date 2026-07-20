@@ -701,8 +701,10 @@ route('/paper-translate-full/r/:token', lazy(() => import('./views/paper_transla
 route('/paper-translate-full',          lazy(() => import('./views/paper_translate_full.js'), 'renderPaperTranslateFull'));
 // v809 論文要約 + 全訳の合算新着一覧 (ホーム widget の「すべて →」リンク先)
 route('/papers-recent',                 lazy(() => import('./views/papers_recent.js'), 'renderPapersRecent'));
-// v804 名言登録 / 管理
+// v804 名言登録 / 管理 (外部の名言)
 route('/quotes',                        lazy(() => import('./views/quotes.js'), 'renderQuotes'));
+// v1208 ラボ名言/迷言 集 (年度別 + 投票、 娯楽)
+route('/sayings',                       lazy(() => import('./views/lab_sayings.js'), 'renderLabSayings'));
 // v583 #225 レジュメ原稿チェック (paper-review 軽量版、 5pt)
 route('/resume-check/:id',  lazy(() => import('./views/resume_check.js'), 'renderResumeCheckDetail'));
 route('/resume-check',      lazy(() => import('./views/resume_check.js'), 'renderResumeCheck'));
