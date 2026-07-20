@@ -125,10 +125,15 @@ function hitTestStroke(wx, wy, tol) {
   }
   return null;
 }
-// v1202 fb#493/494: 単一選択 (今回は 単一 のみ、 複数 は 次段)
+// v1202/v1203 fb#493/494: 選択状態 (v1203 で 複数選択 対応)
+//   SELECTED_NOTE_ID は 互換 のため 残す (単一 選択 の 代表 = Set の 最後 に 追加された id)
 let SELECTED_NOTE_ID = null;
-let CLIPBOARD_NOTE = null;   // { color, front_text, back_text, front_image_url, width, height }
+const SELECTED_NOTE_IDS = new Set();
+// v1203 clipboard は 単一 でなく 配列 に (相対 位置 保持)
+let CLIPBOARD_NOTES = [];    // [{ color, front_text, back_text, front_image_url, width, height, dx, dy }]
 let LAST_POINTER = { x: 0, y: 0 };  // 直近 pointer 位置 (Ctrl+V の 貼り付け 場所 用)
+// v1203 範囲選択 (rubber-band) の 状態
+let RECT_SELECT = null;   // { x1, y1, x2, y2 } world 座標
 // v1196 Undo スタック — 各アクション を {label, undo: async fn} で 積む、 ↶ ボタン / Ctrl+Z で pop
 const UNDO_STACK = [];
 const UNDO_LIMIT = 40;
@@ -162,33 +167,48 @@ function boardKeydown(ev) {
     doUndo();
     return;
   }
-  // v1202 fb#494 コピー / 貼り付け
+  // v1203 fb#493/494 コピー / 貼り付け (複数 対応: 相対位置 保持)
   if (ctrl && (ev.key === 'c' || ev.key === 'C')) {
-    if (SELECTED_NOTE_ID !== null && NOTE_MAP[SELECTED_NOTE_ID]) {
-      const n = NOTE_MAP[SELECTED_NOTE_ID];
-      CLIPBOARD_NOTE = {
+    const ids = [...SELECTED_NOTE_IDS];
+    if (ids.length === 0) return;
+    // 全 note の 中心 の 重心 を 基準 に、 各 note の 相対 dx/dy を 保存
+    const cx = ids.reduce((s, id) => s + ((NOTE_MAP[id]?.x || 0) + (NOTE_MAP[id]?.width || 200) / 2), 0) / ids.length;
+    const cy = ids.reduce((s, id) => s + ((NOTE_MAP[id]?.y || 0) + (NOTE_MAP[id]?.height || 200) / 2), 0) / ids.length;
+    CLIPBOARD_NOTES = ids.filter(id => NOTE_MAP[id]).map(id => {
+      const n = NOTE_MAP[id];
+      return {
         color: n.color, front_text: n.front_text || '', back_text: n.back_text || '',
         front_image_url: n.front_image_url || '', width: n.width, height: n.height,
+        dx: (n.x + (n.width || 200) / 2) - cx,
+        dy: (n.y + (n.height || 200) / 2) - cy,
       };
-      toast('付箋をコピー (Ctrl+V で 貼り付け)', 1200);
+    });
+    toast(`${CLIPBOARD_NOTES.length} 枚 コピー (Ctrl+V で 貼り付け)`, 1200);
+    ev.preventDefault();
+    return;
+  }
+  if (ctrl && (ev.key === 'v' || ev.key === 'V')) {
+    if (CLIPBOARD_NOTES.length > 0) {
+      pasteClipboardAtCursor();
       ev.preventDefault();
     }
     return;
   }
-  if (ctrl && (ev.key === 'v' || ev.key === 'V')) {
-    if (CLIPBOARD_NOTE) {
-      pasteNoteAtCursor();
-      ev.preventDefault();
-    }
+  // v1203 Delete / Backspace で 選択中 の 付箋 を 一括 削除
+  if ((ev.key === 'Delete' || ev.key === 'Backspace') && SELECTED_NOTE_IDS.size > 0) {
+    ev.preventDefault();
+    const n = SELECTED_NOTE_IDS.size;
+    if (!confirm(`選択中 の ${n} 枚 を 削除するよ? (Ctrl+Z で 戻せる)`)) return;
+    deleteSelectedNotes();
     return;
   }
 }
 
-// v1202 fb#493/494: 選択状態 の 見た目 反映
+// v1202/v1203 fb#493 選択状態 の 見た目 反映 (複数選択 対応)
 function updateSelectionHighlight() {
   document.querySelectorAll('.bnote').forEach(el => {
     const id = parseInt(el.dataset.id, 10);
-    if (id === SELECTED_NOTE_ID) {
+    if (SELECTED_NOTE_IDS.has(id)) {
       el.style.outline = '3px solid #4a106d';
       el.style.outlineOffset = '2px';
     } else {
@@ -197,34 +217,116 @@ function updateSelectionHighlight() {
     }
   });
 }
+// 選択の 追加/切替/クリア のユーティリティ
+function selectOnlyNote(id) {
+  SELECTED_NOTE_IDS.clear();
+  SELECTED_NOTE_IDS.add(id);
+  SELECTED_NOTE_ID = id;
+  updateSelectionHighlight();
+}
+function toggleNoteSelection(id) {
+  if (SELECTED_NOTE_IDS.has(id)) {
+    SELECTED_NOTE_IDS.delete(id);
+    SELECTED_NOTE_ID = SELECTED_NOTE_IDS.size ? [...SELECTED_NOTE_IDS].pop() : null;
+  } else {
+    SELECTED_NOTE_IDS.add(id);
+    SELECTED_NOTE_ID = id;
+  }
+  updateSelectionHighlight();
+}
+function clearNoteSelection() {
+  if (SELECTED_NOTE_IDS.size === 0 && SELECTED_NOTE_ID === null) return;
+  SELECTED_NOTE_IDS.clear();
+  SELECTED_NOTE_ID = null;
+  updateSelectionHighlight();
+}
 
-async function pasteNoteAtCursor() {
-  if (!CLIPBOARD_NOTE) return;
-  const c = CLIPBOARD_NOTE;
-  const px = LAST_POINTER.x - (c.width || 220) / 2;
-  const py = LAST_POINTER.y - (c.height || 220) / 2;
+// v1203 複数貼り付け: 相対位置 (dx/dy) を 保持 したまま cursor 位置 に 集合 を 落とす
+async function pasteClipboardAtCursor() {
+  if (!CLIPBOARD_NOTES || CLIPBOARD_NOTES.length === 0) return;
+  const cx = LAST_POINTER.x, cy = LAST_POINTER.y;
+  const createdIds = [];
   try {
-    const r = await post(`/api/board/rooms/${ROOM_ID}/notes`, {
-      x: px, y: py, width: c.width || 220, height: c.height || 220,
-      color: c.color || MY_DEFAULT_COLOR, front_text: c.front_text || '',
-      back_text: c.back_text || '', front_image_url: c.front_image_url || '',
-    });
-    if (r && r.id) {
-      NOTE_MAP[r.id] = r.note;
-      NOTES = Object.values(NOTE_MAP);
-      SELECTED_NOTE_ID = r.id;
-      renderAll();
-      updateSelectionHighlight();
-      const nid = r.id;
-      pushUndo('貼り付けを取消', async () => {
-        await del(`/api/board/notes/${nid}`).catch(() => {});
-        delete NOTE_MAP[nid];
+    const results = await Promise.all(CLIPBOARD_NOTES.map(c => {
+      const w = c.width || 220, h = c.height || 220;
+      const px = cx + c.dx - w / 2, py = cy + c.dy - h / 2;
+      return post(`/api/board/rooms/${ROOM_ID}/notes`, {
+        x: px, y: py, width: w, height: h,
+        color: c.color || MY_DEFAULT_COLOR, front_text: c.front_text || '',
+        back_text: c.back_text || '', front_image_url: c.front_image_url || '',
+      }).catch(() => null);
+    }));
+    SELECTED_NOTE_IDS.clear();
+    for (const r of results) {
+      if (r && r.id) {
+        NOTE_MAP[r.id] = r.note;
+        SELECTED_NOTE_IDS.add(r.id);
+        SELECTED_NOTE_ID = r.id;
+        createdIds.push(r.id);
+      }
+    }
+    NOTES = Object.values(NOTE_MAP);
+    renderAll();
+    if (createdIds.length > 0) {
+      pushUndo(`${createdIds.length} 枚 の 貼付 を 取消`, async () => {
+        await Promise.all(createdIds.map(id => del(`/api/board/notes/${id}`).catch(() => {})));
+        for (const id of createdIds) delete NOTE_MAP[id];
         NOTES = Object.values(NOTE_MAP);
         renderAll();
       });
-      toast('付箋を貼り付け', 1000);
+      toast(`${createdIds.length} 枚 貼り付け`, 1000);
     }
   } catch (e) { toast('貼り付け失敗: ' + e.message); }
+}
+
+// v1203 選択中 note を 一括削除 (Undo で 復活)
+async function deleteSelectedNotes() {
+  const ids = [...SELECTED_NOTE_IDS];
+  if (ids.length === 0) return;
+  const backups = ids.filter(id => NOTE_MAP[id]).map(id => ({ ...NOTE_MAP[id] }));
+  try {
+    await Promise.all(ids.map(id => del(`/api/board/notes/${id}`).catch(() => {})));
+    for (const id of ids) delete NOTE_MAP[id];
+    NOTES = Object.values(NOTE_MAP);
+    SELECTED_NOTE_IDS.clear();
+    SELECTED_NOTE_ID = null;
+    renderAll();
+    pushUndo(`${backups.length} 枚 の 削除 を 取消`, async () => {
+      const news = await Promise.all(backups.map(b =>
+        post(`/api/board/rooms/${ROOM_ID}/notes`, {
+          x: b.x, y: b.y, width: b.width, height: b.height,
+          color: b.color, front_text: b.front_text || '',
+          back_text: b.back_text || '', front_image_url: b.front_image_url || '',
+        }).catch(() => null)
+      ));
+      for (const r of news) if (r && r.id) NOTE_MAP[r.id] = r.note;
+      NOTES = Object.values(NOTE_MAP);
+      renderAll();
+    });
+    toast(`${backups.length} 枚 削除 (↶ で 戻せる)`, 1400);
+  } catch (e) { toast('削除失敗: ' + e.message); }
+}
+
+// v1203 範囲選択 の rubber-band 描画 (SVG overlay に 破線 rect)
+function renderRectSelect() {
+  const svg = document.getElementById('board-strokes-svg');
+  if (!svg) return;
+  let cur = svg.querySelector('#board-rect-select');
+  if (!RECT_SELECT) { if (cur) cur.remove(); return; }
+  const { x1, y1, x2, y2 } = RECT_SELECT;
+  const X1 = Math.min(x1, x2) + 10000, Y1 = Math.min(y1, y2) + 10000;
+  const X2 = Math.max(x1, x2) + 10000, Y2 = Math.max(y1, y2) + 10000;
+  if (!cur) {
+    cur = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    cur.id = 'board-rect-select';
+    cur.setAttribute('fill', 'rgba(122, 55, 175, 0.10)');
+    cur.setAttribute('stroke', '#7b3fa0');
+    cur.setAttribute('stroke-width', '1.5');
+    cur.setAttribute('stroke-dasharray', '6,4');
+    svg.appendChild(cur);
+  }
+  cur.setAttribute('x', X1.toFixed(1)); cur.setAttribute('y', Y1.toFixed(1));
+  cur.setAttribute('width', (X2 - X1).toFixed(1)); cur.setAttribute('height', (Y2 - Y1).toFixed(1));
 }
 // v1182 fb#492 スマホの 2 本指 pinch 拡大縮小用の追跡
 const ACTIVE_POINTERS = new Map();  // pointerId → {x, y} (touch のみ、 mouse は追跡しない)
@@ -807,20 +909,43 @@ function wireCanvas() {
       DRAG.startX = e.clientX; DRAG.startY = e.clientY;
       DRAG.noteStartW = n.width; DRAG.noteStartH = n.height;
     } else if (noteEl && !e.target.closest('button, textarea, input, a')) {
-      DRAG.mode = 'note';
-      DRAG.noteId = parseInt(noteEl.dataset.id, 10);
-      const n = NOTE_MAP[DRAG.noteId];
+      const nid = parseInt(noteEl.dataset.id, 10);
+      const n = NOTE_MAP[nid];
       if (!n) return;
-      // v1202 fb#493/494: 選択状態 を 更新 (Ctrl+C の 対象 に)
-      SELECTED_NOTE_ID = DRAG.noteId;
-      updateSelectionHighlight();
+      // v1203 fb#493 複数選択: Shift+click で 追加/削除、 通常 click は 単一 に
+      if (e.shiftKey) {
+        toggleNoteSelection(nid);
+        // Shift 選択 だけ の 時 は drag 開始 しない
+        DRAG.mode = null;
+        return;
+      }
+      // 既に 選択済 なら 選択維持 (multi-drag 準備)、 未選択 なら single-select
+      if (!SELECTED_NOTE_IDS.has(nid)) selectOnlyNote(nid);
+      DRAG.mode = 'note';
+      DRAG.noteId = nid;
       DRAG.startX = e.clientX; DRAG.startY = e.clientY;
       DRAG.noteStartX = n.x; DRAG.noteStartY = n.y;
+      // v1203 multi-drag 用: 選択中 全 note の 初期位置 を 保存
+      DRAG.multi = [];
+      for (const sid of SELECTED_NOTE_IDS) {
+        const s = NOTE_MAP[sid];
+        if (s) DRAG.multi.push({ id: sid, x0: s.x, y0: s.y });
+      }
       // z bump
-      bringToFront(DRAG.noteId).catch(() => {});
+      bringToFront(nid).catch(() => {});
     } else if (!e.target.closest('button, .bmodal-color, .bpal')) {
+      // v1203 空白 で Shift+drag = 範囲選択 (rubber-band)
+      if (e.shiftKey && MODE === 'select') {
+        const w = screenToWorld(e.clientX, e.clientY);
+        RECT_SELECT = { x1: w.x, y1: w.y, x2: w.x, y2: w.y };
+        DRAG.mode = 'rect-select';
+        DRAG.pointerId = e.pointerId;
+        try { vp.setPointerCapture(e.pointerId); } catch (_) {}
+        renderRectSelect();
+        return;
+      }
       // v1202 空白 タップ で 選択解除
-      if (SELECTED_NOTE_ID !== null) { SELECTED_NOTE_ID = null; updateSelectionHighlight(); }
+      clearNoteSelection();
       DRAG.mode = 'pan';
       DRAG.startX = e.clientX; DRAG.startY = e.clientY;
       DRAG.origTx = VIEW.tx; DRAG.origTy = VIEW.ty;
@@ -892,11 +1017,26 @@ function wireCanvas() {
       VIEW.ty = DRAG.origTy + dy;
       applyTransform();
     } else if (DRAG.mode === 'note') {
-      const n = NOTE_MAP[DRAG.noteId]; if (!n) return;
-      n.x = DRAG.noteStartX + dx / VIEW.scale;
-      n.y = DRAG.noteStartY + dy / VIEW.scale;
-      const el = document.querySelector(`.bnote[data-id="${DRAG.noteId}"]`);
-      if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
+      // v1203 multi-drag: DRAG.multi に 記録した 全 選択 note を 同じ dx/dy で 移動
+      const shiftX = dx / VIEW.scale, shiftY = dy / VIEW.scale;
+      if (DRAG.multi && DRAG.multi.length > 1) {
+        for (const m of DRAG.multi) {
+          const n = NOTE_MAP[m.id]; if (!n) continue;
+          n.x = m.x0 + shiftX; n.y = m.y0 + shiftY;
+          const el = document.querySelector(`.bnote[data-id="${m.id}"]`);
+          if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
+        }
+      } else {
+        const n = NOTE_MAP[DRAG.noteId]; if (!n) return;
+        n.x = DRAG.noteStartX + shiftX;
+        n.y = DRAG.noteStartY + shiftY;
+        const el = document.querySelector(`.bnote[data-id="${DRAG.noteId}"]`);
+        if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
+      }
+    } else if (DRAG.mode === 'rect-select') {
+      // v1203 範囲選択 の 終点 を 更新 + preview 再描画
+      const w = screenToWorld(e.clientX, e.clientY);
+      if (RECT_SELECT) { RECT_SELECT.x2 = w.x; RECT_SELECT.y2 = w.y; renderRectSelect(); }
     } else if (DRAG.mode === 'resize') {
       const n = NOTE_MAP[DRAG.noteId]; if (!n) return;
       n.width  = Math.max(80, Math.min(1200, DRAG.noteStartW + dx / VIEW.scale));
@@ -986,14 +1126,58 @@ function wireCanvas() {
     const mode = DRAG.mode;
     const nid  = DRAG.noteId;
     const moved = DRAG.moved;
+    const multi = DRAG.multi;
     vp.style.cursor = 'grab';
     try { vp.releasePointerCapture(e.pointerId); } catch (_) {}
-    DRAG.mode = null; DRAG.noteId = null;
+    DRAG.mode = null; DRAG.noteId = null; DRAG.multi = null;
+    // v1203 範囲選択 の 確定
+    if (mode === 'rect-select' && RECT_SELECT) {
+      const r = RECT_SELECT;
+      const x1 = Math.min(r.x1, r.x2), y1 = Math.min(r.y1, r.y2);
+      const x2 = Math.max(r.x1, r.x2), y2 = Math.max(r.y1, r.y2);
+      RECT_SELECT = null;
+      renderRectSelect();
+      let added = 0;
+      // 選択矩形 内 に 完全 に 収まる note を 追加 (Miro/Figma 風、 交差 でなく 内包)
+      for (const n of Object.values(NOTE_MAP)) {
+        if (!n || n.hidden_for_me) continue;
+        const w = n.width || 200, h = n.height || 200;
+        if (n.x >= x1 && n.y >= y1 && (n.x + w) <= x2 && (n.y + h) <= y2) {
+          SELECTED_NOTE_IDS.add(n.id);
+          SELECTED_NOTE_ID = n.id;
+          added++;
+        }
+      }
+      updateSelectionHighlight();
+      if (added > 0) toast(`${added} 枚 選択`, 900);
+      return;
+    }
     if ((mode === 'note' || mode === 'resize') && nid && moved) {
       const n = NOTE_MAP[nid];
       if (n) {
         try {
-          if (mode === 'note')   await patch(`/api/board/notes/${nid}`, { x: n.x, y: n.y });
+          if (mode === 'note') {
+            // v1203 multi-drag: DRAG.multi の 全 note を 並列 で PATCH
+            if (multi && multi.length > 1) {
+              const backup = multi.map(m => ({ id: m.id, x0: m.x0, y0: m.y0 }));
+              await Promise.all(multi.map(m => {
+                const nn = NOTE_MAP[m.id];
+                if (!nn) return null;
+                return patch(`/api/board/notes/${m.id}`, { x: nn.x, y: nn.y }).catch(() => {});
+              }));
+              // undo: 全 note を 元位置 に 戻す
+              pushUndo(`${multi.length} 枚 の 移動 を 取消`, async () => {
+                await Promise.all(backup.map(m => {
+                  const nn = NOTE_MAP[m.id]; if (!nn) return null;
+                  nn.x = m.x0; nn.y = m.y0;
+                  return patch(`/api/board/notes/${m.id}`, { x: m.x0, y: m.y0 }).catch(() => {});
+                }));
+                renderAll();
+              });
+            } else {
+              await patch(`/api/board/notes/${nid}`, { x: n.x, y: n.y });
+            }
+          }
           if (mode === 'resize') await patch(`/api/board/notes/${nid}`, { width: n.width, height: n.height });
         } catch (err) { toast('保存失敗: ' + err.message); }
       }
@@ -2013,7 +2197,7 @@ function setMode(m) {
   });
   // v1200 モード切替 の toast を 使い方 付き に (中村さん実測「矢印はノード間、消しゴムはクリックなのね」→ 一目で 分かる 説明を 添える)
   const HINT = {
-    select: '🖐 選択/移動: ドラッグでパン、 ノート つまんで 移動',
+    select: '🖐 選択/移動: パン+ドラッグ / Shift+クリック で 複数選択 / Shift+ドラッグ で 範囲選択 / Ctrl+C/V',
     draw:   '✏️ 手書き: ドラッグで 自由 に 線を 引く',
     arrow:  '↗ 矢印: ノードA → ノードB を 順にタップ で 接続',
     shape:  '⬜ 図形: ドラッグ で 四角/楕円/直線 を 描く (点線 チェックで 破線に)',
