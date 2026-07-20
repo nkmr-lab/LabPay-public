@@ -576,13 +576,10 @@ function wireCanvas() {
       return;
     }
     // v1197 消しゴムモード: 手動 hit-test (SVG の pointer-events に 頼らない)
+    // v1199 note タップ で note 削除 (Miro 風、 Undo で 復活)
     if (MODE === 'erase') {
       const w0 = screenToWorld(e.clientX, e.clientY);
-      // v1198 diagnostic
-      const sCount = Object.keys(STROKE_MAP).length;
-      const aCount = Object.keys(ARROW_MAP).length;
-      toast(`erase: w=(${w0.x.toFixed(0)},${w0.y.toFixed(0)}) strokes=${sCount} arrows=${aCount}`, 2000);
-      // まず stroke (幅 12px 以内)、 次に arrow (10px 以内) を 判定
+      // まず stroke (幅 12px 以内)、 次に arrow (10px 以内)、 最後 に note を 判定
       const sHit = hitTestStroke(w0.x, w0.y, 12);
       if (sHit) {
         deleteStroke(sHit.id).catch(err => toast('削除失敗: ' + err.message));
@@ -597,23 +594,36 @@ function wireCanvas() {
         e.preventDefault();
         return;
       }
-      // note を タップ したら drag しない (誤操作 防止)
-      const nHit = hitTestNote(w0.x, w0.y);
+      // note 削除 (DOM ancestry と 世界座標 の 両方 で 判定)
+      const nEl = e.target.closest('.bnote');
+      let nHit = null;
+      if (nEl) {
+        const id = parseInt(nEl.dataset.id, 10);
+        nHit = NOTE_MAP[id] || null;
+      }
+      if (!nHit) nHit = hitTestNote(w0.x, w0.y);
       if (nHit) {
-        toast('消しゴムモード: ペンの線 or 矢印 をタップしてね', 1400);
-        updateDebug('erase:blocked-note#' + nHit.id);
+        deleteNoteWithUndo(nHit.id);
+        updateDebug('erase:note#' + nHit.id);
+        e.preventDefault();
         return;
       }
       // 空白 は pan に fall-through
       updateDebug('erase:fall-thr');
     }
-    // v1197 矢印モード: 手動 hit-test で note を 拾う (SVG が 覆っていても 大丈夫)
+    // v1197 矢印モード: note を 拾う。 v1199 DOM ancestor と 世界座標 の 両方 で 判定
+    //   どちらか が 見つけたら hit 成立 (screenToWorld / n.width の 微妙な ずれ を 吸収)
     if (MODE === 'arrow') {
-      const w0 = screenToWorld(e.clientX, e.clientY);
-      const nHit = hitTestNote(w0.x, w0.y);
-      // v1198 diagnostic (中村さん再報告「矢印もeraseもだめ」で 情報 が 欲しい)
-      const noteCount = Object.keys(NOTE_MAP).length;
-      toast(`arrow: w=(${w0.x.toFixed(0)},${w0.y.toFixed(0)}) notes=${noteCount} hit=${nHit ? '#'+nHit.id : 'none'}`, 2000);
+      const nEl = e.target.closest('.bnote');
+      let nHit = null;
+      if (nEl) {
+        const id = parseInt(nEl.dataset.id, 10);
+        nHit = NOTE_MAP[id] || null;
+      }
+      if (!nHit) {
+        const w0 = screenToWorld(e.clientX, e.clientY);
+        nHit = hitTestNote(w0.x, w0.y);
+      }
       if (nHit) {
         const nid = nHit.id;
         if (!ARROW_SOURCE_NOTE_ID) {
@@ -1196,6 +1206,34 @@ async function deleteNote(id) {
     delete NOTE_MAP[id];
     NOTES = Object.values(NOTE_MAP);
     renderAll();
+  } catch (e) { toast('削除失敗: ' + e.message); }
+}
+
+// v1199 消しゴム モード の note タップ 用 (confirm なし、 undo で 復活 できる)
+async function deleteNoteWithUndo(id) {
+  const backup = NOTE_MAP[id];
+  if (!backup) return;
+  try {
+    await del(`/api/board/notes/${id}`);
+    delete NOTE_MAP[id];
+    NOTES = Object.values(NOTE_MAP);
+    renderAll();
+    pushUndo('ノート削除を取消', async () => {
+      try {
+        const r = await post(`/api/board/rooms/${ROOM_ID}/notes`, {
+          x: backup.x, y: backup.y,
+          width: backup.width, height: backup.height,
+          color: backup.color, front_text: backup.front_text || '',
+          back_text: backup.back_text || '', front_image_url: backup.front_image_url || '',
+        });
+        if (r && r.note) {
+          NOTE_MAP[r.id] = r.note;
+          NOTES = Object.values(NOTE_MAP);
+          renderAll();
+        }
+      } catch (e) { toast('復元失敗: ' + e.message); }
+    });
+    toast('ノートを削除 (↶ で戻せる)', 1400);
   } catch (e) { toast('削除失敗: ' + e.message); }
 }
 
