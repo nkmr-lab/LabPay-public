@@ -652,7 +652,8 @@ async function loadInitial() {
     LAST_SERVER_TIME = d.server_time;
     document.getElementById('board-title').textContent = ROOM.title;
     document.getElementById('board-viewport').style.background = ROOM.bg_color || '#fafafa';
-    // v1188 削除メニュー: 作成者 or admin のみ ⋯ を表示 / v1205 共有設定 は 作成者 のみ
+    // v1188 削除メニュー: 作成者 or admin のみ ⋯ を表示
+    // v1205/v1207 共有設定 も 作成者 or admin (中村さん確認「・・・からの共有モード変更できる？」→ admin でも 開ける よう 見直し)
     const myId   = state?.me?.id ?? 0;
     const myRole = state?.me?.role ?? '';
     const isCreator = Number(ROOM.creator_user_id) === Number(myId);
@@ -660,7 +661,7 @@ async function loadInitial() {
     const moreWrap = document.getElementById('board-more-wrap');
     if (moreWrap) moreWrap.hidden = !canDelete;
     const shareBtn = document.getElementById('board-share');
-    if (shareBtn) shareBtn.style.display = isCreator ? 'block' : 'none';
+    if (shareBtn) shareBtn.style.display = canDelete ? 'block' : 'none';
     highlightPalette();
     // v1104 初回カーソル
     const nowMs = Date.now();

@@ -576,10 +576,11 @@ function board_room_patch(PDO $pdo, array $cfg, int $id): void {
     if (array_key_exists('bg_color', $body)) {
         $sets[] = 'bg_color = ?'; $params[] = _board_norm_color((string)$body['bg_color'], '#FAFAFA');
     }
-    // v1110 visibility 切替は作成者のみ
+    // v1110 visibility 切替は作成者のみ / v1207 admin も 許可 (⋯ メニュー を admin にも 出しているため 整合)
     if (array_key_exists('visibility', $body)) {
-        if ((int)$r['creator_user_id'] !== (int)$u['id']) {
-            throw new ApiException('forbidden', '公開範囲の変更は作成者のみ', 403);
+        $isAdmin2 = (string)($u['role'] ?? '') === 'admin';
+        if ((int)$r['creator_user_id'] !== (int)$u['id'] && !$isAdmin2) {
+            throw new ApiException('forbidden', '公開範囲の変更は作成者 or admin のみ', 403);
         }
         $vis = (string)$body['visibility'];
         if (!in_array($vis, ['lab','group','private'], true)) throw new ApiException('bad_request', 'visibility 不正', 400);
