@@ -90,66 +90,86 @@ function shellHtml() {
       #board-shell .bnote-editta::-webkit-scrollbar { display:none }
       #board-shell .bnote-body,
       #board-shell .bnote-editta { scrollbar-width:none; -ms-overflow-style:none }
+      /* v1190 Miro 風 フローティング UI パネル 共通 */
+      #board-shell .b-float {
+        position:absolute; background:rgba(255,255,255,0.96);
+        border:1px solid #d1d5db; border-radius:10px;
+        box-shadow:0 4px 12px rgba(0,0,0,0.12);
+        z-index:20; user-select:none;
+      }
+      #board-shell .b-icon-btn {
+        width:38px; height:38px; padding:0; border:none; background:transparent;
+        display:flex; align-items:center; justify-content:center;
+        font-size:18px; cursor:pointer; border-radius:8px;
+      }
+      #board-shell .b-icon-btn:hover { background:rgba(0,0,0,0.06); }
+      #board-shell .b-icon-btn.active { background:#7b3fa0; color:#fff; }
+      #board-shell .b-sep { height:1px; background:#e5e7eb; margin:4px 4px; }
     </style>
-    <div id="board-shell" style="position:fixed; top:0; left:0; right:0; bottom:0; width:100vw; height:100vh; display:flex; flex-direction:column; background:#fafafa; z-index:100">
-      <!-- toolbar -->
-      <div id="board-toolbar" style="display:flex; gap:6px; align-items:center; padding:6px 10px; background:#fff; border-bottom:1px solid #e5e7eb; flex-wrap:wrap">
-        <a href="#/board" class="hint" style="text-decoration:none; padding:4px 8px">← 部屋一覧</a>
-        <div id="board-title" style="font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">…</div>
-        <button class="btn" id="board-add" title="ノートを追加">➕ ノート</button>
-        <!-- v1177 中村さん指示「論文/食べ歩きはデフォルトで出ておく必要ない、
-             インポートというボタン → 論文/食べ歩き/画像ファイル群/動画を選べる」 -->
-        <div id="board-import-wrap" style="position:relative; display:inline-flex">
-          <button class="btn" id="board-import" title="外部素材を取り込む">📥 インポート ▾</button>
-          <div id="board-import-menu" style="display:none; position:absolute; top:100%; left:0; margin-top:2px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; min-width:200px">
+    <div id="board-shell" style="position:fixed; top:0; left:0; right:0; bottom:0; width:100vw; height:100vh; background:#fafafa; z-index:100">
+      <!-- v1190 中村さん指示「Miro って メニュー を 上 に 固める んじゃ なくて ツールバー的 にしてる、
+           画面 全体 を 使える の が メリット」→ 従来 の 上固定 toolbar を 撤去、 全 UI を
+           floating pane で viewport に 重ねる。 viewport は 常時 全画面。 -->
+      <!-- 上左: 戻る + タイトル (compact) -->
+      <div class="b-float" style="top:8px; left:8px; padding:6px 12px; display:flex; align-items:center; gap:8px; max-width:calc(100vw - 24px)">
+        <a href="#/board" class="hint" style="text-decoration:none; padding:2px 6px; color:#6b7280">← 一覧</a>
+        <div id="board-title" style="font-weight:700; font-size:14px; min-width:0; max-width:60vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">…</div>
+        <!-- v1188 削除メニュー: 作成者/admin のみ 表示 -->
+        <div id="board-more-wrap" hidden style="position:relative">
+          <button class="b-icon-btn" id="board-more" title="その他" style="width:28px; height:28px; font-size:16px">⋯</button>
+          <div id="board-more-menu" style="display:none; position:absolute; top:100%; right:0; margin-top:4px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; min-width:180px">
+            <button class="btn" id="board-delete" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer; color:#b91c1c">🗑 このボードを削除</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 左レール: 主要ツール (Miro 風 縦アイコン) -->
+      <div class="b-float" style="top:60px; left:8px; padding:6px; display:flex; flex-direction:column; gap:2px; width:50px">
+        <button class="b-icon-btn board-mode" data-mode="select" title="選択/移動 (V)">🖱</button>
+        <button class="b-icon-btn board-mode" data-mode="draw"   title="手書き (P)">✏️</button>
+        <button class="b-icon-btn board-mode" data-mode="arrow"  title="矢印 (A) 付箋→付箋">↗</button>
+        <button class="b-icon-btn board-mode" data-mode="erase"  title="消しゴム (E)">🩹</button>
+        <div class="b-sep"></div>
+        <button class="b-icon-btn" id="board-add" title="ノートを追加 (N)">➕</button>
+        <div id="board-import-wrap" style="position:relative">
+          <button class="b-icon-btn" id="board-import" title="インポート">📥</button>
+          <div id="board-import-menu" style="display:none; position:absolute; left:100%; top:0; margin-left:6px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; min-width:200px">
             <button class="btn board-import-item" data-import="refs"   style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">📚 文献管理から</button>
             <button class="btn board-import-item" data-import="places" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🍜 食べある記から</button>
             <button class="btn board-import-item" data-import="images" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🖼 画像 (PCから)</button>
             <button class="btn board-import-item" data-import="videos" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🎬 動画 (PCから)</button>
           </div>
         </div>
-        <!-- 隠し input: インポートメニューから起動 -->
         <input type="file" id="board-import-image-input" accept="image/*" multiple style="display:none">
         <input type="file" id="board-import-video-input" accept="video/*" multiple style="display:none">
-        <!-- v1173 手書きモード / v1189 矢印モード追加 -->
-        <div id="board-mode-group" style="display:inline-flex; gap:2px; margin-left:6px" title="モード切替">
-          <button class="btn board-mode" data-mode="select" title="選択/移動">🖱</button>
-          <button class="btn board-mode" data-mode="draw"   title="手書き">✏️</button>
-          <button class="btn board-mode" data-mode="arrow"  title="矢印 (ノート → ノート で接続)">↗</button>
-          <button class="btn board-mode" data-mode="erase"  title="消しゴム (ストローク / 矢印 タップで削除)">🩹</button>
-        </div>
-        <div id="board-pen-group" style="display:none; gap:2px; align-items:center; margin-left:4px" title="ペン設定">
-          <input type="color" id="board-pen-color" value="#111827" style="width:28px; height:28px; padding:0; border:1px solid #d1d5db; border-radius:4px; cursor:pointer">
-          <select id="board-pen-width" style="padding:2px 4px; font-size:12px">
-            <option value="1.5">細</option>
-            <option value="2.5" selected>中</option>
-            <option value="4">太</option>
-            <option value="6">極太</option>
-          </select>
-        </div>
-        <div id="board-palette" style="display:flex; gap:3px; align-items:center; margin-left:6px" title="デフォルト色">
-          ${PALETTE.map(c => `<button class="bpal" data-color="${c}" style="width:24px; height:24px; border-radius:6px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer" title="${c}"></button>`).join('')}
-        </div>
-        <div style="display:flex; gap:3px; align-items:center; margin-left:6px">
-          <button class="btn" id="board-zoom-out" style="padding:4px 8px">−</button>
-          <span id="board-zoom-label" style="font-size:12px; color:#6b7280; min-width:44px; text-align:center">100%</span>
-          <button class="btn" id="board-zoom-in" style="padding:4px 8px">＋</button>
-          <button class="btn" id="board-zoom-fit" style="padding:4px 8px" title="全部見える倍率にリセット">⛶</button>
-        </div>
-        <!-- v1188 中村さん指示「boardを削除する機能も欲しいね」→ toolbar 右端に … メニュー。
-             DOM は常に置いておいて、 loadInitial 後に creator/admin なら hidden を外す。 -->
-        <div id="board-more-wrap" hidden style="position:relative; display:inline-flex; margin-left:6px">
-          <button class="btn" id="board-more" title="その他">⋯</button>
-          <div id="board-more-menu" style="display:none; position:absolute; top:100%; right:0; margin-top:2px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; min-width:180px">
-            <button class="btn" id="board-delete" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer; color:#b91c1c">🗑 このボードを削除</button>
-          </div>
-        </div>
       </div>
-      <!-- viewport -->
-      <!-- v1177 中村さん指摘「マウスで手書きできない」対策: user-select:none を viewport に。
-           マウスドラッグが text-selection に化けて pointerdown/move が期待通り走らない
-           ケースを防ぐ。 -->
-      <div id="board-viewport" style="flex:1; overflow:hidden; position:relative; touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; background:#fafafa">
+
+      <!-- 左レールの下: draw モードのときだけ 出る ペン設定 -->
+      <div id="board-pen-group" class="b-float" style="display:none; top:auto; bottom:70px; left:8px; padding:6px; flex-direction:column; align-items:center; gap:4px; width:50px" title="ペン設定">
+        <input type="color" id="board-pen-color" value="#111827" style="width:32px; height:32px; padding:0; border:1px solid #d1d5db; border-radius:4px; cursor:pointer">
+        <select id="board-pen-width" style="padding:2px 2px; font-size:11px; width:40px">
+          <option value="1.5">細</option>
+          <option value="2.5" selected>中</option>
+          <option value="4">太</option>
+          <option value="6">極太</option>
+        </select>
+      </div>
+
+      <!-- 右下: ズーム コントロール (ミニマップ の 上 に 配置) -->
+      <div class="b-float" style="top:auto; bottom:150px; right:8px; padding:4px; display:flex; align-items:center; gap:2px">
+        <button class="b-icon-btn" id="board-zoom-out" style="width:32px; height:32px; font-size:20px">−</button>
+        <span id="board-zoom-label" style="font-size:12px; color:#6b7280; min-width:46px; text-align:center">100%</span>
+        <button class="b-icon-btn" id="board-zoom-in" style="width:32px; height:32px; font-size:20px">＋</button>
+        <button class="b-icon-btn" id="board-zoom-fit" style="width:32px; height:32px; font-size:14px" title="全部見える倍率にリセット">⛶</button>
+      </div>
+
+      <!-- 上右: デフォルト色パレット (小型) -->
+      <div id="board-palette" class="b-float" style="top:8px; right:8px; padding:4px; display:flex; gap:3px; align-items:center" title="新規ノートのデフォルト色">
+        ${PALETTE.map(c => `<button class="bpal" data-color="${c}" style="width:20px; height:20px; border-radius:5px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer" title="${c}"></button>`).join('')}
+      </div>
+
+      <!-- viewport は 全画面。 UI は 全部 b-float で 上 に 重ねる -->
+      <div id="board-viewport" style="position:absolute; top:0; left:0; right:0; bottom:0; overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; background:#fafafa">
         <div id="board-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform">
           <!-- v1173 手書きストローク SVG (world 座標。 board-layer の transform に追随) -->
           <svg id="board-strokes-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible"></svg>
@@ -1586,13 +1606,16 @@ async function uploadFilesAsNotes(files, mediaType) {
 // ─── v1173 手書き ───────────────────────────────────────
 function setMode(m) {
   MODE = m;
+  // v1190 レール ボタン は .active クラスで highlight (b-icon-btn.active)
   document.querySelectorAll('.board-mode').forEach(b => {
     const active = b.dataset.mode === m;
+    b.classList.toggle('active', active);
+    // 旧 .btn 系 の 直接 style 上書きも残しておく (b-icon-btn 以外の セレクタから 呼ばれても 効くよう)
     b.style.background = active ? '#7b3fa0' : '';
     b.style.color      = active ? '#fff'   : '';
   });
   const pen = document.getElementById('board-pen-group');
-  if (pen) pen.style.display = (m === 'draw') ? 'inline-flex' : 'none';
+  if (pen) pen.style.display = (m === 'draw') ? 'flex' : 'none';
   const svg = document.getElementById('board-strokes-svg');
   if (svg) {
     // draw モードでは stroke SVG を pointer 透過に (下の viewport で drawing 開始できるように)
