@@ -194,11 +194,10 @@ function boardKeydown(ev) {
     }
     return;
   }
-  // v1203 Delete / Backspace で 選択中 の 付箋 を 一括 削除
+  // v1203/v1206 Delete / Backspace で 選択中 の 付箋 を 一括 削除
+  //   v1206 fb#497/500 confirm 撤去 (Ctrl+Z で 戻せる ので 誤操作 の 心配 小)
   if ((ev.key === 'Delete' || ev.key === 'Backspace') && SELECTED_NOTE_IDS.size > 0) {
     ev.preventDefault();
-    const n = SELECTED_NOTE_IDS.size;
-    if (!confirm(`選択中 の ${n} 枚 を 削除するよ? (Ctrl+Z で 戻せる)`)) return;
     deleteSelectedNotes();
     return;
   }
@@ -943,6 +942,9 @@ function wireCanvas() {
       // v1203 fb#493 複数選択: Shift+click で 追加/削除、 通常 click は 単一 に
       if (e.shiftKey) {
         toggleNoteSelection(nid);
+        // v1206 fb#498 中村さん要望「shift+選択で 順次複数選択」→ 選択数 を toast で フィードバック
+        const n = SELECTED_NOTE_IDS.size;
+        if (n > 0) toast(`${n} 枚 選択中`, 700);
         // Shift 選択 だけ の 時 は drag 開始 しない
         DRAG.mode = null;
         return;
@@ -999,7 +1001,11 @@ function wireCanvas() {
           // v1202 fb#495 pinch (拡大縮小) + pan (2本指中点移動) を 同時 に。
           //   まず scale を 2本指 中点 で 更新、 その後 mid の 移動 分 だけ tx/ty を 追加 シフト。
           const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-          const newScale = PINCH_STATE.scale0 * (d / PINCH_STATE.d0);
+          // v1206 fb#499 zoom 感度 上げ: 距離比 を 累乗 で 増幅 (1.8 乗)。
+          //   指 距離 2 倍 → scale 3.5 倍 (従来 は 2 倍)。 指 半分 → scale 0.29 倍 (従来 0.5 倍)。
+          const ratio = d / PINCH_STATE.d0;
+          const amp = Math.pow(ratio, 1.8);
+          const newScale = PINCH_STATE.scale0 * amp;
           zoomAtScreen(cx, cy, newScale);
           // 2 本指 中点 の 移動 = pan 量
           VIEW.tx += (cx - PINCH_STATE.mid0.x);
@@ -1234,11 +1240,11 @@ function wireCanvas() {
     }
   });
 
-  // wheel = zoom
+  // wheel = zoom (v1206 fb#499 中村さん要望「同一の動作でもっと拡大縮小が大きく」→ 感度 2.7 倍 (0.0015 → 0.004)。 1 tick で ~30% ズームアウト/イン、 2〜3 tick で 倍/半分 に なる 体感)
   vp.addEventListener('wheel', (e) => {
     e.preventDefault();
     const delta = -e.deltaY;
-    const factor = Math.exp(delta * 0.0015);
+    const factor = Math.exp(delta * 0.004);
     zoomAtScreen(e.clientX, e.clientY, VIEW.scale * factor);
   }, { passive: false });
 
@@ -1664,14 +1670,11 @@ async function deleteNote(id) {
   } catch (e) { toast('削除失敗: ' + e.message); }
 }
 
-// v1199 消しゴム モード の note タップ 用 (v1201 中村さん要望「付箋の削除の時だけは 確認して欲しい」)
+// v1199 消しゴム モード の note タップ 用
+// v1206 fb#497 中村さん最新「付箋削除時のアラート不要」→ confirm 撤去。 undo で 戻せる ので 安全。
 async function deleteNoteWithUndo(id) {
   const backup = NOTE_MAP[id];
   if (!backup) return;
-  // 付箋 は 中身 が 大きい ので 誤 タップ 保護 の 確認 (Miro でも 付箋 は 確認あり)
-  const preview = (backup.front_text || '').replace(/\s+/g, ' ').slice(0, 40);
-  const label = preview ? `「${preview}${preview.length >= 40 ? '…' : ''}」` : 'この空のノート';
-  if (!confirm(`${label} を 削除するよ?\n(↶ ボタン / Ctrl+Z で 戻せる)`)) return;
   try {
     await del(`/api/board/notes/${id}`);
     delete NOTE_MAP[id];
