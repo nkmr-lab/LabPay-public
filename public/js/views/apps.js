@@ -124,6 +124,8 @@ export const APPS = [
   { id: 'nkmr-albums',    cat: 'shared', url: '#/albums', title: '📸 中村研アルバム',
     desc: '中村研の Google Photos アルバム集を LabPay 内から一覧・タップで遷移。年別に折りたたみ、学会 / 合宿 / 飲み会 / 卒業式等 200+ 件の思い出。各アルバムは Google Photos が別タブで開きます。', defaultVisible: true },
   // v960 外部ツールポータル (LabPay をハブにして別アプリに飛ぶ)
+  { id: 'fund-portal',    cat: 'lab-mgmt', url: 'https://fund.nkmr.io', title: '💴 研究費ポータル (fund.nkmr.io)',
+    desc: '中村研の 予算執行 DB。 科研費 / 校費 / 各種 fund の 予定 と 実績、 アルバイト代の 登録、 支払明細、 予算残高 まで。 nkmr-SSO で保護。 自分宛の 支払いだけ を LabPay 内で 見たい 時 は 💴 自分宛の研究費支払い を どうぞ。', defaultVisible: true },
   { id: 'poster-maker',   cat: 'shared', url: 'https://member.nkmr.io', title: '📇 メンバー紹介ポスター作成',
     desc: '研究室メンバー紹介ポスターを Web で入力 → pptx 自動生成。顔写真 / 名前 / 学年 / 研究テーマ / 趣味などを打ち込むと綺麗な A3 ポスターの pptx が落ちてくる。新歓 / 学会準備 / 研究室訪問対応に。 nkmr-SSO で保護。', defaultVisible: true },
   { id: 'file-browser',   cat: 'tools',    url: 'https://file.nkmr.io', title: '🗄 ファイルブラウザ',
