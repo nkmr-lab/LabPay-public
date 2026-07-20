@@ -168,6 +168,11 @@ function shellHtml() {
         ${PALETTE.map(c => `<button class="bpal" data-color="${c}" style="width:20px; height:20px; border-radius:5px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer" title="${c}"></button>`).join('')}
       </div>
 
+      <!-- v1192 diagnostic bar: 下中央 に DRAG.mode / 点数 / MODE を リアルタイム 表示 -->
+      <div id="board-debug" class="b-float" style="top:auto; bottom:8px; left:50%; transform:translateX(-50%); padding:4px 10px; font-size:11px; color:#111827; font-family:monospace; z-index:100">
+        <span id="board-dbg-mode">MODE=?</span> <span id="board-dbg-drag">DRAG=?</span> <span id="board-dbg-pts">pts=0</span> <span id="board-dbg-last">last=?</span>
+      </div>
+
       <!-- viewport は 全画面。 UI は 全部 b-float で 上 に 重ねる -->
       <div id="board-viewport" style="position:absolute; top:0; left:0; right:0; bottom:0; overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; background:#fafafa">
         <div id="board-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform">
@@ -181,6 +186,11 @@ function shellHtml() {
               </marker>
             </defs>
           </svg>
+          <!-- v1192 中村さん報告「線が引けない」の 決定的 バグ 修正:
+               従来 renderAll で layer.innerHTML = notesHtml していたため
+               SVG (strokes / arrows) が 毎回 破棄されていた。 notes 専用の 別 container に
+               分離し、 SVG は layer 直下 に 残す。 z-index で notes を SVG より 上 に。 -->
+          <div id="board-notes-container" style="position:absolute; left:0; top:0; z-index:2"></div>
         </div>
         <!-- v1104 他人カーソルオーバーレイ (screen 座標、変形しないので上のレイヤ) -->
         <div id="board-cursors" style="position:absolute; inset:0; pointer-events:none; overflow:hidden"></div>
@@ -444,7 +454,7 @@ function wireCanvas() {
     //   処理する 単純設計 に 戻す + 「描画開始」を toast で 可視化 する。
     if (MODE === 'draw') {
       // ボタン系 (b-icon-btn, .bpal, .bnote 内部ボタン等) は 描画 の 起点 に しない
-      if (e.target.closest('button, .bnote, .bpal, input, select')) return;
+      if (e.target.closest('button, .bnote, .bpal, input, select')) { updateDebug('down:blocked'); return; }
       e.preventDefault();
       const w = screenToWorld(e.clientX, e.clientY);
       CURRENT_STROKE = { points: [{ x: w.x, y: w.y }], color: PEN_COLOR, width: PEN_WIDTH };
@@ -452,8 +462,7 @@ function wireCanvas() {
       DRAG.pointerId = e.pointerId;
       try { vp.setPointerCapture(e.pointerId); } catch (_) {}
       renderCurrentStroke();
-      // v1191 diagnostic: 中村さんが「効いてる/効いてない」を 見て 判別 できる
-      if (window.__board_debug !== false) toast(`✏️ 描画開始 (${e.pointerType})`, 900);
+      updateDebug('down:' + e.pointerType);
       return;
     }
     // v1173 消しゴムモード: pointerdown で SVG stroke path をタップしたら削除
@@ -561,6 +570,8 @@ function wireCanvas() {
       if (dx * dx + dy * dy > 4) {
         CURRENT_STROKE.points.push({ x: w.x, y: w.y });
         renderCurrentStroke();
+      } else {
+        updateDebug('move:skip');
       }
       return;
     }
@@ -798,32 +809,34 @@ function renderAll() {
     if (ta) editingSnapshot = { value: ta.value, start: ta.selectionStart, end: ta.selectionEnd };
     EDITING_NOTE_ID = null;
   }
-  layer.innerHTML = sorted.map(noteHtml).join('');
-  layer.querySelectorAll('[data-flip-id]').forEach(el => {
+  // v1192 layer 直下 の SVG を 破壊 しない よう、 notes は board-notes-container に 書く
+  const notesRoot = document.getElementById('board-notes-container') || layer;
+  notesRoot.innerHTML = sorted.map(noteHtml).join('');
+  notesRoot.querySelectorAll('[data-flip-id]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       flipNote(parseInt(el.dataset.flipId, 10));
     });
   });
-  layer.querySelectorAll('[data-genimg-id]').forEach(el => {
+  notesRoot.querySelectorAll('[data-genimg-id]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       openImagePromptFor(parseInt(el.dataset.genimgId, 10));
     });
   });
-  layer.querySelectorAll('[data-clearimg-id]').forEach(el => {
+  notesRoot.querySelectorAll('[data-clearimg-id]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       clearImageFor(parseInt(el.dataset.clearimgId, 10));
     });
   });
-  layer.querySelectorAll('[data-color-id]').forEach(el => {
+  notesRoot.querySelectorAll('[data-color-id]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       openColorPop(parseInt(el.dataset.colorId, 10), el);
     });
   });
-  layer.querySelectorAll('[data-del-id]').forEach(el => {
+  notesRoot.querySelectorAll('[data-del-id]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       deleteNote(parseInt(el.dataset.delId, 10));
@@ -1619,6 +1632,18 @@ function renderStrokes() {
   svg.innerHTML = parts.join('');
 }
 
+// v1192 diagnostic
+function updateDebug(lastEvent) {
+  const m = document.getElementById('board-dbg-mode');
+  const d = document.getElementById('board-dbg-drag');
+  const p = document.getElementById('board-dbg-pts');
+  const l = document.getElementById('board-dbg-last');
+  if (m) m.textContent = 'MODE=' + MODE;
+  if (d) d.textContent = 'DRAG=' + (DRAG.mode || '_');
+  if (p) p.textContent = 'pts=' + (CURRENT_STROKE ? CURRENT_STROKE.points.length : 0);
+  if (l && lastEvent) l.textContent = 'last=' + lastEvent;
+}
+
 function renderCurrentStroke() {
   // 描画中の暫定 stroke を専用の path として付ける (id=board-current-stroke)
   const svg = document.getElementById('board-strokes-svg');
@@ -1626,6 +1651,7 @@ function renderCurrentStroke() {
   let cur = svg.querySelector('#board-current-stroke');
   if (!CURRENT_STROKE || CURRENT_STROKE.points.length < 2) {
     if (cur) cur.remove();
+    updateDebug('render(none)');
     return;
   }
   const d = CURRENT_STROKE.points.map((p, i) => (i === 0 ? 'M' : 'L') + (p.x + 10000).toFixed(1) + ',' + (p.y + 10000).toFixed(1)).join(' ');
@@ -1640,6 +1666,7 @@ function renderCurrentStroke() {
   cur.setAttribute('d', d);
   cur.setAttribute('stroke', CURRENT_STROKE.color);
   cur.setAttribute('stroke-width', String(CURRENT_STROKE.width));
+  updateDebug('render(' + CURRENT_STROKE.points.length + ')');
 }
 
 async function deleteStroke(sid) {
