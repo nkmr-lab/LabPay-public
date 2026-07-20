@@ -1333,6 +1333,10 @@ const CAL_MONTH_KEY = 'labpay-cal-month-ym';       // 表示中の 'YYYY-MM'
 let calMode  = null;   // lazy init
 let calMonth = null;
 let calDay   = null;   // v1084 day モード時の対象日 'YYYY-MM-DD'
+// v1210 中村さん指摘「カレンダーが何度もリロードされるの気持ち悪い」→ 60秒ごとの home poll で
+//   毎回 root.innerHTML を 差し替えていた のを、 items+mode+expanded の 指紋 が 変わっていない
+//   時は DOM 更新 を skip して 見た目 の チカチカ を 止める。
+let _calLastRenderKey = null;
 function initCalModeState() {
   if (calMode === null) {
     try { calMode = localStorage.getItem(CAL_MODE_KEY) || 'today'; } catch { calMode = 'today'; }
@@ -1600,6 +1604,13 @@ async function renderCalendarEvents({ force = false } = {}) {
           </div>
         </div>`;
     }).join('');
+    // v1210 fingerprint による 差分レンダ: 同じ内容なら DOM 触らない (60秒ポーリング の チカチカ抑止)
+    const _renderKey = 'today|' + calExpanded + '|' + eventsHtml.length + '|' + JSON.stringify(items.map(x => [x.id, x.start, x.title, x.url, x._isInProgress, x._isPast]));
+    if (_renderKey === _calLastRenderKey) {
+      // ハンドラは 前回 bind 済 (DOM が 生きて いる)。 何もしない。
+      return;
+    }
+    _calLastRenderKey = _renderKey;
     root.innerHTML = eventsHtml + expandRow + addRow;
     document.getElementById('home-mtg-add')?.addEventListener('click', openMtgModal);
     document.getElementById('home-cal-expand')?.addEventListener('click', () => {
@@ -1709,33 +1720,42 @@ async function renderCalendarMonth({ force = false } = {}) {
   const p = monthRange(calMonth);
   const isCurrent = calMonth === currentYm();
   nav.hidden = false;
-  nav.innerHTML = `
-    <div class="row" style="align-items:center; gap:6px; flex-wrap:wrap">
-      <button class="btn" data-cal-nav="prev" aria-label="前月" style="padding:2px 10px">◀</button>
-      <div style="font-weight:700; min-width:100px; text-align:center">${p.y}年 ${p.m}月</div>
-      <button class="btn" data-cal-nav="next" aria-label="次月" style="padding:2px 10px">▶</button>
-      ${!isCurrent ? `<button class="btn" data-cal-nav="today" style="padding:2px 10px; font-size:11px">今月</button>` : ''}
-      <input type="month" data-cal-nav="pick" value="${calMonth}" style="padding:2px 6px; font-size:12px; margin-left:auto">
-    </div>`;
-  nav.querySelectorAll('[data-cal-nav]').forEach(el => {
-    const act = el.dataset.calNav;
-    if (act === 'pick') {
-      el.addEventListener('change', (e) => {
-        const v = e.target.value;
-        if (/^\d{4}-\d{2}$/.test(v)) { calMonth = v; renderCalendarMonth({}); }
-      });
-    } else {
-      el.addEventListener('click', () => {
-        if (act === 'prev')  calMonth = shiftYm(calMonth, -1);
-        else if (act === 'next')  calMonth = shiftYm(calMonth, +1);
-        else if (act === 'today') calMonth = currentYm();
-        renderCalendarMonth({});
-      });
-    }
-  });
-  // fetch (cache first)
-  root.innerHTML = `<div class="empty">読み込み中…</div>`;
+  // v1210 nav も 内容 変わらない なら 更新しない (60秒 ポーリング 中の チカチカ 抑止)
+  const navKey = `${p.y}|${p.m}|${isCurrent}|${calMonth}`;
+  if (nav.dataset.key !== navKey) {
+    nav.dataset.key = navKey;
+    nav.innerHTML = `
+      <div class="row" style="align-items:center; gap:6px; flex-wrap:wrap">
+        <button class="btn" data-cal-nav="prev" aria-label="前月" style="padding:2px 10px">◀</button>
+        <div style="font-weight:700; min-width:100px; text-align:center">${p.y}年 ${p.m}月</div>
+        <button class="btn" data-cal-nav="next" aria-label="次月" style="padding:2px 10px">▶</button>
+        ${!isCurrent ? `<button class="btn" data-cal-nav="today" style="padding:2px 10px; font-size:11px">今月</button>` : ''}
+        <input type="month" data-cal-nav="pick" value="${calMonth}" style="padding:2px 6px; font-size:12px; margin-left:auto">
+      </div>`;
+    nav.querySelectorAll('[data-cal-nav]').forEach(el => {
+      const act = el.dataset.calNav;
+      if (act === 'pick') {
+        el.addEventListener('change', (e) => {
+          const v = e.target.value;
+          if (/^\d{4}-\d{2}$/.test(v)) { calMonth = v; renderCalendarMonth({}); }
+        });
+      } else {
+        el.addEventListener('click', () => {
+          if (act === 'prev')  calMonth = shiftYm(calMonth, -1);
+          else if (act === 'next')  calMonth = shiftYm(calMonth, +1);
+          else if (act === 'today') calMonth = currentYm();
+          renderCalendarMonth({});
+        });
+      }
+    });
+  }
+  // v1210 cache が あれば「読み込み中…」プレースホルダ を 出さない (チカチカ抑止)。
+  //   キャッシュ なし かつ 未描画 の 時 だけ プレースホルダ。
   let items = force ? null : readMonthCache(calMonth);
+  const wasEmpty = !root.innerHTML || root.innerHTML.includes('読み込み中');
+  if (!items && wasEmpty) {
+    root.innerHTML = `<div class="empty">読み込み中…</div>`;
+  }
   if (!items) {
     try {
       const data = await get('/api/me/calendar/events', { tz: localTzIana(), from: p.from, to: p.to });
@@ -1746,8 +1766,14 @@ async function renderCalendarMonth({ force = false } = {}) {
       return;
     }
   }
-  root.innerHTML = renderMonthGridHtml(calMonth, items);
-  ensureMonthGridDelegation();
+  // v1210 fingerprint による 差分レンダ: 同じ内容 なら DOM 触らない
+  const html = renderMonthGridHtml(calMonth, items);
+  const key = 'month|' + calMonth + '|' + html.length;
+  if (root.dataset.rkey !== key) {
+    root.dataset.rkey = key;
+    root.innerHTML = html;
+    ensureMonthGridDelegation();
+  }
 }
 
 function renderMonthGridHtml(ym, items) {
@@ -1863,26 +1889,33 @@ async function renderCalendarDay({ force = false } = {}) {
   const isToday = calDay === todayYmd();
   const dowColor = dow === 0 ? '#dc2626' : (dow === 6 ? '#0369a1' : '#374151');
   nav.hidden = false;
-  nav.innerHTML = `
-    <div class="row" style="align-items:center; gap:6px; flex-wrap:wrap">
-      <button class="btn" data-cd-nav="prev" style="padding:2px 10px" aria-label="前日">◀</button>
-      <div style="font-weight:700; min-width:130px; text-align:center">${Number(y)}年 ${Number(mm)}月 ${Number(d)}日 <span style="color:${dowColor}">(${dowLabel})</span></div>
-      <button class="btn" data-cd-nav="next" style="padding:2px 10px" aria-label="次日">▶</button>
-      ${!isToday ? `<button class="btn" data-cd-nav="today" style="padding:2px 10px; font-size:11px">今日</button>` : ''}
-      <button class="btn" data-cd-nav="tomonth" style="padding:2px 10px; font-size:11px; margin-left:auto">⤴ 月表示</button>
-    </div>`;
-  nav.querySelectorAll('[data-cd-nav]').forEach(el => {
-    el.addEventListener('click', () => {
-      const act = el.dataset.cdNav;
-      if      (act === 'prev')   calDay = shiftYmd(calDay, -1);
-      else if (act === 'next')   calDay = shiftYmd(calDay, +1);
-      else if (act === 'today')  { calDay = todayYmd(); calMode = 'today'; saveCalMode('today'); renderCalendarEvents({}); return; }
-      else if (act === 'tomonth') { calMonth = ymdToYm(calDay); calMode = 'month'; saveCalMode('month'); renderCalendarEvents({}); return; }
-      renderCalendarDay({});
+  // v1210 nav も 差分レンダ (60秒ポーリング の チカチカ抑止)
+  const navDayKey = `day|${calDay}|${isToday}`;
+  if (nav.dataset.key !== navDayKey) {
+    nav.dataset.key = navDayKey;
+    nav.innerHTML = `
+      <div class="row" style="align-items:center; gap:6px; flex-wrap:wrap">
+        <button class="btn" data-cd-nav="prev" style="padding:2px 10px" aria-label="前日">◀</button>
+        <div style="font-weight:700; min-width:130px; text-align:center">${Number(y)}年 ${Number(mm)}月 ${Number(d)}日 <span style="color:${dowColor}">(${dowLabel})</span></div>
+        <button class="btn" data-cd-nav="next" style="padding:2px 10px" aria-label="次日">▶</button>
+        ${!isToday ? `<button class="btn" data-cd-nav="today" style="padding:2px 10px; font-size:11px">今日</button>` : ''}
+        <button class="btn" data-cd-nav="tomonth" style="padding:2px 10px; font-size:11px; margin-left:auto">⤴ 月表示</button>
+      </div>`;
+    nav.querySelectorAll('[data-cd-nav]').forEach(el => {
+      el.addEventListener('click', () => {
+        const act = el.dataset.cdNav;
+        if      (act === 'prev')   calDay = shiftYmd(calDay, -1);
+        else if (act === 'next')   calDay = shiftYmd(calDay, +1);
+        else if (act === 'today')  { calDay = todayYmd(); calMode = 'today'; saveCalMode('today'); renderCalendarEvents({}); return; }
+        else if (act === 'tomonth') { calMonth = ymdToYm(calDay); calMode = 'month'; saveCalMode('month'); renderCalendarEvents({}); return; }
+        renderCalendarDay({});
+      });
     });
-  });
+  }
   // fetch 対象日のみ (from/to 同日 = その 1 日のみ)
-  root.innerHTML = `<div class="empty">読み込み中…</div>`;
+  // v1210 プレースホルダ は 初回 (root が 空 か 「読み込み中」の 時) だけ
+  const wasEmpty = !root.innerHTML || root.innerHTML.includes('読み込み中');
+  if (wasEmpty) root.innerHTML = `<div class="empty">読み込み中…</div>`;
   const ym = ymdToYm(calDay);
   let dayItems = null;
   const cached = force ? null : readMonthCache(ym);
@@ -1935,6 +1968,10 @@ async function renderCalendarDay({ force = false } = {}) {
                     <div class="grow bold" style="color:var(--primary)">＋ MTG を立てる (${Number(mm)}/${Number(d)} に)</div>
                     <div class="hint">→</div>
                   </div>`;
+  // v1210 fingerprint 差分レンダ
+  const dayKey = 'day|' + calDay + '|' + evsHtml.length + '|' + JSON.stringify(dayItems.map(x => [x.id, x.start, x.title, x.url]));
+  if (root.dataset.rkey === dayKey) return;
+  root.dataset.rkey = dayKey;
   root.innerHTML = evsHtml + addRow;
   document.getElementById('home-cal-day-add')?.addEventListener('click', () => openMtgModal({ dateYmd: calDay }));
   root.querySelectorAll('[data-hm-day-addzoom]').forEach(btn => {
