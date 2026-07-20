@@ -16,6 +16,8 @@ function route_tasks(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($id > 0 && ($seg[2] ?? '') === 'claim'  && $method === 'POST') { tasks_claim($pdo, $cfg, $id); return; }
     if ($id > 0 && ($seg[2] ?? '') === 'cancel' && $method === 'POST') { tasks_cancel($pdo, $cfg, $id); return; }
     if ($id > 0 && ($seg[2] ?? '') === 'close'  && $method === 'POST') { tasks_close ($pdo, $cfg, $id); return; }
+    // v1184 中村さん要望「指名タスクからも離脱したい」→ assigned_user_ids から自分を抜く
+    if ($id > 0 && ($seg[2] ?? '') === 'leave'  && $method === 'POST') { tasks_leave($pdo, $cfg, $id); return; }
     if ($id > 0 && ($seg[2] ?? '') === 'attachments' && $method === 'POST' && !isset($seg[3])) {
         task_attachments_upload($pdo, $cfg, $id); return;
     }
@@ -1207,6 +1209,43 @@ function tasks_reject(PDO $pdo, array $cfg, int $taskId, int $claimId): void {
 //   - status を 'closed' に (cancelled ではないので、履歴上「✅ 終了」表記)
 //   - 未承認 capacity 分の報酬は起案者に返金 (cancel と同じ)
 //   - 進行中 (claimed/reported) の claim は cancelled に。引き受け者には通知。
+// v1184 中村さん要望「指名タスクからも離脱したい」
+//   指名タスク (assigned_user_ids に自分が入っている) から自分を抜く。
+//   ・claim 状態別の挙動:
+//     - まだ claim してない (assigned だけ)     → assigned_user_ids から自分を削除で完了
+//     - claim 済み (claimed)                    → その claim を cancelled に + assigned から削除
+//     - reported / approved                     → 既に作業/承認済なので離脱不可 (400)
+function tasks_leave(PDO $pdo, array $cfg, int $taskId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $uid = (int)$u['id'];
+    db_tx($pdo, function () use ($pdo, $taskId, $uid) {
+        $st = $pdo->prepare("SELECT id, status, assigned_user_ids FROM tasks WHERE id=? FOR UPDATE");
+        $st->execute([$taskId]);
+        $task = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$task) throw new ApiException('not_found', 'タスクが見つかりません', 404);
+        // 進行中/完了/取消の claim があると離脱不可
+        $stC = $pdo->prepare("SELECT status FROM task_claims WHERE task_id=? AND user_id=? AND status IN ('reported','approved')");
+        $stC->execute([$taskId, $uid]);
+        if ($stC->fetchColumn()) {
+            throw new ApiException('bad_state', '既に完了報告済み / 承認済みなので離脱できません', 409);
+        }
+        // assigned_user_ids CSV から自分を削除
+        $ids = empty($task['assigned_user_ids']) ? [] : array_map('intval', explode(',', (string)$task['assigned_user_ids']));
+        $before = count($ids);
+        $ids = array_values(array_filter($ids, fn($x) => $x !== $uid));
+        $after = count($ids);
+        $removed = $before !== $after;
+        if ($removed) {
+            $newCsv = $ids ? implode(',', $ids) : null;
+            $pdo->prepare("UPDATE tasks SET assigned_user_ids=? WHERE id=?")->execute([$newCsv, $taskId]);
+        }
+        // 進行中 (claimed) の自分の claim を cancelled に
+        $pdo->prepare("UPDATE task_claims SET status='cancelled' WHERE task_id=? AND user_id=? AND status='claimed'")
+            ->execute([$taskId, $uid]);
+    });
+    json_response(['ok' => true]);
+}
+
 function tasks_close(PDO $pdo, array $cfg, int $taskId): void {
     $u = Auth::requireUser($pdo, $cfg);
     [$affectedClaimants, $taskTitle, $refund] = db_tx($pdo, function () use ($pdo, $taskId, $u) {

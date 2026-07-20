@@ -769,6 +769,14 @@ async function loadDetail(id) {
           <button id="cancel-task" class="danger">取り消す</button>
         </div>`;
     }
+    // v1184 中村さん要望「指名タスクからも離脱したい」→ 指名 されていて 未承認 なら 離脱可
+    if (!isRequester && t.status === 'open' && t.is_assigned_to_me && !myApproved) {
+      actions += `
+        <div class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap; padding-top:6px; border-top:1px dashed #ddd">
+          <button id="leave-task" class="btn" style="color:#c00">🚪 指名から降りる</button>
+          <span class="hint-sm" style="font-size:11px; color:#666">assigned_user_ids から自分だけ抜けます (完了報告/承認済みは離脱不可)</span>
+        </div>`;
+    }
 
     const safeDetailUrl = safeHttpUrl(t.url);
     const urlBlock = safeDetailUrl
@@ -902,6 +910,15 @@ async function loadDetail(id) {
     document.getElementById('close-task')?.addEventListener('click', () => onCloseTask(id));
     document.getElementById('cancel-task')?.addEventListener('click', () => onCancelTask(id));
     document.getElementById('edit-task')?.addEventListener('click', () => renderEditForm(t));
+    // v1184 中村さん要望「指名タスクからも離脱したい」
+    document.getElementById('leave-task')?.addEventListener('click', async () => {
+      if (!confirm('この指名から降りますか? (assigned_user_ids から自分だけ抜けます、 引き受け中の場合は claim も自動で cancelled)')) return;
+      try {
+        await post(`/api/tasks/${id}/leave`, {});
+        toast('指名から降りました');
+        navigate('#/tasks');
+      } catch (e) { toast('失敗: ' + e.message); }
+    });
     root.querySelectorAll('[data-approve]').forEach(b => b.addEventListener('click', () => onApprove(id, b.dataset.approve)));
     root.querySelectorAll('[data-reject]').forEach(b => b.addEventListener('click', () => onReject(id, b.dataset.reject)));
     root.querySelectorAll('[data-att-del]').forEach(b => {
