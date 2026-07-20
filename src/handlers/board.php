@@ -286,7 +286,7 @@ function board_room_detail(PDO $pdo, array $cfg, int $id): void {
 }
 
 function _board_load_strokes(PDO $pdo, int $roomId): array {
-    $st = $pdo->prepare("SELECT id, points_json, color, width, created_by_user_id, created_at
+    $st = $pdo->prepare("SELECT id, points_json, shape, dashed, color, width, created_by_user_id, created_at
                            FROM board_strokes
                           WHERE room_id = ? AND deleted_at IS NULL
                           ORDER BY id ASC");
@@ -298,6 +298,8 @@ function _board_load_strokes(PDO $pdo, int $roomId): array {
         $out[] = [
             'id'                 => (int)$r['id'],
             'points'             => $pts,
+            'shape'              => (string)($r['shape'] ?? 'freehand'),
+            'dashed'             => (int)($r['dashed'] ?? 0) === 1,
             'color'              => (string)$r['color'],
             'width'              => (float)$r['width'],
             'created_by_user_id' => (int)$r['created_by_user_id'],
@@ -344,9 +346,13 @@ function board_stroke_create(PDO $pdo, array $cfg, int $roomId): void {
     if (count($clean) < 2) throw new ApiException('bad_request', 'valid points が 2 点未満', 400);
     $color = _board_norm_color((string)($body['color'] ?? '#111827'), '#111827');
     $width = isset($body['width']) ? max(0.5, min(20.0, (float)$body['width'])) : 2.0;
-    $ins = $pdo->prepare("INSERT INTO board_strokes (room_id, points_json, color, width, created_by_user_id)
-                          VALUES (?, ?, ?, ?, ?)");
-    $ins->execute([$roomId, json_encode($clean), $color, $width, (int)$u['id']]);
+    // v1201 shape / dashed
+    $shape = (string)($body['shape'] ?? 'freehand');
+    if (!in_array($shape, ['freehand', 'rect', 'ellipse', 'line'], true)) $shape = 'freehand';
+    $dashed = !empty($body['dashed']) ? 1 : 0;
+    $ins = $pdo->prepare("INSERT INTO board_strokes (room_id, points_json, shape, dashed, color, width, created_by_user_id)
+                          VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $ins->execute([$roomId, json_encode($clean), $shape, $dashed, $color, $width, (int)$u['id']]);
     $sid = (int)$pdo->lastInsertId();
     $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
     json_response([
@@ -354,6 +360,8 @@ function board_stroke_create(PDO $pdo, array $cfg, int $roomId): void {
         'stroke' => [
             'id'                 => $sid,
             'points'             => $clean,
+            'shape'              => $shape,
+            'dashed'             => (bool)$dashed,
             'color'              => $color,
             'width'              => $width,
             'created_by_user_id' => (int)$u['id'],
@@ -614,7 +622,8 @@ function board_room_updates(PDO $pdo, array $cfg, int $id): void {
         ];
     }
     // v1173 手書きストローク: since より新しい (or 削除) を返す
-    $stS = $pdo->prepare("SELECT id, points_json, color, width, created_by_user_id, created_at, deleted_at
+    // v1201 shape / dashed も 同梱
+    $stS = $pdo->prepare("SELECT id, points_json, shape, dashed, color, width, created_by_user_id, created_at, deleted_at
                             FROM board_strokes
                            WHERE room_id = ? AND created_at > ?");
     $stS->execute([$id, $since]);
@@ -628,6 +637,8 @@ function board_room_updates(PDO $pdo, array $cfg, int $id): void {
             $strokeUpserts[] = [
                 'id'                 => (int)$r['id'],
                 'points'             => $pts,
+                'shape'              => (string)($r['shape'] ?? 'freehand'),
+                'dashed'             => (int)($r['dashed'] ?? 0) === 1,
                 'color'              => (string)$r['color'],
                 'width'              => (float)$r['width'],
                 'created_by_user_id' => (int)$r['created_by_user_id'],

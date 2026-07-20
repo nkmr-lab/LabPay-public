@@ -41,8 +41,13 @@ let CURSOR_POST_ANIM = null;
 let MINIMAP_OPEN = true;
 // v1173 手書きモード
 // v1189 arrow モード追加 (Miro 風 note-to-note 矢印)
-// MODE: 'select' (pan + note ドラッグ) / 'draw' (自由手書き) / 'erase' (ストロークタップで削除) / 'arrow' (ノート → ノート で 矢印)
+// v1201 shape モード追加 (図形: 四角/楕円/直線/破線 の 4 種類 + dashed 切替)
+// MODE: 'select' / 'draw' / 'erase' / 'arrow' / 'shape'
 let MODE = 'select';
+let SHAPE_TYPE = 'rect';   // 'rect' | 'ellipse' | 'line'  (dashed 切替 は 別 flag)
+let SHAPE_DASHED = false;
+// 図形描画中: 開始点 + 現在点 (world 座標)
+let CURRENT_SHAPE = null;   // { x1, y1, x2, y2 }
 let STROKES = [];     // 全ストローク (array)
 let STROKE_MAP = {};  // id → stroke
 let CURRENT_STROKE = null;  // 描画中: { points:[{x,y},...], color, width }
@@ -87,9 +92,35 @@ function hitTestStroke(wx, wy, tol) {
   const T = tol / VIEW.scale;
   for (const s of Object.values(STROKE_MAP)) {
     if (!s || !Array.isArray(s.points) || s.points.length < 2) continue;
+    const shape = s.shape || 'freehand';
+    const half = T + (s.width || 2);
+    if (shape === 'rect') {
+      const p1 = s.points[0], p2 = s.points[s.points.length - 1];
+      const x1 = Math.min(p1.x, p2.x), y1 = Math.min(p1.y, p2.y);
+      const x2 = Math.max(p1.x, p2.x), y2 = Math.max(p1.y, p2.y);
+      // 4 辺 の うち どれか に 近い か
+      if (distPointToSegment(wx, wy, x1, y1, x2, y1) <= half) return s;
+      if (distPointToSegment(wx, wy, x2, y1, x2, y2) <= half) return s;
+      if (distPointToSegment(wx, wy, x2, y2, x1, y2) <= half) return s;
+      if (distPointToSegment(wx, wy, x1, y2, x1, y1) <= half) return s;
+      continue;
+    }
+    if (shape === 'ellipse') {
+      const p1 = s.points[0], p2 = s.points[s.points.length - 1];
+      const cx = (p1.x + p2.x) / 2, cy = (p1.y + p2.y) / 2;
+      const rx = Math.abs(p2.x - p1.x) / 2, ry = Math.abs(p2.y - p1.y) / 2;
+      if (rx < 1 || ry < 1) continue;
+      // 楕円 の 円周距離 の 近似: 点 を 楕円 の 中心 座標系 に 変換 → 正規化
+      const dx = (wx - cx) / rx, dy = (wy - cy) / ry;
+      const dist = Math.abs(Math.sqrt(dx * dx + dy * dy) - 1);
+      // dist は 正規化距離。 実 距離 は 大まかに dist * min(rx, ry)
+      if (dist * Math.min(rx, ry) <= half) return s;
+      continue;
+    }
+    // freehand / line: 各セグメント 距離
     for (let i = 1; i < s.points.length; i++) {
       const a = s.points[i - 1], b = s.points[i];
-      if (distPointToSegment(wx, wy, a.x, a.y, b.x, b.y) <= T + (s.width || 2)) return s;
+      if (distPointToSegment(wx, wy, a.x, a.y, b.x, b.y) <= half) return s;
     }
   }
   return null;
@@ -232,7 +263,21 @@ function shellHtml() {
         <button class="b-icon-btn board-mode" data-mode="select" title="選択/移動 (Miro 風 手のひら)">🖐</button>
         <button class="b-icon-btn board-mode" data-mode="draw"   title="手書き">✏️</button>
         <button class="b-icon-btn board-mode" data-mode="arrow"  title="矢印 (付箋 → 付箋)">↗</button>
-        <button class="b-icon-btn board-mode" data-mode="erase"  title="消しゴム (ストローク/矢印 タップで削除)">🩹</button>
+        <!-- v1201 図形モード: 押すと 右 に 図形 picker が 出る、 選んだ図形 を ドラッグ で 描画 -->
+        <div style="position:relative">
+          <button class="b-icon-btn board-mode" data-mode="shape" id="board-mode-shape" title="図形 (四角/楕円/直線 / 破線切替)">⬜</button>
+          <div id="board-shape-menu" style="display:none; position:absolute; left:100%; top:0; margin-left:6px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; width:180px">
+            <div class="row" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:2px">
+              <button class="b-icon-btn board-shape-type" data-shape="rect"    title="四角">⬜</button>
+              <button class="b-icon-btn board-shape-type" data-shape="ellipse" title="楕円">⭕</button>
+              <button class="b-icon-btn board-shape-type" data-shape="line"    title="直線">─</button>
+            </div>
+            <div style="margin-top:4px; display:flex; align-items:center; gap:6px; padding:4px 6px; font-size:12px; border-top:1px solid #eee">
+              <input type="checkbox" id="board-shape-dashed"> <label for="board-shape-dashed" style="cursor:pointer">点線</label>
+            </div>
+          </div>
+        </div>
+        <button class="b-icon-btn board-mode" data-mode="erase"  title="消しゴム (ストローク/矢印/付箋 タップで削除)">🩹</button>
         <div class="b-sep"></div>
         <button class="b-icon-btn" id="board-undo" title="取り消す (Ctrl+Z)" disabled>↶</button>
         <button class="b-icon-btn" id="board-add" title="ノートを追加">➕</button>
@@ -576,6 +621,19 @@ function wireCanvas() {
       // v1200: 描画開始 toast は 撤去 (draw 中は 毎回 出ると 邪魔)
       return;
     }
+    // v1201 図形モード: ドラッグ で 四角/楕円/直線 を 描画
+    if (MODE === 'shape') {
+      if (e.target.closest('button, .bnote, .bpal, input, select')) { updateDebug('shape:blocked'); return; }
+      e.preventDefault();
+      const w = screenToWorld(e.clientX, e.clientY);
+      CURRENT_SHAPE = { x1: w.x, y1: w.y, x2: w.x, y2: w.y };
+      DRAG.mode = 'shape';
+      DRAG.pointerId = e.pointerId;
+      try { vp.setPointerCapture(e.pointerId); } catch (_) {}
+      renderCurrentShape();
+      updateDebug('shape:down:' + SHAPE_TYPE);
+      return;
+    }
     // v1197 消しゴムモード: 手動 hit-test (SVG の pointer-events に 頼らない)
     // v1199 note タップ で note 削除 (Miro 風、 Undo で 復活)
     if (MODE === 'erase') {
@@ -704,6 +762,13 @@ function wireCanvas() {
     const w = screenToWorld(e.clientX, e.clientY);
     MY_CURSOR.x = w.x; MY_CURSOR.y = w.y;
     scheduleCursorPost();
+    // v1201 図形描画中: 終点 を 更新 + preview 再描画
+    if (DRAG.mode === 'shape' && CURRENT_SHAPE) {
+      CURRENT_SHAPE.x2 = w.x;
+      CURRENT_SHAPE.y2 = w.y;
+      renderCurrentShape();
+      return;
+    }
     // v1173 手書き: 描画中は世界座標で点を追加、SVG に反映
     // v1191 pointerType 分岐 撤廃 (v1188 の mouse skip を 取消)
     if (DRAG.mode === 'draw' && CURRENT_STROKE) {
@@ -751,6 +816,40 @@ function wireCanvas() {
       if (ACTIVE_POINTERS.size < 2) PINCH_STATE = null;
       // draw モード中なら下の draw 完了パスに任せる。それ以外なら pinch/pan 中断。
       if (DRAG.mode !== 'draw' && ACTIVE_POINTERS.size === 0) DRAG.mode = null;
+    }
+    // v1201 図形完了: shape stroke として サーバ 保存
+    if (DRAG.mode === 'shape' && CURRENT_SHAPE) {
+      try { vp.releasePointerCapture(e.pointerId); } catch (_) {}
+      const s = CURRENT_SHAPE;
+      CURRENT_SHAPE = null;
+      DRAG.mode = null;
+      const dx = Math.abs(s.x2 - s.x1), dy = Math.abs(s.y2 - s.y1);
+      // 極小 は 捨てる (誤タップ)
+      if (dx < 6 && dy < 6) { renderCurrentShape(); return; }
+      // points = [start, end] の 2 点、 shape / dashed で サーバ が 解釈
+      try {
+        const r = await post(`/api/board/rooms/${ROOM_ID}/strokes`, {
+          points: [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }],
+          shape: SHAPE_TYPE, dashed: SHAPE_DASHED,
+          color: PEN_COLOR, width: PEN_WIDTH,
+        });
+        if (r && r.stroke) {
+          STROKE_MAP[r.stroke.id] = r.stroke;
+          STROKES = Object.values(STROKE_MAP);
+          renderStrokes();
+          const sid = r.stroke.id;
+          pushUndo('図形を取消', async () => {
+            await del(`/api/board/strokes/${sid}`).catch(() => {});
+            delete STROKE_MAP[sid];
+            STROKES = Object.values(STROKE_MAP);
+            renderStrokes();
+          });
+        }
+      } catch (err) {
+        toast('保存失敗: ' + err.message);
+      }
+      renderCurrentShape();
+      return;
     }
     // v1173 手書き完了: サーバ保存
     // v1191 pointerType 分岐 撤廃
@@ -875,6 +974,28 @@ function wireToolbar() {
   // v1173 モード切替
   document.querySelectorAll('.board-mode').forEach(b => {
     b.addEventListener('click', () => setMode(b.dataset.mode));
+  });
+  // v1201 図形 picker
+  const shapeMenu = document.getElementById('board-shape-menu');
+  document.getElementById('board-mode-shape')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    // shape mode ON + menu 表示
+    setMode('shape');
+    shapeMenu.style.display = shapeMenu.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', () => { if (shapeMenu) shapeMenu.style.display = 'none'; });
+  document.querySelectorAll('.board-shape-type').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      SHAPE_TYPE = b.dataset.shape;
+      // 選択状態 の highlight
+      document.querySelectorAll('.board-shape-type').forEach(x => x.classList.toggle('active', x === b));
+      const label = SHAPE_TYPE === 'rect' ? '⬜ 四角' : SHAPE_TYPE === 'ellipse' ? '⭕ 楕円' : '─ 直線';
+      toast('図形: ' + label + (SHAPE_DASHED ? ' (点線)' : ''), 1200);
+    });
+  });
+  document.getElementById('board-shape-dashed')?.addEventListener('change', (ev) => {
+    SHAPE_DASHED = !!ev.target.checked;
   });
   document.getElementById('board-pen-color').addEventListener('input', (e) => { PEN_COLOR = e.target.value; });
   document.getElementById('board-pen-width').addEventListener('change', (e) => { PEN_WIDTH = Number(e.target.value) || 2.5; });
@@ -1210,10 +1331,14 @@ async function deleteNote(id) {
   } catch (e) { toast('削除失敗: ' + e.message); }
 }
 
-// v1199 消しゴム モード の note タップ 用 (confirm なし、 undo で 復活 できる)
+// v1199 消しゴム モード の note タップ 用 (v1201 中村さん要望「付箋の削除の時だけは 確認して欲しい」)
 async function deleteNoteWithUndo(id) {
   const backup = NOTE_MAP[id];
   if (!backup) return;
+  // 付箋 は 中身 が 大きい ので 誤 タップ 保護 の 確認 (Miro でも 付箋 は 確認あり)
+  const preview = (backup.front_text || '').replace(/\s+/g, ' ').slice(0, 40);
+  const label = preview ? `「${preview}${preview.length >= 40 ? '…' : ''}」` : 'この空のノート';
+  if (!confirm(`${label} を 削除するよ?\n(↶ ボタン / Ctrl+Z で 戻せる)`)) return;
   try {
     await del(`/api/board/notes/${id}`);
     delete NOTE_MAP[id];
@@ -1785,11 +1910,12 @@ function setMode(m) {
     select: '🖐 選択/移動: ドラッグでパン、 ノート つまんで 移動',
     draw:   '✏️ 手書き: ドラッグで 自由 に 線を 引く',
     arrow:  '↗ 矢印: ノードA → ノードB を 順にタップ で 接続',
+    shape:  '⬜ 図形: ドラッグ で 四角/楕円/直線 を 描く (点線 チェックで 破線に)',
     erase:  '🩹 消しゴム: 線/矢印/ノート を タップで 削除 (↶ で 戻せる)',
   };
   toast(HINT[m] || m, 1600);
   const pen = document.getElementById('board-pen-group');
-  if (pen) pen.style.display = (m === 'draw') ? 'flex' : 'none';
+  if (pen) pen.style.display = (m === 'draw' || m === 'shape') ? 'flex' : 'none';
   // v1197 SVG root は none 固定 (hit-test は 手動 で NOTE_MAP / STROKE_MAP / ARROW_MAP から)
   const svg = document.getElementById('board-strokes-svg');
   if (svg) svg.style.pointerEvents = 'none';
@@ -1813,14 +1939,68 @@ function renderStrokes() {
   const parts = [];
   for (const s of Object.values(STROKE_MAP)) {
     if (!s || !Array.isArray(s.points) || s.points.length < 2) continue;
-    // world 座標を SVG viewBox (svg は -10000..10000 の viewport 上に絶対配置) に合わせる
-    // ため、各点に +10000 の offset を加える
+    const shape = s.shape || 'freehand';
+    const dash = s.dashed ? ' stroke-dasharray="8,6"' : '';
+    // v1201 shape 別 rendering
+    if (shape === 'rect' || shape === 'ellipse' || shape === 'line') {
+      const p1 = s.points[0], p2 = s.points[s.points.length - 1];
+      const x1 = Math.min(p1.x, p2.x) + 10000;
+      const y1 = Math.min(p1.y, p2.y) + 10000;
+      const x2 = Math.max(p1.x, p2.x) + 10000;
+      const y2 = Math.max(p1.y, p2.y) + 10000;
+      if (shape === 'rect') {
+        parts.push(`<rect data-stroke-id="${s.id}" x="${x1.toFixed(1)}" y="${y1.toFixed(1)}" width="${(x2-x1).toFixed(1)}" height="${(y2-y1).toFixed(1)}" fill="none" stroke="${s.color}" stroke-width="${s.width}"${dash} pointer-events="stroke" />`);
+      } else if (shape === 'ellipse') {
+        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+        const rx = Math.max(1, (x2 - x1) / 2), ry = Math.max(1, (y2 - y1) / 2);
+        parts.push(`<ellipse data-stroke-id="${s.id}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="none" stroke="${s.color}" stroke-width="${s.width}"${dash} pointer-events="stroke" />`);
+      } else {  // line
+        parts.push(`<line data-stroke-id="${s.id}" x1="${(p1.x + 10000).toFixed(1)}" y1="${(p1.y + 10000).toFixed(1)}" x2="${(p2.x + 10000).toFixed(1)}" y2="${(p2.y + 10000).toFixed(1)}" stroke="${s.color}" stroke-width="${s.width}"${dash} stroke-linecap="round" pointer-events="stroke" />`);
+      }
+      continue;
+    }
+    // freehand (既存 path)
     const d = s.points.map((p, i) => (i === 0 ? 'M' : 'L') + (p.x + 10000).toFixed(1) + ',' + (p.y + 10000).toFixed(1)).join(' ');
-    // 消しゴムモードではヒット判定幅を広くしたいので pointer-events は path の stroke だけに
-    const cursorAttr = MODE === 'erase' ? ' style="cursor:pointer" ' : '';
-    parts.push(`<path data-stroke-id="${s.id}" d="${d}" stroke="${s.color}" stroke-width="${s.width}" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="stroke"${cursorAttr}/>`);
+    parts.push(`<path data-stroke-id="${s.id}" d="${d}" stroke="${s.color}" stroke-width="${s.width}" fill="none" stroke-linecap="round" stroke-linejoin="round"${dash} pointer-events="stroke"/>`);
   }
   svg.innerHTML = parts.join('');
+}
+
+// v1201 図形描画中 の preview (drag 中 に 半透明で 出す)
+function renderCurrentShape() {
+  const svg = document.getElementById('board-strokes-svg');
+  if (!svg) return;
+  let cur = svg.querySelector('#board-current-shape');
+  if (!CURRENT_SHAPE) { if (cur) cur.remove(); return; }
+  const { x1, y1, x2, y2 } = CURRENT_SHAPE;
+  const X1 = Math.min(x1, x2) + 10000, Y1 = Math.min(y1, y2) + 10000;
+  const X2 = Math.max(x1, x2) + 10000, Y2 = Math.max(y1, y2) + 10000;
+  const dash = SHAPE_DASHED ? '8,6' : '';
+  if (cur) cur.remove();
+  let el;
+  if (SHAPE_TYPE === 'rect') {
+    el = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    el.setAttribute('x', X1.toFixed(1)); el.setAttribute('y', Y1.toFixed(1));
+    el.setAttribute('width', (X2 - X1).toFixed(1)); el.setAttribute('height', (Y2 - Y1).toFixed(1));
+  } else if (SHAPE_TYPE === 'ellipse') {
+    el = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+    el.setAttribute('cx', ((X1 + X2) / 2).toFixed(1));
+    el.setAttribute('cy', ((Y1 + Y2) / 2).toFixed(1));
+    el.setAttribute('rx', Math.max(1, (X2 - X1) / 2).toFixed(1));
+    el.setAttribute('ry', Math.max(1, (Y2 - Y1) / 2).toFixed(1));
+  } else {  // line
+    el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    el.setAttribute('x1', (x1 + 10000).toFixed(1)); el.setAttribute('y1', (y1 + 10000).toFixed(1));
+    el.setAttribute('x2', (x2 + 10000).toFixed(1)); el.setAttribute('y2', (y2 + 10000).toFixed(1));
+    el.setAttribute('stroke-linecap', 'round');
+  }
+  el.id = 'board-current-shape';
+  el.setAttribute('fill', 'none');
+  el.setAttribute('stroke', PEN_COLOR);
+  el.setAttribute('stroke-width', String(PEN_WIDTH));
+  if (dash) el.setAttribute('stroke-dasharray', dash);
+  el.setAttribute('opacity', '0.8');
+  svg.appendChild(el);
 }
 
 // v1192 diagnostic
@@ -1885,16 +2065,36 @@ async function deleteStroke(sid) {
 
 // ─── v1189 note-to-note 矢印 ───────────────────────────────────
 
-// note の 中心 world 座標 (fallback: 0,0)
+// note の 中心 world 座標 (v1201: n.width/n.height の フィールド名 バグ 修正)
 function noteCenter(nid) {
   const n = NOTE_MAP[nid]; if (!n) return null;
-  return { x: (n.x || 0) + (n.w || 200) / 2, y: (n.y || 0) + (n.h || 200) / 2 };
+  return { x: (n.x || 0) + (n.width || 200) / 2, y: (n.y || 0) + (n.height || 200) / 2 };
 }
-// 2 点間 の 線分 で、 target 側 の 円 (半径 r) と 交わる 点 を 返す (矢印先端 が ノート に めり込む のを 抑える)
-function shortenToward(p1, p2, r) {
-  const dx = p2.x - p1.x, dy = p2.y - p1.y;
-  const d = Math.sqrt(dx * dx + dy * dy) || 1;
-  return { x: p2.x - (dx / d) * r, y: p2.y - (dy / d) * r };
+// note の bounding box (world 座標)
+function noteBox(nid) {
+  const n = NOTE_MAP[nid]; if (!n) return null;
+  const x1 = n.x || 0, y1 = n.y || 0;
+  const w = n.width || 200, h = n.height || 200;
+  return { x1, y1, x2: x1 + w, y2: y1 + h, cx: x1 + w / 2, cy: y1 + h / 2 };
+}
+// note の rect edge と 中心 → 外向き の 線分 の 交点。 gap 分 さらに 外側 に 押し出す。
+//   矢印 の 始点/終点 が 付箋 から 少し 離れる ように する ため。
+function rectEdgeToward(box, tx, ty, gap) {
+  const cx = box.cx, cy = box.cy;
+  const dx = tx - cx, dy = ty - cy;
+  if (dx === 0 && dy === 0) return { x: cx, y: cy };
+  // 中心 から 外へ の parametric line: (cx + t*dx, cy + t*dy)。 rect の 4 辺 の うち 最短 の t (>0) を 探す。
+  const halfW = (box.x2 - box.x1) / 2;
+  const halfH = (box.y2 - box.y1) / 2;
+  const tx2 = dx !== 0 ? halfW / Math.abs(dx) : Infinity;
+  const ty2 = dy !== 0 ? halfH / Math.abs(dy) : Infinity;
+  const t = Math.min(tx2, ty2);
+  // 交点 = 中心 + t * (dx, dy)
+  const ex = cx + t * dx, ey = cy + t * dy;
+  // gap 分 (px) 外向き に 追加
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const ux = dx / len, uy = dy / len;
+  return { x: ex + ux * gap, y: ey + uy * gap };
 }
 
 function renderArrows() {
@@ -1904,17 +2104,14 @@ function renderArrows() {
   const parts = [];
   for (const a of Object.values(ARROW_MAP)) {
     if (!a) continue;
-    const p1 = noteCenter(a.from_note_id);
-    const p2 = noteCenter(a.to_note_id);
-    if (!p1 || !p2) continue;
-    // ターゲット側の端点を note 半径分 手前 に (見た目 矢印 が ノート に 触れる 程度)
-    const nt = NOTE_MAP[a.to_note_id];
-    const rt = nt ? (Math.min(nt.w || 200, nt.h || 200) / 2) - 4 : 0;
-    const q2 = shortenToward(p1, p2, Math.max(30, rt));
-    // ソース側も 少しだけ 内側 (中心 から 半径 分)
-    const ns = NOTE_MAP[a.from_note_id];
-    const rs = ns ? (Math.min(ns.w || 200, ns.h || 200) / 2) - 4 : 0;
-    const q1 = shortenToward(p2, p1, Math.max(20, rs));
+    const boxS = noteBox(a.from_note_id);
+    const boxT = noteBox(a.to_note_id);
+    if (!boxS || !boxT) continue;
+    // v1201 中村さん要望「矢印の始点終点は 付箋から少し離して」→ rect の 実際 の 辺 で 交点 を 取って、
+    //   gap:14px 分 外側 に 押し出す。 これで 付箋 と 矢印線 の 間 に 空気層 が 生まれる。
+    const GAP = 14;
+    const q1 = rectEdgeToward(boxS, boxT.cx, boxT.cy, GAP);
+    const q2 = rectEdgeToward(boxT, boxS.cx, boxS.cy, GAP);
     const dash = a.style === 'dashed' ? ' stroke-dasharray="8,6"' : '';
     // 選択中の source を強調
     const highlight = (a.from_note_id === ARROW_SOURCE_NOTE_ID || a.to_note_id === ARROW_SOURCE_NOTE_ID);
