@@ -769,11 +769,14 @@ async function loadDetail(id) {
           <button id="cancel-task" class="danger">取り消す</button>
         </div>`;
     }
-    // v1184 中村さん要望「指名タスクからも離脱したい」→ 指名 されていて 未承認 なら 離脱可
+    // v1184 中村さん要望「指名タスクからも離脱したい」/ v1185 中村さん指示「引き受けない
+    //   というボタンを用意しておいて、 ひきうけないを押したら離脱するようにしたら良いのか」
+    //   → 指名されていて未承認なら「❌ 引き受けない」button を表示 (v1184 の 🚪 指名から
+    //   降りる をリネーム、 意味は同じ)。
     if (!isRequester && t.status === 'open' && t.is_assigned_to_me && !myApproved) {
       actions += `
         <div class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap; padding-top:6px; border-top:1px dashed #ddd">
-          <button id="leave-task" class="btn" style="color:#c00">🚪 指名から降りる</button>
+          <button id="leave-task" class="btn" style="color:#c00; font-weight:600">❌ 引き受けない (指名から降りる)</button>
           <span class="hint-sm" style="font-size:11px; color:#666">assigned_user_ids から自分だけ抜けます (完了報告/承認済みは離脱不可)</span>
         </div>`;
     }

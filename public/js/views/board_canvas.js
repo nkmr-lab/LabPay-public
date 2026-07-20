@@ -490,12 +490,15 @@ function wireCanvas() {
   });
 
   vp.addEventListener('pointerup', async (e) => {
-    // v1182 2 本指 pinch: pointer を外す
+    // v1182 2 本指 pinch: pointer を外す。
+    //   v1185 中村さん報告「board、手書きできないね」← touch pointerup で早期 return
+    //   していたため draw 完了 POST が走らないバグを修正。 pinch cleanup を先に
+    //   済ませて、 draw 完了パスに fall through させる (return しない)。
     if (e.pointerType === 'touch' && ACTIVE_POINTERS.has(e.pointerId)) {
       ACTIVE_POINTERS.delete(e.pointerId);
       if (ACTIVE_POINTERS.size < 2) PINCH_STATE = null;
-      if (ACTIVE_POINTERS.size === 0) DRAG.mode = null;
-      return;
+      // draw モード中なら下の draw 完了パスに任せる。それ以外なら pinch/pan 中断。
+      if (DRAG.mode !== 'draw' && ACTIVE_POINTERS.size === 0) DRAG.mode = null;
     }
     // v1173 手書き完了: サーバ保存
     if (DRAG.mode === 'draw' && CURRENT_STROKE) {
