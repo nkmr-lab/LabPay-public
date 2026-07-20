@@ -34,6 +34,9 @@ function route_board(PDO $pdo, array $cfg, string $method, array $seg): void {
             // v1173 手書き
             if ($next === 'strokes' && $method === 'GET')  { board_strokes_list($pdo, $cfg, $id);   return; }
             if ($next === 'strokes' && $method === 'POST') { board_stroke_create($pdo, $cfg, $id);  return; }
+            // v1189 note-to-note 矢印 (Miro 風)
+            if ($next === 'arrows'  && $method === 'GET')  { board_arrows_list ($pdo, $cfg, $id);   return; }
+            if ($next === 'arrows'  && $method === 'POST') { board_arrow_create($pdo, $cfg, $id);   return; }
         }
     }
     // /api/board/notes/{id} ...
@@ -51,6 +54,12 @@ function route_board(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'strokes') {
         $id = (int)($seg[2] ?? 0);
         if ($id > 0 && $method === 'DELETE') { board_stroke_delete($pdo, $cfg, $id); return; }
+    }
+    // v1189 /api/board/arrows/{id} — PATCH (label/color/style) / DELETE (soft)
+    if ($sub === 'arrows') {
+        $id = (int)($seg[2] ?? 0);
+        if ($id > 0 && $method === 'PATCH')  { board_arrow_patch ($pdo, $cfg, $id); return; }
+        if ($id > 0 && $method === 'DELETE') { board_arrow_delete($pdo, $cfg, $id); return; }
     }
     // /api/board/default-color — GET/PUT
     if ($sub === 'default-color') {
@@ -263,10 +272,13 @@ function board_room_detail(PDO $pdo, array $cfg, int $id): void {
     }
     // v1173 手書きストローク一括
     $strokes = _board_load_strokes($pdo, $id);
+    // v1189 note-to-note 矢印
+    $arrows  = _board_load_arrows($pdo, $id);
     json_response([
         'room'          => $room,
         'notes'         => $notes,
         'strokes'       => $strokes,
+        'arrows'        => $arrows,
         'cursors'       => $cursors,
         'my_default_color' => $defColor,
         'server_time'   => (new DateTimeImmutable())->format('Y-m-d H:i:s'),
@@ -366,6 +378,132 @@ function board_stroke_delete(PDO $pdo, array $cfg, int $strokeId): void {
     // 削除は 作成者 or admin or room 参加者 (共同編集 モデル)
     $pdo->prepare("UPDATE board_strokes SET deleted_at = NOW() WHERE id = ?")->execute([$strokeId]);
     $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$s['room_id']]);
+    json_response(['ok' => true]);
+}
+
+// ─── v1189 note-to-note arrows (Miro 風) ─────────────────────────
+
+function _board_arrow_shape(array $r): array {
+    return [
+        'id'                 => (int)$r['id'],
+        'from_note_id'       => (int)$r['from_note_id'],
+        'to_note_id'         => (int)$r['to_note_id'],
+        'color'              => (string)$r['color'],
+        'style'              => (string)$r['style'],
+        'label'              => $r['label'] !== null ? (string)$r['label'] : null,
+        'created_by_user_id' => (int)$r['created_by_user_id'],
+        'created_at'         => (string)$r['created_at'],
+        'updated_at'         => (string)$r['updated_at'],
+    ];
+}
+
+function _board_load_arrows(PDO $pdo, int $roomId): array {
+    $st = $pdo->prepare("SELECT * FROM board_arrows WHERE room_id = ? AND deleted_at IS NULL ORDER BY id ASC");
+    $st->execute([$roomId]);
+    $out = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $out[] = _board_arrow_shape($r);
+    return $out;
+}
+
+function board_arrows_list(PDO $pdo, array $cfg, int $roomId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $room = _board_room_row($pdo, $roomId);
+    if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', '権限なし', 403);
+    }
+    json_response(['arrows' => _board_load_arrows($pdo, $roomId)]);
+}
+
+function board_arrow_create(PDO $pdo, array $cfg, int $roomId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $room = _board_room_row($pdo, $roomId);
+    if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', '権限なし', 403);
+    }
+    $body = read_json_body();
+    $from = (int)($body['from_note_id'] ?? 0);
+    $to   = (int)($body['to_note_id']   ?? 0);
+    if ($from <= 0 || $to <= 0 || $from === $to) {
+        throw new ApiException('bad_request', 'from_note_id / to_note_id が不正', 400);
+    }
+    // 両ノートが同じ room に属し, deleted でないこと
+    $chk = $pdo->prepare("SELECT COUNT(*) FROM board_notes WHERE id IN (?, ?) AND room_id = ? AND deleted_at IS NULL");
+    $chk->execute([$from, $to, $roomId]);
+    if ((int)$chk->fetchColumn() !== 2) {
+        throw new ApiException('bad_request', 'ノートがこの部屋に見つかりません', 400);
+    }
+    $color = _board_norm_color((string)($body['color'] ?? '#111827'), '#111827');
+    $style = (string)($body['style'] ?? 'solid');
+    if (!in_array($style, ['solid','dashed'], true)) $style = 'solid';
+    $label = isset($body['label']) ? trim((string)$body['label']) : '';
+    if ($label === '') $label = null;
+    if ($label !== null && mb_strlen($label) > 120) $label = mb_substr($label, 0, 120);
+    // 同じ (from,to) の 生きた矢印 が 既に あれば それを 返す (重複防止)
+    $exist = $pdo->prepare("SELECT * FROM board_arrows WHERE room_id = ? AND from_note_id = ? AND to_note_id = ? AND deleted_at IS NULL LIMIT 1");
+    $exist->execute([$roomId, $from, $to]);
+    if ($row = $exist->fetch(PDO::FETCH_ASSOC)) {
+        json_response(['ok' => true, 'arrow' => _board_arrow_shape($row), 'existed' => true]);
+        return;
+    }
+    $ins = $pdo->prepare("INSERT INTO board_arrows (room_id, from_note_id, to_note_id, color, style, label, created_by_user_id)
+                          VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $ins->execute([$roomId, $from, $to, $color, $style, $label, (int)$u['id']]);
+    $aid = (int)$pdo->lastInsertId();
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
+    $sel = $pdo->prepare("SELECT * FROM board_arrows WHERE id = ?");
+    $sel->execute([$aid]);
+    json_response(['ok' => true, 'arrow' => _board_arrow_shape($sel->fetch(PDO::FETCH_ASSOC))]);
+}
+
+function board_arrow_patch(PDO $pdo, array $cfg, int $arrowId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT * FROM board_arrows WHERE id = ? AND deleted_at IS NULL");
+    $st->execute([$arrowId]);
+    $a = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$a) throw new ApiException('not_found', 'arrow なし', 404);
+    $room = _board_room_row($pdo, (int)$a['room_id']);
+    if (!$room || !_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', '権限なし', 403);
+    }
+    $body = read_json_body();
+    $sets = []; $params = [];
+    if (array_key_exists('color', $body)) {
+        $sets[] = 'color = ?'; $params[] = _board_norm_color((string)$body['color'], '#111827');
+    }
+    if (array_key_exists('style', $body)) {
+        $s = (string)$body['style'];
+        if (!in_array($s, ['solid','dashed'], true)) $s = 'solid';
+        $sets[] = 'style = ?'; $params[] = $s;
+    }
+    if (array_key_exists('label', $body)) {
+        $l = trim((string)$body['label']);
+        if ($l === '') $l = null;
+        if ($l !== null && mb_strlen($l) > 120) $l = mb_substr($l, 0, 120);
+        $sets[] = 'label = ?'; $params[] = $l;
+    }
+    if (!$sets) { json_response(['ok' => true, 'arrow' => _board_arrow_shape($a)]); return; }
+    $params[] = $arrowId;
+    $pdo->prepare("UPDATE board_arrows SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$a['room_id']]);
+    $st2 = $pdo->prepare("SELECT * FROM board_arrows WHERE id = ?");
+    $st2->execute([$arrowId]);
+    json_response(['ok' => true, 'arrow' => _board_arrow_shape($st2->fetch(PDO::FETCH_ASSOC))]);
+}
+
+function board_arrow_delete(PDO $pdo, array $cfg, int $arrowId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT * FROM board_arrows WHERE id = ? AND deleted_at IS NULL");
+    $st->execute([$arrowId]);
+    $a = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$a) throw new ApiException('not_found', 'arrow なし', 404);
+    $room = _board_room_row($pdo, (int)$a['room_id']);
+    if (!$room || !_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
+        throw new ApiException('forbidden', '権限なし', 403);
+    }
+    $pdo->prepare("UPDATE board_arrows SET deleted_at = NOW() WHERE id = ?")->execute([$arrowId]);
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$a['room_id']]);
     json_response(['ok' => true]);
 }
 
@@ -501,11 +639,21 @@ function board_room_updates(PDO $pdo, array $cfg, int $id): void {
     $stD = $pdo->prepare("SELECT id FROM board_strokes WHERE room_id = ? AND deleted_at IS NOT NULL AND deleted_at > ? AND created_at <= ?");
     $stD->execute([$id, $since, $since]);
     foreach ($stD->fetchAll(PDO::FETCH_COLUMN) as $sid) $strokeDeletes[] = (int)$sid;
+    // v1189 note-to-note 矢印 の 差分 (updated_at > since = 新規 + patch + delete)
+    $stA = $pdo->prepare("SELECT * FROM board_arrows WHERE room_id = ? AND updated_at > ?");
+    $stA->execute([$id, $since]);
+    $arrowUpserts = []; $arrowDeletes = [];
+    foreach ($stA->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        if ($r['deleted_at'] !== null) $arrowDeletes[] = (int)$r['id'];
+        else $arrowUpserts[] = _board_arrow_shape($r);
+    }
     json_response([
         'upserts'          => $upserts,
         'deletes'          => $deletes,
         'stroke_upserts'   => $strokeUpserts,
         'stroke_deletes'   => $strokeDeletes,
+        'arrow_upserts'    => $arrowUpserts,
+        'arrow_deletes'    => $arrowDeletes,
         'cursors'          => $cursors,
         'server_time'      => (new DateTimeImmutable())->format('Y-m-d H:i:s'),
         'room_updated_at'  => $room['updated_at'],

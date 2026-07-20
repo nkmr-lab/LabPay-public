@@ -40,11 +40,16 @@ let CURSOR_POST_ANIM = null;
 // v1104 ミニマップの開閉
 let MINIMAP_OPEN = true;
 // v1173 手書きモード
-// MODE: 'select' (デフォルト、 pan + note ドラッグ) / 'draw' (自由手書き) / 'erase' (ストロークタップで削除)
+// v1189 arrow モード追加 (Miro 風 note-to-note 矢印)
+// MODE: 'select' (pan + note ドラッグ) / 'draw' (自由手書き) / 'erase' (ストロークタップで削除) / 'arrow' (ノート → ノート で 矢印)
 let MODE = 'select';
 let STROKES = [];     // 全ストローク (array)
 let STROKE_MAP = {};  // id → stroke
 let CURRENT_STROKE = null;  // 描画中: { points:[{x,y},...], color, width }
+// v1189 矢印
+let ARROWS = [];      // 全矢印
+let ARROW_MAP = {};   // id → arrow
+let ARROW_SOURCE_NOTE_ID = null;  // arrow モードで 1 本目タップ済 の source note id (2 本目タップで確定)
 // v1182 fb#492 スマホの 2 本指 pinch 拡大縮小用の追跡
 const ACTIVE_POINTERS = new Map();  // pointerId → {x, y} (touch のみ、 mouse は追跡しない)
 let PINCH_STATE = null;  // { d0, scale0 } / null なら pinch 中でない
@@ -106,11 +111,12 @@ function shellHtml() {
         <!-- 隠し input: インポートメニューから起動 -->
         <input type="file" id="board-import-image-input" accept="image/*" multiple style="display:none">
         <input type="file" id="board-import-video-input" accept="video/*" multiple style="display:none">
-        <!-- v1173 手書きモード -->
+        <!-- v1173 手書きモード / v1189 矢印モード追加 -->
         <div id="board-mode-group" style="display:inline-flex; gap:2px; margin-left:6px" title="モード切替">
           <button class="btn board-mode" data-mode="select" title="選択/移動">🖱</button>
-          <button class="btn board-mode" data-mode="draw" title="手書き">✏️</button>
-          <button class="btn board-mode" data-mode="erase" title="消しゴム (ストロークをタップで削除)">🩹</button>
+          <button class="btn board-mode" data-mode="draw"   title="手書き">✏️</button>
+          <button class="btn board-mode" data-mode="arrow"  title="矢印 (ノート → ノート で接続)">↗</button>
+          <button class="btn board-mode" data-mode="erase"  title="消しゴム (ストローク / 矢印 タップで削除)">🩹</button>
         </div>
         <div id="board-pen-group" style="display:none; gap:2px; align-items:center; margin-left:4px" title="ペン設定">
           <input type="color" id="board-pen-color" value="#111827" style="width:28px; height:28px; padding:0; border:1px solid #d1d5db; border-radius:4px; cursor:pointer">
@@ -147,6 +153,14 @@ function shellHtml() {
         <div id="board-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform">
           <!-- v1173 手書きストローク SVG (world 座標。 board-layer の transform に追随) -->
           <svg id="board-strokes-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible"></svg>
+          <!-- v1189 note-to-note 矢印 SVG (strokes と 同じ座標系。 note の 上 に 出す ため z-index 高め) -->
+          <svg id="board-arrows-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible; z-index:5">
+            <defs>
+              <marker id="board-arrow-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse" markerUnits="strokeWidth">
+                <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/>
+              </marker>
+            </defs>
+          </svg>
         </div>
         <!-- v1104 他人カーソルオーバーレイ (screen 座標、変形しないので上のレイヤ) -->
         <div id="board-cursors" style="position:absolute; inset:0; pointer-events:none; overflow:hidden"></div>
@@ -239,6 +253,11 @@ async function loadInitial() {
     STROKES = d.strokes || [];
     STROKE_MAP = {};
     for (const s of STROKES) STROKE_MAP[s.id] = s;
+    // v1189 note-to-note 矢印
+    ARROWS = d.arrows || [];
+    ARROW_MAP = {};
+    for (const a of ARROWS) ARROW_MAP[a.id] = a;
+    ARROW_SOURCE_NOTE_ID = null;
     LAST_SERVER_TIME = d.server_time;
     document.getElementById('board-title').textContent = ROOM.title;
     document.getElementById('board-viewport').style.background = ROOM.bg_color || '#fafafa';
@@ -291,9 +310,13 @@ function startPolling() {
       // v1173 手書きストロークの diff
       for (const s of d.stroke_upserts || []) { STROKE_MAP[s.id] = s; dirty = true; }
       for (const sid of d.stroke_deletes || []) { if (STROKE_MAP[sid]) { delete STROKE_MAP[sid]; dirty = true; } }
+      // v1189 矢印 の diff
+      for (const a of d.arrow_upserts || []) { ARROW_MAP[a.id] = a; dirty = true; }
+      for (const aid of d.arrow_deletes || []) { if (ARROW_MAP[aid]) { delete ARROW_MAP[aid]; dirty = true; } }
       if (dirty) {
         NOTES = Object.values(NOTE_MAP);
         STROKES = Object.values(STROKE_MAP);
+        ARROWS = Object.values(ARROW_MAP);
         renderAll();
       }
       // v1104 他人カーソルを取り込む (poll ごとに全リフレッシュ、シンプル)
@@ -417,7 +440,40 @@ function wireCanvas() {
         deleteStroke(sid).catch(err => toast('削除失敗: ' + err.message));
         return;
       }
-      // stroke 以外を触ったら pan は許す (下の通常分岐に fall through)
+      // v1189 消しゴムモードで矢印もタップ削除
+      const arrLine = e.target.closest('[data-arrow-id]');
+      if (arrLine) {
+        deleteArrow(parseInt(arrLine.dataset.arrowId, 10));
+        return;
+      }
+      // stroke/arrow 以外を触ったら pan は許す (下の通常分岐に fall through)
+    }
+    // v1189 矢印モード: ノートタップ → source, 2 本目ノートタップ → 矢印作成
+    if (MODE === 'arrow') {
+      const nEl = e.target.closest('.bnote');
+      if (nEl) {
+        const nid = parseInt(nEl.dataset.id, 10);
+        if (!ARROW_SOURCE_NOTE_ID) {
+          ARROW_SOURCE_NOTE_ID = nid;
+          toast('接続先の付箋をタップしてね');
+          renderArrows();  // 選択状態 の 反映
+        } else if (ARROW_SOURCE_NOTE_ID === nid) {
+          ARROW_SOURCE_NOTE_ID = null;
+          toast('選択解除');
+          renderArrows();
+        } else {
+          const from = ARROW_SOURCE_NOTE_ID;
+          ARROW_SOURCE_NOTE_ID = null;
+          tryCreateArrow(from, nid);
+        }
+        e.preventDefault();
+        return;
+      }
+      // 空白タップ で 選択解除 (pan は 下 に fall through で 有効)
+      if (ARROW_SOURCE_NOTE_ID) {
+        ARROW_SOURCE_NOTE_ID = null;
+        renderArrows();
+      }
     }
     // 何に触れたか
     const noteEl   = e.target.closest('.bnote');
@@ -745,6 +801,8 @@ function renderAll() {
   applyTransform();
   // v1173 手書きストロークも同時に描画
   renderStrokes();
+  // v1189 note-to-note 矢印 も同時に描画
+  renderArrows();
   // z_index でソート
   const sorted = [...Object.values(NOTE_MAP)].sort((a, b) => (a.z_index || 0) - (b.z_index || 0));
   // 編集中ノートの現在値を保存 (再描画で消えるので後で戻す)。 EDITING_NOTE_ID を
@@ -1544,8 +1602,14 @@ function setMode(m) {
   }
   const vp = document.getElementById('board-viewport');
   if (vp) {
-    vp.style.cursor = m === 'draw' ? 'crosshair' : m === 'erase' ? 'not-allowed' : 'grab';
+    vp.style.cursor = m === 'draw' ? 'crosshair'
+                    : m === 'erase' ? 'not-allowed'
+                    : m === 'arrow' ? 'cell'
+                    : 'grab';
   }
+  // v1189 モード切替 で 矢印 の 選択状態 は 常にクリア + 再描画 (pointerEvents 反映)
+  if (m !== 'arrow') ARROW_SOURCE_NOTE_ID = null;
+  renderArrows();
 }
 
 function renderStrokes() {
@@ -1592,4 +1656,113 @@ async function deleteStroke(sid) {
   delete STROKE_MAP[sid];
   STROKES = Object.values(STROKE_MAP);
   renderStrokes();
+}
+
+// ─── v1189 note-to-note 矢印 ───────────────────────────────────
+
+// note の 中心 world 座標 (fallback: 0,0)
+function noteCenter(nid) {
+  const n = NOTE_MAP[nid]; if (!n) return null;
+  return { x: (n.x || 0) + (n.w || 200) / 2, y: (n.y || 0) + (n.h || 200) / 2 };
+}
+// 2 点間 の 線分 で、 target 側 の 円 (半径 r) と 交わる 点 を 返す (矢印先端 が ノート に めり込む のを 抑える)
+function shortenToward(p1, p2, r) {
+  const dx = p2.x - p1.x, dy = p2.y - p1.y;
+  const d = Math.sqrt(dx * dx + dy * dy) || 1;
+  return { x: p2.x - (dx / d) * r, y: p2.y - (dy / d) * r };
+}
+
+function renderArrows() {
+  const svg = document.getElementById('board-arrows-svg');
+  if (!svg) return;
+  const defs = svg.querySelector('defs');
+  const parts = [];
+  for (const a of Object.values(ARROW_MAP)) {
+    if (!a) continue;
+    const p1 = noteCenter(a.from_note_id);
+    const p2 = noteCenter(a.to_note_id);
+    if (!p1 || !p2) continue;
+    // ターゲット側の端点を note 半径分 手前 に (見た目 矢印 が ノート に 触れる 程度)
+    const nt = NOTE_MAP[a.to_note_id];
+    const rt = nt ? (Math.min(nt.w || 200, nt.h || 200) / 2) - 4 : 0;
+    const q2 = shortenToward(p1, p2, Math.max(30, rt));
+    // ソース側も 少しだけ 内側 (中心 から 半径 分)
+    const ns = NOTE_MAP[a.from_note_id];
+    const rs = ns ? (Math.min(ns.w || 200, ns.h || 200) / 2) - 4 : 0;
+    const q1 = shortenToward(p2, p1, Math.max(20, rs));
+    const dash = a.style === 'dashed' ? ' stroke-dasharray="8,6"' : '';
+    // 選択中の source を強調
+    const highlight = (a.from_note_id === ARROW_SOURCE_NOTE_ID || a.to_note_id === ARROW_SOURCE_NOTE_ID);
+    const strokeW = highlight ? 4 : 2.5;
+    // 太い透明ライン を 下敷き に 置いて タップ判定 を 広げる (12px ヒット)
+    parts.push(`<line data-arrow-id="${a.id}" x1="${(q1.x+10000).toFixed(1)}" y1="${(q1.y+10000).toFixed(1)}" x2="${(q2.x+10000).toFixed(1)}" y2="${(q2.y+10000).toFixed(1)}" stroke="transparent" stroke-width="14" pointer-events="stroke" style="cursor:pointer" />`);
+    parts.push(`<line data-arrow-id="${a.id}" x1="${(q1.x+10000).toFixed(1)}" y1="${(q1.y+10000).toFixed(1)}" x2="${(q2.x+10000).toFixed(1)}" y2="${(q2.y+10000).toFixed(1)}" stroke="${a.color}" stroke-width="${strokeW}" marker-end="url(#board-arrow-head)"${dash} pointer-events="none" />`);
+    if (a.label) {
+      const mx = (q1.x + q2.x) / 2 + 10000;
+      const my = (q1.y + q2.y) / 2 + 10000;
+      const w = Math.max(20, (a.label.length * 8) + 12);
+      parts.push(`<rect x="${(mx - w / 2).toFixed(1)}" y="${(my - 11).toFixed(1)}" width="${w.toFixed(1)}" height="18" rx="3" fill="#fff" stroke="${a.color}" stroke-width="1" pointer-events="none" />`);
+      parts.push(`<text x="${mx.toFixed(1)}" y="${(my + 3).toFixed(1)}" font-size="12" text-anchor="middle" fill="${a.color}" pointer-events="none">${escapeHtml(a.label)}</text>`);
+    }
+  }
+  // defs は 残して 本体を差替え
+  svg.innerHTML = (defs ? defs.outerHTML : '') + parts.join('');
+  // 矢印 の pointerEvents: arrow / erase / select モード で 有効
+  //   arrow: タップ で 選択/削除 メニュー
+  //   erase: タップ で 削除
+  //   select: タップ で 編集 (label/color/style) — 便利なので有効
+  svg.style.pointerEvents = (MODE === 'draw') ? 'none' : 'auto';
+  // 各矢印線 に click ハンドラ
+  svg.querySelectorAll('[data-arrow-id]').forEach(el => {
+    el.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const aid = parseInt(el.dataset.arrowId, 10);
+      onArrowClick(aid);
+    });
+  });
+}
+
+function onArrowClick(aid) {
+  const a = ARROW_MAP[aid]; if (!a) return;
+  if (MODE === 'erase') { deleteArrow(aid); return; }
+  // arrow / select モード: 簡易ダイアログ
+  const nxt = prompt(`矢印 のラベル (空欄で無し / "delete" で削除 / "dash" で 破線切替)\n色は 頭に #RRGGBB を 付ければ 一緒に 変更 (例: "#ff0000 因果")`, a.label || '');
+  if (nxt === null) return;
+  const trimmed = nxt.trim();
+  if (trimmed === 'delete') { deleteArrow(aid); return; }
+  if (trimmed === 'dash') { patchArrow(aid, { style: a.style === 'solid' ? 'dashed' : 'solid' }); return; }
+  let color = a.color, label = trimmed;
+  const m = trimmed.match(/^(#[0-9A-Fa-f]{6})\s*(.*)$/);
+  if (m) { color = m[1]; label = m[2].trim(); }
+  patchArrow(aid, { color, label });
+}
+
+async function patchArrow(aid, body) {
+  try {
+    const r = await patch(`/api/board/arrows/${aid}`, body);
+    if (r && r.arrow) { ARROW_MAP[aid] = r.arrow; renderArrows(); }
+  } catch (e) { toast('矢印更新失敗: ' + e.message); }
+}
+async function deleteArrow(aid) {
+  try {
+    await del(`/api/board/arrows/${aid}`);
+    delete ARROW_MAP[aid];
+    ARROWS = Object.values(ARROW_MAP);
+    renderArrows();
+  } catch (e) { toast('矢印削除失敗: ' + e.message); }
+}
+
+async function tryCreateArrow(fromId, toId) {
+  if (!fromId || !toId || fromId === toId) return;
+  try {
+    const r = await post(`/api/board/rooms/${ROOM_ID}/arrows`, {
+      from_note_id: fromId, to_note_id: toId,
+    });
+    if (r && r.arrow) {
+      ARROW_MAP[r.arrow.id] = r.arrow;
+      ARROWS = Object.values(ARROW_MAP);
+      renderArrows();
+      toast(r.existed ? '既にある矢印を選択' : '矢印を追加');
+    }
+  } catch (e) { toast('矢印作成失敗: ' + e.message); }
 }
