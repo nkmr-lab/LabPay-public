@@ -9,7 +9,7 @@
 
 import { get, post, patch, put, del } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
-import { toast } from '../app.js';
+import { toast, state } from '../app.js';
 
 const PALETTE = [
   '#FEF9A8', // 黄 (デフォ)
@@ -130,6 +130,14 @@ function shellHtml() {
           <button class="btn" id="board-zoom-in" style="padding:4px 8px">＋</button>
           <button class="btn" id="board-zoom-fit" style="padding:4px 8px" title="全部見える倍率にリセット">⛶</button>
         </div>
+        <!-- v1188 中村さん指示「boardを削除する機能も欲しいね」→ toolbar 右端に … メニュー。
+             DOM は常に置いておいて、 loadInitial 後に creator/admin なら hidden を外す。 -->
+        <div id="board-more-wrap" hidden style="position:relative; display:inline-flex; margin-left:6px">
+          <button class="btn" id="board-more" title="その他">⋯</button>
+          <div id="board-more-menu" style="display:none; position:absolute; top:100%; right:0; margin-top:2px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; min-width:180px">
+            <button class="btn" id="board-delete" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer; color:#b91c1c">🗑 このボードを削除</button>
+          </div>
+        </div>
       </div>
       <!-- viewport -->
       <!-- v1177 中村さん指摘「マウスで手書きできない」対策: user-select:none を viewport に。
@@ -234,6 +242,12 @@ async function loadInitial() {
     LAST_SERVER_TIME = d.server_time;
     document.getElementById('board-title').textContent = ROOM.title;
     document.getElementById('board-viewport').style.background = ROOM.bg_color || '#fafafa';
+    // v1188 削除メニュー: 作成者 or admin のみ ⋯ を表示
+    const myId   = state?.me?.id ?? 0;
+    const myRole = state?.me?.role ?? '';
+    const canDelete = (Number(ROOM.creator_user_id) === Number(myId)) || myRole === 'admin';
+    const moreWrap = document.getElementById('board-more-wrap');
+    if (moreWrap) moreWrap.hidden = !canDelete;
     highlightPalette();
     // v1104 初回カーソル
     const nowMs = Date.now();
@@ -381,6 +395,9 @@ function wireCanvas() {
         return;
       }
     }
+    // v1188 マウス draw モード時は pointer 経路を完全にスキップ (pan にも 進まない)。
+    //   mouse handler (下 の mousedown/move/up) が 全て 処理 する。
+    if (MODE === 'draw' && e.pointerType === 'mouse') return;
     // v1173 手書きモード: pointerdown で新規ストローク開始 (note/pan と分岐)
     if (MODE === 'draw' && !e.target.closest('button, .bnote')) {
       e.preventDefault();  // v1178 マウス drag → text-selection や dragstart を確実に抑止
@@ -456,7 +473,8 @@ function wireCanvas() {
     MY_CURSOR.x = w.x; MY_CURSOR.y = w.y;
     scheduleCursorPost();
     // v1173 手書き: 描画中は世界座標で点を追加、SVG に反映
-    if (DRAG.mode === 'draw' && CURRENT_STROKE) {
+    // v1188 マウスは mouse 経路 に 委譲 (pointer 経路 は touch/pen のみ 走らせる)
+    if (DRAG.mode === 'draw' && CURRENT_STROKE && e.pointerType !== 'mouse') {
       const last = CURRENT_STROKE.points[CURRENT_STROKE.points.length - 1];
       // 隣接点間の距離が最低 2px 以上あるときだけ追加 (点数節約)
       const dx = w.x - last.x, dy = w.y - last.y;
@@ -501,7 +519,8 @@ function wireCanvas() {
       if (DRAG.mode !== 'draw' && ACTIVE_POINTERS.size === 0) DRAG.mode = null;
     }
     // v1173 手書き完了: サーバ保存
-    if (DRAG.mode === 'draw' && CURRENT_STROKE) {
+    // v1188 マウスは mouse 経路 に 委譲
+    if (DRAG.mode === 'draw' && CURRENT_STROKE && e.pointerType !== 'mouse') {
       try { vp.releasePointerCapture(e.pointerId); } catch (_) {}
       const stroke = CURRENT_STROKE;
       CURRENT_STROKE = null;
@@ -672,6 +691,27 @@ function wireToolbar() {
                  VIEW.scale / 1.2);
   });
   document.getElementById('board-zoom-fit').addEventListener('click', () => { fitAll(); });
+  // v1188 … メニュー (削除)
+  const moreBtn  = document.getElementById('board-more');
+  const moreMenu = document.getElementById('board-more-menu');
+  moreBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    moreMenu.style.display = moreMenu.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', () => { moreMenu.style.display = 'none'; });
+  document.getElementById('board-delete').addEventListener('click', async (ev) => {
+    ev.stopPropagation();
+    moreMenu.style.display = 'none';
+    if (!ROOM) return;
+    if (!confirm(`ボード「${ROOM.title}」を削除しますか?\n\n・貼ってあるノートも一緒に見えなくなります\n・作成者 or admin だけが実行できます\n・元に戻すには DB 側 (archived_at を NULL に戻す) 操作が必要です`)) return;
+    try {
+      await del(`/api/board/rooms/${ROOM_ID}`);
+      toast('ボードを削除したよ');
+      navigate('/board');
+    } catch (e) {
+      toast('削除失敗: ' + e.message);
+    }
+  });
   // palette (デフォルト色)
   document.querySelectorAll('#board-palette .bpal').forEach(el => {
     el.addEventListener('click', async () => {
