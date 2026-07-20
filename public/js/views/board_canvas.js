@@ -63,12 +63,15 @@ export async function renderBoardCanvas({ params }) {
   // v1194 中村さん報告「左右両端まで行かない」→ main#app の padding が 干渉している 疑い。
   //   board-shell は position:fixed だが safety-first で document.body 直下 に 挿入
   //   (前回残置分を掃除)。 app は 空に して SPA の期待 に 合わせる。
-  document.querySelectorAll('#board-shell').forEach(el => el.remove());
+  // v1195 前バージョンで firstElementChild だけ を append していて <style> だけ が 移動 →
+  //   本体 <div id="board-shell"> が 消えて addEventListener が null に なった 事故。
+  //   全ての 子ノード を まとめて body 直下 の board-host div に 移す。
+  document.querySelectorAll('#board-shell, #board-host').forEach(el => el.remove());
   app.innerHTML = '';
-  const wrap = document.createElement('div');
-  wrap.innerHTML = shellHtml();
-  const shell = wrap.firstElementChild;
-  document.body.appendChild(shell);
+  const host = document.createElement('div');
+  host.id = 'board-host';
+  host.innerHTML = shellHtml();
+  document.body.appendChild(host);
   // v1104 miro モードは画面いっぱいで使いたい (トップバー / タブバーを隠す)
   const topbar = document.getElementById('topbar');
   const tabs   = document.getElementById('tabs');
@@ -82,8 +85,8 @@ export async function renderBoardCanvas({ params }) {
   startPolling();
   LEAVE_HANDLER = () => {
     stopPolling();
-    // v1194 body 直下 に 移した shell を 掃除
-    document.querySelectorAll('#board-shell').forEach(el => el.remove());
+    // v1194 body 直下 に 移した shell + host を 掃除
+    document.querySelectorAll('#board-shell, #board-host').forEach(el => el.remove());
     if (topbar) topbar.style.display = wasTopHidden  ? '' : '';
     if (tabs)   tabs.style.display   = wasTabsHidden ? '' : '';
     // display を消せば hidden 属性の元制御に戻る
