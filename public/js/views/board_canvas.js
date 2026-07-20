@@ -273,8 +273,8 @@ function shellHtml() {
         ${PALETTE.map(c => `<button class="bpal" data-color="${c}" style="width:20px; height:20px; border-radius:5px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer" title="${c}"></button>`).join('')}
       </div>
 
-      <!-- v1192 diagnostic bar: 下中央 に DRAG.mode / 点数 / MODE を リアルタイム 表示 -->
-      <div id="board-debug" class="b-float" style="top:auto; bottom:8px; left:50%; transform:translateX(-50%); padding:4px 10px; font-size:11px; color:#111827; font-family:monospace; z-index:100">
+      <!-- v1192 diagnostic bar: 下中央、 v1200 で 非表示 (window.__board_debug=true で 有効化)。 内部 は 残す ので 次回 トラブル 時 は 即 切替可能 -->
+      <div id="board-debug" class="b-float" style="display:none; top:auto; bottom:8px; left:50%; transform:translateX(-50%); padding:4px 10px; font-size:11px; color:#111827; font-family:monospace; z-index:100">
         <span id="board-dbg-mode">MODE=?</span> <span id="board-dbg-drag">DRAG=?</span> <span id="board-dbg-pts">pts=0</span> <span id="board-dbg-last">last=?</span>
       </div>
 
@@ -573,6 +573,7 @@ function wireCanvas() {
       try { vp.setPointerCapture(e.pointerId); } catch (_) {}
       renderCurrentStroke();
       updateDebug('down:' + e.pointerType);
+      // v1200: 描画開始 toast は 撤去 (draw 中は 毎回 出ると 邪魔)
       return;
     }
     // v1197 消しゴムモード: 手動 hit-test (SVG の pointer-events に 頼らない)
@@ -1779,11 +1780,14 @@ function setMode(m) {
     b.style.background = active ? '#7b3fa0' : '';
     b.style.color      = active ? '#fff'   : '';
   });
-  // v1191 diagnostic: モード切替 が 効いた ことを 中村さんが 目視 で 確認 できる
-  if (window.__board_debug !== false) {
-    const label = m === 'select' ? '🖱 選択' : m === 'draw' ? '✏️ 手書き' : m === 'arrow' ? '↗ 矢印' : '🩹 消しゴム';
-    toast(`モード: ${label}`, 900);
-  }
+  // v1200 モード切替 の toast を 使い方 付き に (中村さん実測「矢印はノード間、消しゴムはクリックなのね」→ 一目で 分かる 説明を 添える)
+  const HINT = {
+    select: '🖐 選択/移動: ドラッグでパン、 ノート つまんで 移動',
+    draw:   '✏️ 手書き: ドラッグで 自由 に 線を 引く',
+    arrow:  '↗ 矢印: ノードA → ノードB を 順にタップ で 接続',
+    erase:  '🩹 消しゴム: 線/矢印/ノート を タップで 削除 (↶ で 戻せる)',
+  };
+  toast(HINT[m] || m, 1600);
   const pen = document.getElementById('board-pen-group');
   if (pen) pen.style.display = (m === 'draw') ? 'flex' : 'none';
   // v1197 SVG root は none 固定 (hit-test は 手動 で NOTE_MAP / STROKE_MAP / ARROW_MAP から)
