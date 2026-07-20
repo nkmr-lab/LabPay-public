@@ -385,6 +385,13 @@ function tasks_fetch_with_meta(PDO $pdo, int $taskId, ?int $forUserId = null): a
         }
         unset($c);
         $row['my_claims'] = $myRows;
+        // v1187 中村さん報告「引き受けないボタンが存在しない」の根本原因: 詳細 API に
+        //   is_assigned_to_me が入っていなかった (list だけで計算していた)。
+        //   JS 側の表示判定 (v1184/v1185) が undefined→false で常に隠されていた。
+        $assignedIds = empty($row['assigned_user_ids'])
+            ? null
+            : array_map('intval', explode(',', (string)$row['assigned_user_ids']));
+        $row['is_assigned_to_me'] = $assignedIds !== null && in_array($forUserId, $assignedIds, true);
     }
     // v790 #393 起案者向けに完了入力欄定義を decoded で返す
     if (!empty($row['completion_fields_json'])) {
