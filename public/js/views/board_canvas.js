@@ -50,6 +50,50 @@ let CURRENT_STROKE = null;  // 描画中: { points:[{x,y},...], color, width }
 let ARROWS = [];      // 全矢印
 let ARROW_MAP = {};   // id → arrow
 let ARROW_SOURCE_NOTE_ID = null;  // arrow モードで 1 本目タップ済 の source note id (2 本目タップで確定)
+
+// v1197 世界座標での 手動 hit-test (SVG の pointer-events で 詰まないよう ブラウザ非依存 に)
+function hitTestNote(wx, wy) {
+  // 上 (z_index 大) から順 に走査、 最初に box に 入った note を返す
+  const sorted = [...Object.values(NOTE_MAP)].sort((a, b) => (b.z_index || 0) - (a.z_index || 0));
+  for (const n of sorted) {
+    if (!n || n.hidden_for_me) continue;
+    if (wx >= n.x && wx <= n.x + (n.width || 200) && wy >= n.y && wy <= n.y + (n.height || 200)) {
+      return n;
+    }
+  }
+  return null;
+}
+// 点 (wx,wy) と 線分 (x1,y1)-(x2,y2) の 距離
+function distPointToSegment(wx, wy, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(wx - x1, wy - y1);
+  let t = ((wx - x1) * dx + (wy - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const px = x1 + t * dx, py = y1 + t * dy;
+  return Math.hypot(wx - px, wy - py);
+}
+function hitTestArrow(wx, wy, tol) {
+  const T = tol / VIEW.scale;  // ズーム で 判定幅 を 調整
+  for (const a of Object.values(ARROW_MAP)) {
+    if (!a) continue;
+    const p1 = noteCenter(a.from_note_id); if (!p1) continue;
+    const p2 = noteCenter(a.to_note_id);   if (!p2) continue;
+    if (distPointToSegment(wx, wy, p1.x, p1.y, p2.x, p2.y) <= T) return a;
+  }
+  return null;
+}
+function hitTestStroke(wx, wy, tol) {
+  const T = tol / VIEW.scale;
+  for (const s of Object.values(STROKE_MAP)) {
+    if (!s || !Array.isArray(s.points) || s.points.length < 2) continue;
+    for (let i = 1; i < s.points.length; i++) {
+      const a = s.points[i - 1], b = s.points[i];
+      if (distPointToSegment(wx, wy, a.x, a.y, b.x, b.y) <= T + (s.width || 2)) return s;
+    }
+  }
+  return null;
+}
 // v1196 Undo スタック — 各アクション を {label, undo: async fn} で 積む、 ↶ ボタン / Ctrl+Z で pop
 const UNDO_STACK = [];
 const UNDO_LIMIT = 40;
@@ -238,10 +282,10 @@ function shellHtml() {
       <div id="board-viewport" style="position:absolute; top:0; left:0; right:0; bottom:0; overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; background:#fafafa">
         <div id="board-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform">
           <!-- v1173 手書きストローク SVG (world 座標。 board-layer の transform に追随) -->
-          <!-- v1196 pointer-events:visiblePainted に して 個別 path の pointer-events="stroke" が 効くように -->
-          <svg id="board-strokes-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:visiblePainted; overflow:visible; z-index:1"></svg>
-          <!-- v1189 note-to-note 矢印 SVG (strokes と 同じ座標系) v1196: notes より下 (z-index:2), notes-container が 上 (10) で 掴める -->
-          <svg id="board-arrows-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:visiblePainted; overflow:visible; z-index:2">
+          <!-- v1197 pointer-events:none 固定 (ブラウザ の SVG hit-test に 依存 しない、 手動 hit-test で 拾う) -->
+          <svg id="board-strokes-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible; z-index:1"></svg>
+          <!-- v1189 note-to-note 矢印 SVG -->
+          <svg id="board-arrows-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible; z-index:2">
             <defs>
               <marker id="board-arrow-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse" markerUnits="strokeWidth">
                 <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/>
@@ -531,43 +575,44 @@ function wireCanvas() {
       updateDebug('down:' + e.pointerType);
       return;
     }
-    // v1173 消しゴムモード: pointerdown で SVG stroke path をタップしたら削除
+    // v1197 消しゴムモード: 手動 hit-test (SVG の pointer-events に 頼らない)
     if (MODE === 'erase') {
-      const path = e.target.closest('path[data-stroke-id]');
-      if (path) {
-        const sid = parseInt(path.dataset.strokeId, 10);
-        deleteStroke(sid).catch(err => toast('削除失敗: ' + err.message));
-        updateDebug('erase:stroke');
+      const w0 = screenToWorld(e.clientX, e.clientY);
+      // まず stroke (幅 12px 以内)、 次に arrow (10px 以内) を 判定
+      const sHit = hitTestStroke(w0.x, w0.y, 12);
+      if (sHit) {
+        deleteStroke(sHit.id).catch(err => toast('削除失敗: ' + err.message));
+        updateDebug('erase:stroke#' + sHit.id);
+        e.preventDefault();
         return;
       }
-      // v1189 消しゴムモードで矢印もタップ削除
-      const arrLine = e.target.closest('[data-arrow-id]');
-      if (arrLine) {
-        deleteArrow(parseInt(arrLine.dataset.arrowId, 10));
-        updateDebug('erase:arrow');
+      const aHit = hitTestArrow(w0.x, w0.y, 10);
+      if (aHit) {
+        deleteArrow(aHit.id);
+        updateDebug('erase:arrow#' + aHit.id);
+        e.preventDefault();
         return;
       }
-      // v1193 中村さん報告「消しゴム機能せず、ドラッグアンドドロップ」対策:
-      //   ノートをタップした時 は 消しゴムモードでは 何もしない (fall-through で drag は 誤解)。
-      //   ペン/矢印 の 削除 用 なので、 note を掴んで 動かすのは 意図しない挙動。
-      const nEl0 = e.target.closest('.bnote');
-      if (nEl0) {
+      // note を タップ したら drag しない (誤操作 防止)
+      const nHit = hitTestNote(w0.x, w0.y);
+      if (nHit) {
         toast('消しゴムモード: ペンの線 or 矢印 をタップしてね', 1400);
-        updateDebug('erase:blocked-note', e.target.tagName);
+        updateDebug('erase:blocked-note#' + nHit.id);
         return;
       }
-      // 空白タップ は pan させる (下の通常分岐に fall through)
-      updateDebug('erase:fall-thr', e.target.tagName + '#' + (e.target.id || '-'));
+      // 空白 は pan に fall-through
+      updateDebug('erase:fall-thr');
     }
-    // v1189 矢印モード: ノートタップ → source, 2 本目ノートタップ → 矢印作成
+    // v1197 矢印モード: 手動 hit-test で note を 拾う (SVG が 覆っていても 大丈夫)
     if (MODE === 'arrow') {
-      const nEl = e.target.closest('.bnote');
-      if (nEl) {
-        const nid = parseInt(nEl.dataset.id, 10);
+      const w0 = screenToWorld(e.clientX, e.clientY);
+      const nHit = hitTestNote(w0.x, w0.y);
+      if (nHit) {
+        const nid = nHit.id;
         if (!ARROW_SOURCE_NOTE_ID) {
           ARROW_SOURCE_NOTE_ID = nid;
           toast('接続先の付箋をタップしてね', 1400);
-          renderArrows();  // 選択状態 の 反映
+          renderArrows();
         } else if (ARROW_SOURCE_NOTE_ID === nid) {
           ARROW_SOURCE_NOTE_ID = null;
           toast('選択解除', 900);
@@ -581,12 +626,12 @@ function wireCanvas() {
         updateDebug('arrow:note=' + nid);
         return;
       }
-      // 空白タップ で 選択解除 (pan は 下 に fall through で 有効)
+      // 空白タップ で source clear + pan に fall-through
       if (ARROW_SOURCE_NOTE_ID) {
         ARROW_SOURCE_NOTE_ID = null;
         renderArrows();
       }
-      updateDebug('arrow:fall-thr', e.target.tagName + '#' + (e.target.id || '-'));
+      updateDebug('arrow:fall-thr');
     }
     // 何に触れたか
     const noteEl   = e.target.closest('.bnote');
@@ -1696,10 +1741,11 @@ function setMode(m) {
   }
   const pen = document.getElementById('board-pen-group');
   if (pen) pen.style.display = (m === 'draw') ? 'flex' : 'none';
-  // v1196 SVG root は visiblePainted 固定 (子の pointer-events="stroke" が 効く条件)。
-  //   note は z-index:10 で SVG より上、 note 上 の click は 必ず note に 届く。
+  // v1197 SVG root は none 固定 (hit-test は 手動 で NOTE_MAP / STROKE_MAP / ARROW_MAP から)
   const svg = document.getElementById('board-strokes-svg');
-  if (svg) svg.style.pointerEvents = 'visiblePainted';
+  if (svg) svg.style.pointerEvents = 'none';
+  const asvg = document.getElementById('board-arrows-svg');
+  if (asvg) asvg.style.pointerEvents = 'none';
   const vp = document.getElementById('board-viewport');
   if (vp) {
     vp.style.cursor = m === 'draw' ? 'crosshair'
@@ -1837,9 +1883,8 @@ function renderArrows() {
   }
   // defs は 残して 本体を差替え
   svg.innerHTML = (defs ? defs.outerHTML : '') + parts.join('');
-  // v1196 visiblePainted に して 個別 line の pointer-events="stroke" 透明ヒット (14px) が 効く。
-  //   note は z-index:10 で SVG (z-index:2) の 上、 note を 掴む 操作 に 干渉 しない。
-  svg.style.pointerEvents = 'visiblePainted';
+  // v1197 SVG root は 常に none、 hit-test は 手動 (hitTestArrow) で NOTE_MAP から 幾何計算。
+  svg.style.pointerEvents = 'none';
   // 各矢印線 に click ハンドラ
   svg.querySelectorAll('[data-arrow-id]').forEach(el => {
     el.addEventListener('click', (ev) => {
