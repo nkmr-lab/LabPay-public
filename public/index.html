@@ -20,7 +20,7 @@
   <meta name="apple-mobile-web-app-title" content="LabPay">
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="/css/style.css">
-  <!-- v1203 fb#490 バージョン履歴クリックを堅牢化。 index.html だけで完結する
+  <!-- v1204 fb#490 バージョン履歴クリックを堅牢化。 index.html だけで完結する
        非モジュールインラインスクリプトにハンドラ本体を置くことで、
        (a) module import タイミング race を完全に避ける
        (b) sw キャッシュ状態に関係なく button parse 済み時点で
@@ -53,13 +53,13 @@
 </head>
 <body>
   <header id="topbar" hidden>
-    <!-- v1203 fb#490 バージョンクリック修正 (v1156 では GitHub フォールバックだったが
+    <!-- v1204 fb#490 バージョンクリック修正 (v1156 では GitHub フォールバックだったが
          リポは private なので中村さん指摘で撤退)。 button に戻し、 onclick で <head> 側の
          window.__lpVersionClick を呼ぶ単純構造に。モジュール import が走らないので
          SW キャッシュや読み込み race に一切依存しない。 -->
     <span class="brand"><a href="#/" style="text-decoration:none; color:inherit">LabPay</a>
       <button type="button" class="brand-version" id="brand-version" title="バージョン履歴"
-              onclick="return window.__lpVersionClick(event)">v1203</button></span>
+              onclick="return window.__lpVersionClick(event)">v1204</button></span>
     <div class="topbar-right">
       <a href="#/notifications" class="bell" id="bell-link">
         通知<span id="unread-badge" class="badge" hidden>0</span>
@@ -72,7 +72,7 @@
     </div>
   </header>
 
-  <!-- v1203 タブは js/app.js の TAB_DEFS を single source of truth に、
+  <!-- v1204 タブは js/app.js の TAB_DEFS を single source of truth に、
        applyTabLayout() の中で動的生成 (rebuildNav) するので nav の中身は空。 -->
   <nav id="tabs" hidden></nav>
 
@@ -81,7 +81,7 @@
        (app.innerHTML = ... が走ると消える) -->
   <main id="app">
     <div id="splash" style="text-align:center; padding:80px 16px 24px; color:#4a106d; font-family:system-ui, -apple-system, sans-serif">
-      <div style="font-size:36px; font-weight:700; letter-spacing:0.05em">LabPay <span style="color:#7b3fa0" id="splash-ver">v1203</span></div>
+      <div style="font-size:36px; font-weight:700; letter-spacing:0.05em">LabPay <span style="color:#7b3fa0" id="splash-ver">v1204</span></div>
       <div style="font-size:12px; color:#666; margin-top:8px" id="splash-updated">最終更新: 取得中…</div>
       <div style="margin-top:30px">
         <div style="width:30px; height:30px; border:3px solid #ede4f3; border-top-color:#4a106d; border-radius:50%; margin:0 auto; animation:splash-spin 1s linear infinite"></div>

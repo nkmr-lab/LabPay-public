@@ -23,19 +23,33 @@ async function invalidateGroupCache(_gid) {
 
 // v1193 中村さん要望「グループに Board を作る機能」→ このグループ限定 (visibility=group)
 //   の新規 board を 作成して 直行。 タイトル は「(グループ名) のボード N」形式。
+// v1204 中村さん再報告「複数同じのが作られてしまう」対応:
+//   (a) ボタン を disable + in-flight フラグ で 二重発火 を 完全防止。
+//   (b) 既に この グループ の board が あれば、 新規作成 でなく 既存の 最新 を 開く。
+//       (新規 が 欲しい 場合 は /#/board から 明示 作成 する 動線 で。)
+let _createBoardInflight = false;
 async function createBoardForGroup(groupId) {
+  if (_createBoardInflight) return;
+  _createBoardInflight = true;
+  const btn = document.getElementById('gd-new-board');
+  const origLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '準備中…'; }
   try {
-    // グループ名 と 既存の同名 board 数 を 取るため、 detail から groupTitle を 拾う
     const g = await get(`/api/groups/${encodeURIComponent(groupId)}`);
     const groupTitle = (g && g.title) ? g.title : ('グループ' + groupId);
-    // 既存 board のうち この グループ owner の 個数 で 連番
-    let seq = 1;
+    // 既に この グループ owner の board が あれば、 その うち 最新 (updated_at DESC) を 開く
+    let existing = [];
     try {
       const rooms = await get('/api/board/rooms');
-      const same = (rooms.items || []).filter(r => (r.visibility === 'group') && String(r.owner_group_id) === String(g.id) && (r.title || '').startsWith(groupTitle));
-      seq = same.length + 1;
+      existing = (rooms.items || []).filter(r => (r.visibility === 'group') && String(r.owner_group_id) === String(g.id));
     } catch (_) {}
-    const title = seq === 1 ? `${groupTitle} のボード` : `${groupTitle} のボード ${seq}`;
+    if (existing.length > 0) {
+      // updated_at DESC (list は 既に この 順) の 先頭 を 開く
+      toast('既存のボードを開きます');
+      location.hash = '#/board/rooms/' + existing[0].id;
+      return;
+    }
+    const title = `${groupTitle} のボード`;
     const r = await post('/api/board/rooms', {
       title,
       visibility: 'group',
@@ -48,6 +62,9 @@ async function createBoardForGroup(groupId) {
     }
   } catch (e) {
     toast('作成失敗: ' + (e.message || 'unknown'));
+  } finally {
+    _createBoardInflight = false;
+    if (btn) { btn.disabled = false; btn.textContent = origLabel; }
   }
 }
 

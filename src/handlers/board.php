@@ -193,15 +193,53 @@ function board_rooms_list(PDO $pdo, array $cfg): void {
                        ORDER BY r.updated_at DESC");
     $st->execute([$uid, $uid, $uid]);
     $items = [];
-    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+    $rooms = $st->fetchAll(PDO::FETCH_ASSOC);
+    // v1204 各 room の 貢献者 (notes / strokes / arrows を 作った 人) を 一括収集
+    //   creator は 除いた 状態 で 返す (フロント で 起案者アバター の 右 に 追加表示)
+    $contribByRoom = [];
+    if (!empty($rooms)) {
+        $roomIds = array_map(fn($r) => (int)$r['id'], $rooms);
+        $ph = implode(',', array_fill(0, count($roomIds), '?'));
+        // notes/strokes/arrows の UNION で 各 room の 貢献者ユーザ一覧 (deleted 除く)
+        $sqlC = "SELECT room_id, uid FROM (
+                   SELECT room_id, created_by_user_id AS uid FROM board_notes   WHERE deleted_at IS NULL AND room_id IN ($ph)
+                   UNION
+                   SELECT room_id, created_by_user_id AS uid FROM board_strokes WHERE deleted_at IS NULL AND room_id IN ($ph)
+                   UNION
+                   SELECT room_id, created_by_user_id AS uid FROM board_arrows  WHERE deleted_at IS NULL AND room_id IN ($ph)
+                 ) t";
+        $sqlJoin = "SELECT t.room_id, t.uid, u.display_name, u.avatar_url
+                      FROM ($sqlC) t
+                      JOIN users u ON u.id = t.uid
+                     GROUP BY t.room_id, t.uid, u.display_name, u.avatar_url
+                     ORDER BY t.room_id, t.uid";
+        $sc = $pdo->prepare($sqlJoin);
+        $sc->execute(array_merge($roomIds, $roomIds, $roomIds));
+        foreach ($sc->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            $rid = (int)$c['room_id'];
+            if (!isset($contribByRoom[$rid])) $contribByRoom[$rid] = [];
+            $contribByRoom[$rid][] = [
+                'id'         => (int)$c['uid'],
+                'name'       => (string)$c['display_name'],
+                'avatar_url' => $c['avatar_url'] ?: null,
+            ];
+        }
+    }
+    foreach ($rooms as $r) {
         $r['id']              = (int)$r['id'];
         $r['creator_user_id'] = (int)$r['creator_user_id'];
         $r['owner_group_id']  = $r['owner_group_id'] !== null ? (int)$r['owner_group_id'] : null;
         $r['note_count']      = (int)$r['note_count'];
+        // 貢献者 (creator を 除く) — フロント で 起案者 アバター の 隣 に 重ね て 表示
+        $all = $contribByRoom[$r['id']] ?? [];
+        $r['contributors'] = array_values(array_filter($all, fn($c) => $c['id'] !== $r['creator_user_id']));
         $items[] = $r;
     }
     json_response(['items' => $items]);
 }
+
+// v1204 「ボード から 抜ける」は 中村さん 撤回 で 撤去 (migration 233 の テーブル は 空 で 残す、
+//   将来 復活 時 に そのまま 使える)
 
 // POST /api/board/rooms  body: { title, description?, bg_color?, visibility?, owner_group_id? }
 function board_rooms_create(PDO $pdo, array $cfg): void {

@@ -123,6 +123,17 @@ function scopeBadge(r) {
 function cardHtml(r) {
   const bg = r.bg_color || '#FAFAFA';
   const desc = r.description ? `<div style="font-size:12px; color:#4b5563; margin-top:4px">${escapeHtml(r.description)}</div>` : '';
+  // v1204 中村さん要望「起案者は 一番左、 中で 書き込み している 人 は アイコン 追加」
+  const contribs = Array.isArray(r.contributors) ? r.contributors : [];
+  const maxShow = 6;
+  const shown = contribs.slice(0, maxShow);
+  const extra = contribs.length - shown.length;
+  const contribHtml = shown.length
+    ? `<span style="display:inline-flex; align-items:center; margin-left:2px" title="${escapeHtml(shown.map(c => c.name).join(', ')) + (extra > 0 ? ` +${extra}` : '')}">`
+      + shown.map((c, i) => `<span style="margin-left:${i === 0 ? '4px' : '-6px'}; border:1px solid #fff; border-radius:50%; display:inline-flex" title="${escapeHtml(c.name)}">${avatarHtml(c.name, c.avatar_url, 'xs')}</span>`).join('')
+      + (extra > 0 ? `<span style="margin-left:-4px; background:#e5e7eb; color:#374151; border-radius:10px; padding:1px 6px; font-size:10px; font-weight:600; border:1px solid #fff">+${extra}</span>` : '')
+      + `</span>`
+    : '';
   return `
     <div class="btn" data-open="${r.id}" style="cursor:pointer; text-align:left; padding:12px; background:${bg}; border:1px solid #e5e7eb; border-radius:10px; min-height:96px; display:flex; flex-direction:column; gap:4px">
       <div style="display:flex; align-items:center; gap:6px">
@@ -130,9 +141,12 @@ function cardHtml(r) {
         ${scopeBadge(r)}
       </div>
       ${desc}
-      <div style="margin-top:auto; display:flex; align-items:center; gap:6px; font-size:11px; color:#6b7280">
-        ${avatarHtml(r.creator_name, r.creator_avatar, 'xs')}
-        <span>${escapeHtml(r.creator_name || '')}</span>
+      <div style="margin-top:auto; display:flex; align-items:center; gap:4px; font-size:11px; color:#6b7280">
+        <span style="display:inline-flex; align-items:center; gap:4px" title="起案: ${escapeHtml(r.creator_name || '')}">
+          ${avatarHtml(r.creator_name, r.creator_avatar, 'xs')}
+          <span style="font-weight:600">${escapeHtml(r.creator_name || '')}</span>
+        </span>
+        ${contribHtml}
         <span style="margin-left:auto">🗒 ${r.note_count} 枚</span>
       </div>
     </div>
