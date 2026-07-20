@@ -125,6 +125,10 @@ function hitTestStroke(wx, wy, tol) {
   }
   return null;
 }
+// v1202 fb#493/494: 単一選択 (今回は 単一 のみ、 複数 は 次段)
+let SELECTED_NOTE_ID = null;
+let CLIPBOARD_NOTE = null;   // { color, front_text, back_text, front_image_url, width, height }
+let LAST_POINTER = { x: 0, y: 0 };  // 直近 pointer 位置 (Ctrl+V の 貼り付け 場所 用)
 // v1196 Undo スタック — 各アクション を {label, undo: async fn} で 積む、 ↶ ボタン / Ctrl+Z で pop
 const UNDO_STACK = [];
 const UNDO_LIMIT = 40;
@@ -156,7 +160,71 @@ function boardKeydown(ev) {
   if (ctrl && !ev.shiftKey && (ev.key === 'z' || ev.key === 'Z')) {
     ev.preventDefault();
     doUndo();
+    return;
   }
+  // v1202 fb#494 コピー / 貼り付け
+  if (ctrl && (ev.key === 'c' || ev.key === 'C')) {
+    if (SELECTED_NOTE_ID !== null && NOTE_MAP[SELECTED_NOTE_ID]) {
+      const n = NOTE_MAP[SELECTED_NOTE_ID];
+      CLIPBOARD_NOTE = {
+        color: n.color, front_text: n.front_text || '', back_text: n.back_text || '',
+        front_image_url: n.front_image_url || '', width: n.width, height: n.height,
+      };
+      toast('付箋をコピー (Ctrl+V で 貼り付け)', 1200);
+      ev.preventDefault();
+    }
+    return;
+  }
+  if (ctrl && (ev.key === 'v' || ev.key === 'V')) {
+    if (CLIPBOARD_NOTE) {
+      pasteNoteAtCursor();
+      ev.preventDefault();
+    }
+    return;
+  }
+}
+
+// v1202 fb#493/494: 選択状態 の 見た目 反映
+function updateSelectionHighlight() {
+  document.querySelectorAll('.bnote').forEach(el => {
+    const id = parseInt(el.dataset.id, 10);
+    if (id === SELECTED_NOTE_ID) {
+      el.style.outline = '3px solid #4a106d';
+      el.style.outlineOffset = '2px';
+    } else {
+      el.style.outline = '';
+      el.style.outlineOffset = '';
+    }
+  });
+}
+
+async function pasteNoteAtCursor() {
+  if (!CLIPBOARD_NOTE) return;
+  const c = CLIPBOARD_NOTE;
+  const px = LAST_POINTER.x - (c.width || 220) / 2;
+  const py = LAST_POINTER.y - (c.height || 220) / 2;
+  try {
+    const r = await post(`/api/board/rooms/${ROOM_ID}/notes`, {
+      x: px, y: py, width: c.width || 220, height: c.height || 220,
+      color: c.color || MY_DEFAULT_COLOR, front_text: c.front_text || '',
+      back_text: c.back_text || '', front_image_url: c.front_image_url || '',
+    });
+    if (r && r.id) {
+      NOTE_MAP[r.id] = r.note;
+      NOTES = Object.values(NOTE_MAP);
+      SELECTED_NOTE_ID = r.id;
+      renderAll();
+      updateSelectionHighlight();
+      const nid = r.id;
+      pushUndo('貼り付けを取消', async () => {
+        await del(`/api/board/notes/${nid}`).catch(() => {});
+        delete NOTE_MAP[nid];
+        NOTES = Object.values(NOTE_MAP);
+        renderAll();
+      });
+      toast('付箋を貼り付け', 1000);
+    }
+  } catch (e) { toast('貼り付け失敗: ' + e.message); }
 }
 // v1182 fb#492 スマホの 2 本指 pinch 拡大縮小用の追跡
 const ACTIVE_POINTERS = new Map();  // pointerId → {x, y} (touch のみ、 mouse は追跡しない)
@@ -210,6 +278,18 @@ export async function renderBoardCanvas({ params }) {
 function shellHtml() {
   return `
     <style>
+      /* v1202 fb#496 中村さん要望「左のツールバーをホバリングで それがなんの機能であるか 表示」→
+         native title の 遅延 (500ms) を 短縮 する 素早い 独自 tooltip */
+      #board-shell .b-icon-btn { position:relative; }
+      #board-shell .b-icon-btn[data-tip]::after {
+        content: attr(data-tip);
+        position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%);
+        background: rgba(20, 20, 30, 0.92); color: #fff;
+        padding: 4px 8px; border-radius: 4px; font-size: 12px; line-height: 1.3;
+        white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.12s;
+        z-index: 1000;
+      }
+      #board-shell .b-icon-btn[data-tip]:hover::after { opacity: 1; transition-delay: 0.15s; }
       /* v1194 board-shell を 確実 に フルスクリーン に (親要素 の 制約 を 全上書き) */
       #board-shell {
         position: fixed !important;
@@ -592,13 +672,20 @@ function wireCanvas() {
     if (e.pointerType === 'touch') {
       ACTIVE_POINTERS.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (ACTIVE_POINTERS.size === 2) {
-        // 2 本目が着地 = pinch モード開始。既存の 1 本指 drag/draw をキャンセル
+        // 2 本目が着地 = pinch + pan モード開始。既存の 1 本指 drag/draw をキャンセル
+        // v1202 fb#495 中村さん要望「二本指ドラッグで視点移動」→ pinch と 同時 に 2 本指 中点 の
+        //   移動 でも view を pan させる (Miro/Google Maps 風)。 PINCH_STATE に mid0 と tx0/ty0 を追加。
         const [a, b] = [...ACTIVE_POINTERS.values()];
         const dx = b.x - a.x, dy = b.y - a.y;
-        PINCH_STATE = { d0: Math.sqrt(dx * dx + dy * dy), scale0: VIEW.scale };
+        PINCH_STATE = {
+          d0: Math.sqrt(dx * dx + dy * dy), scale0: VIEW.scale,
+          mid0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+          tx0: VIEW.tx, ty0: VIEW.ty,
+        };
         // 進行中の pan/note/draw を停止 (drag mode 解除、未保存 stroke 廃棄)
         DRAG.mode = null;
         if (CURRENT_STROKE) { CURRENT_STROKE = null; renderCurrentStroke(); }
+        if (CURRENT_SHAPE)  { CURRENT_SHAPE  = null; renderCurrentShape(); }
         try { vp.releasePointerCapture(e.pointerId); } catch (_) {}
         return;
       }
@@ -724,11 +811,16 @@ function wireCanvas() {
       DRAG.noteId = parseInt(noteEl.dataset.id, 10);
       const n = NOTE_MAP[DRAG.noteId];
       if (!n) return;
+      // v1202 fb#493/494: 選択状態 を 更新 (Ctrl+C の 対象 に)
+      SELECTED_NOTE_ID = DRAG.noteId;
+      updateSelectionHighlight();
       DRAG.startX = e.clientX; DRAG.startY = e.clientY;
       DRAG.noteStartX = n.x; DRAG.noteStartY = n.y;
       // z bump
       bringToFront(DRAG.noteId).catch(() => {});
     } else if (!e.target.closest('button, .bmodal-color, .bpal')) {
+      // v1202 空白 タップ で 選択解除
+      if (SELECTED_NOTE_ID !== null) { SELECTED_NOTE_ID = null; updateSelectionHighlight(); }
       DRAG.mode = 'pan';
       DRAG.startX = e.clientX; DRAG.startY = e.clientY;
       DRAG.origTx = VIEW.tx; DRAG.origTy = VIEW.ty;
@@ -751,9 +843,16 @@ function wireCanvas() {
         const dx = b.x - a.x, dy = b.y - a.y;
         const d = Math.sqrt(dx * dx + dy * dy);
         if (d > 0) {
+          // v1202 fb#495 pinch (拡大縮小) + pan (2本指中点移動) を 同時 に。
+          //   まず scale を 2本指 中点 で 更新、 その後 mid の 移動 分 だけ tx/ty を 追加 シフト。
           const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
           const newScale = PINCH_STATE.scale0 * (d / PINCH_STATE.d0);
           zoomAtScreen(cx, cy, newScale);
+          // 2 本指 中点 の 移動 = pan 量
+          VIEW.tx += (cx - PINCH_STATE.mid0.x);
+          VIEW.ty += (cy - PINCH_STATE.mid0.y);
+          PINCH_STATE.mid0.x = cx; PINCH_STATE.mid0.y = cy;
+          applyTransform();
         }
         return;
       }
@@ -761,6 +860,7 @@ function wireCanvas() {
     // v1104 自分のカーソル位置 (world 座標) を常時追跡してスロットル送信
     const w = screenToWorld(e.clientX, e.clientY);
     MY_CURSOR.x = w.x; MY_CURSOR.y = w.y;
+    LAST_POINTER = { x: w.x, y: w.y };  // v1202 貼り付け 位置 用
     scheduleCursorPost();
     // v1201 図形描画中: 終点 を 更新 + preview 再描画
     if (DRAG.mode === 'shape' && CURRENT_SHAPE) {
@@ -975,6 +1075,10 @@ function wireToolbar() {
   document.querySelectorAll('.board-mode').forEach(b => {
     b.addEventListener('click', () => setMode(b.dataset.mode));
   });
+  // v1202 fb#496: 左ツールバー の title を data-tip に 反映 (独自 tooltip 用)
+  document.querySelectorAll('#board-shell .b-icon-btn[title]').forEach(b => {
+    if (!b.dataset.tip) b.dataset.tip = b.title;
+  });
   // v1201 図形 picker
   const shapeMenu = document.getElementById('board-shape-menu');
   document.getElementById('board-mode-shape')?.addEventListener('click', (ev) => {
@@ -1121,6 +1225,8 @@ function renderAll() {
   if (wasEditing && NOTE_MAP[wasEditing]) {
     enterInlineEdit(wasEditing, editingSnapshot);
   }
+  // v1202 選択状態 の 見た目 を 復元
+  updateSelectionHighlight();
 }
 
 function noteHtml(n) {
