@@ -430,11 +430,36 @@ function shellHtml() {
       <div class="b-float" style="top:8px; left:8px; padding:6px 12px; display:flex; align-items:center; gap:8px; max-width:calc(100vw - 24px)">
         <a href="#/board" class="hint" style="text-decoration:none; padding:2px 6px; color:#6b7280">← 一覧</a>
         <div id="board-title" style="font-weight:700; font-size:14px; min-width:0; max-width:60vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">…</div>
-        <!-- v1188 削除メニュー: 作成者/admin のみ 表示 -->
+        <!-- v1188 削除メニュー: 作成者/admin のみ 表示 / v1205 共有設定 追加 -->
         <div id="board-more-wrap" hidden style="position:relative">
           <button class="b-icon-btn" id="board-more" title="その他" style="width:28px; height:28px; font-size:16px">⋯</button>
-          <div id="board-more-menu" style="display:none; position:absolute; top:100%; right:0; margin-top:4px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; min-width:180px">
+          <div id="board-more-menu" style="display:none; position:absolute; top:100%; right:0; margin-top:4px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; min-width:200px">
+            <button class="btn" id="board-share" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🔓 共有設定 (公開範囲)</button>
             <button class="btn" id="board-delete" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer; color:#b91c1c">🗑 このボードを削除</button>
+          </div>
+        </div>
+
+        <!-- v1205 共有設定 モーダル -->
+        <div id="board-share-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10001; align-items:center; justify-content:center; padding:16px">
+          <div style="background:#fff; border-radius:12px; padding:16px; width:100%; max-width:440px; display:flex; flex-direction:column; gap:10px">
+            <div style="font-weight:700; font-size:15px">🔓 公開範囲を変える</div>
+            <div class="hint-sm" style="font-size:12px; color:#6b7280">誰にこのボードを見せる/編集させるかを設定します。</div>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:8px; border:1px solid #e5e7eb; border-radius:6px">
+              <input type="radio" name="bshare-vis" value="lab"> <span>🌏 全体 (ラボ全員が 見られる/書ける)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:8px; border:1px solid #e5e7eb; border-radius:6px">
+              <input type="radio" name="bshare-vis" value="group"> <span>👥 グループ (指定したグループのメンバーだけ)</span>
+            </label>
+            <div id="bshare-group-wrap" style="margin-left:26px; display:none">
+              <select id="bshare-group" style="width:100%; padding:4px 6px"><option value="">読み込み中…</option></select>
+            </div>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:8px; border:1px solid #e5e7eb; border-radius:6px">
+              <input type="radio" name="bshare-vis" value="private"> <span>🔒 個人 (自分だけ)</span>
+            </label>
+            <div class="row" style="gap:6px; justify-content:flex-end">
+              <button class="btn" id="bshare-cancel">キャンセル</button>
+              <button class="btn primary" id="bshare-save">保存</button>
+            </div>
           </div>
         </div>
       </div>
@@ -628,12 +653,15 @@ async function loadInitial() {
     LAST_SERVER_TIME = d.server_time;
     document.getElementById('board-title').textContent = ROOM.title;
     document.getElementById('board-viewport').style.background = ROOM.bg_color || '#fafafa';
-    // v1188 削除メニュー: 作成者 or admin のみ ⋯ を表示
+    // v1188 削除メニュー: 作成者 or admin のみ ⋯ を表示 / v1205 共有設定 は 作成者 のみ
     const myId   = state?.me?.id ?? 0;
     const myRole = state?.me?.role ?? '';
-    const canDelete = (Number(ROOM.creator_user_id) === Number(myId)) || myRole === 'admin';
+    const isCreator = Number(ROOM.creator_user_id) === Number(myId);
+    const canDelete = isCreator || myRole === 'admin';
     const moreWrap = document.getElementById('board-more-wrap');
     if (moreWrap) moreWrap.hidden = !canDelete;
+    const shareBtn = document.getElementById('board-share');
+    if (shareBtn) shareBtn.style.display = isCreator ? 'block' : 'none';
     highlightPalette();
     // v1104 初回カーソル
     const nowMs = Date.now();
@@ -1324,6 +1352,21 @@ function wireToolbar() {
     } catch (e) {
       toast('削除失敗: ' + e.message);
     }
+  });
+  // v1205 共有設定 (作成者 のみ)
+  document.getElementById('board-share')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    moreMenu.style.display = 'none';
+    openShareModal();
+  });
+  document.getElementById('bshare-cancel')?.addEventListener('click', () => closeShareModal());
+  document.getElementById('bshare-save')?.addEventListener('click', () => saveShareSettings());
+  document.querySelectorAll('input[name="bshare-vis"]').forEach(el => {
+    el.addEventListener('change', () => {
+      const isGroup = document.querySelector('input[name="bshare-vis"]:checked')?.value === 'group';
+      const wrap = document.getElementById('bshare-group-wrap');
+      if (wrap) wrap.style.display = isGroup ? 'block' : 'none';
+    });
   });
   // palette (デフォルト色)
   document.querySelectorAll('#board-palette .bpal').forEach(el => {
@@ -2476,6 +2519,62 @@ async function deleteArrow(aid) {
       });
     }
   } catch (e) { toast('矢印削除失敗: ' + e.message); }
+}
+
+// v1205 共有設定 モーダル
+async function openShareModal() {
+  if (!ROOM) return;
+  const modal = document.getElementById('board-share-modal');
+  if (!modal) return;
+  // 現在の visibility を radio に 反映
+  const cur = ROOM.visibility || 'lab';
+  document.querySelectorAll('input[name="bshare-vis"]').forEach(el => { el.checked = (el.value === cur); });
+  document.getElementById('bshare-group-wrap').style.display = (cur === 'group') ? 'block' : 'none';
+  // group ドロップダウン は 自分が入っている adhoc_groups を 埋める
+  const sel = document.getElementById('bshare-group');
+  sel.innerHTML = '<option value="">読み込み中…</option>';
+  try {
+    const d = await get('/api/groups');
+    const items = d.items || [];
+    if (!items.length) {
+      sel.innerHTML = '<option value="">(所属グループなし)</option>';
+      sel.disabled = true;
+    } else {
+      sel.innerHTML = items.map(g =>
+        `<option value="${g.id}" ${String(g.id) === String(ROOM.owner_group_id) ? 'selected' : ''}>${escapeHtml(g.title)}</option>`
+      ).join('');
+      sel.disabled = false;
+    }
+  } catch (_) {
+    sel.innerHTML = '<option value="">(取得失敗)</option>';
+  }
+  modal.style.display = 'flex';
+}
+function closeShareModal() {
+  const modal = document.getElementById('board-share-modal');
+  if (modal) modal.style.display = 'none';
+}
+async function saveShareSettings() {
+  if (!ROOM) return;
+  const vis = document.querySelector('input[name="bshare-vis"]:checked')?.value;
+  if (!vis) { toast('公開範囲を選んでね'); return; }
+  const body = { visibility: vis };
+  if (vis === 'group') {
+    const gid = parseInt(document.getElementById('bshare-group').value, 10);
+    if (!gid) { toast('グループを選んでね'); return; }
+    body.owner_group_id = gid;
+  }
+  try {
+    const r = await patch(`/api/board/rooms/${ROOM_ID}`, body);
+    if (r && r.room) {
+      ROOM = r.room;
+      const label = vis === 'lab' ? '🌏 全体' : vis === 'group' ? '👥 グループ' : '🔒 個人';
+      toast('公開範囲を変えたよ: ' + label);
+    }
+    closeShareModal();
+  } catch (e) {
+    toast('保存失敗: ' + e.message);
+  }
 }
 
 async function tryCreateArrow(fromId, toId) {

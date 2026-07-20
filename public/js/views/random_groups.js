@@ -342,16 +342,19 @@ async function onNotifyAll(reSend = false) {
   } catch (e) { toast('失敗: ' + e.message); }
 }
 
-// 「グループN」という名前で全グループを順番に作成。 1 つでも失敗したら
-// 進行状況を toast で報せつつ続行する。
+// v1205 中村さん要望「グループ1、2…だと分からないので、そのシャッフルのタイトルを付与」
+//   → #rg-title に入力があれば「◯◯ 1」「◯◯ 2」... に、 空欄なら 従来通り「グループN」。
 async function onBulkCreate() {
   if (!lastResult || !lastResult.length) { toast('まず分けてください'); return; }
   const n = lastResult.length;
-  if (!confirm(`グループ1〜グループ${n} の ${n} 個を一括作成します。よろしいですか?`)) return;
+  const base = (document.getElementById('rg-title')?.value || '').trim();
+  const titleFor = (i) => base ? `${base} ${i + 1}` : `グループ${i + 1}`;
+  const preview = base ? `${base} 1 〜 ${base} ${n}` : `グループ1 〜 グループ${n}`;
+  if (!confirm(`${preview} の ${n} 個を 一括作成 します。 よろしい?`)) return;
   let ok = 0;
   const errors = [];
   for (let i = 0; i < lastResult.length; i++) {
-    const title = `グループ${i + 1}`;
+    const title = titleFor(i);
     const memberIds = lastResult[i].map(m => m.id);
     try {
       await post('/api/groups', { title, member_ids: memberIds });
