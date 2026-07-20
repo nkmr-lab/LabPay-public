@@ -438,18 +438,22 @@ function wireCanvas() {
         return;
       }
     }
-    // v1188 マウス draw モード時は pointer 経路を完全にスキップ (pan にも 進まない)。
-    //   mouse handler (下 の mousedown/move/up) が 全て 処理 する。
-    if (MODE === 'draw' && e.pointerType === 'mouse') return;
-    // v1173 手書きモード: pointerdown で新規ストローク開始 (note/pan と分岐)
-    if (MODE === 'draw' && !e.target.closest('button, .bnote')) {
-      e.preventDefault();  // v1178 マウス drag → text-selection や dragstart を確実に抑止
+    // v1191 中村さん再報告「手書きできない」の 決定版 修正:
+    //   v1178 の mousedown 保険 + v1188 の pointerType=='mouse' skip 分岐 は 二重発火 と
+    //   誤解 の 温床 だった。 全 pointerType (mouse/pen/touch) を 単一の pointer 経路 で
+    //   処理する 単純設計 に 戻す + 「描画開始」を toast で 可視化 する。
+    if (MODE === 'draw') {
+      // ボタン系 (b-icon-btn, .bpal, .bnote 内部ボタン等) は 描画 の 起点 に しない
+      if (e.target.closest('button, .bnote, .bpal, input, select')) return;
+      e.preventDefault();
       const w = screenToWorld(e.clientX, e.clientY);
       CURRENT_STROKE = { points: [{ x: w.x, y: w.y }], color: PEN_COLOR, width: PEN_WIDTH };
       DRAG.mode = 'draw';
       DRAG.pointerId = e.pointerId;
       try { vp.setPointerCapture(e.pointerId); } catch (_) {}
       renderCurrentStroke();
+      // v1191 diagnostic: 中村さんが「効いてる/効いてない」を 見て 判別 できる
+      if (window.__board_debug !== false) toast(`✏️ 描画開始 (${e.pointerType})`, 900);
       return;
     }
     // v1173 消しゴムモード: pointerdown で SVG stroke path をタップしたら削除
@@ -549,8 +553,8 @@ function wireCanvas() {
     MY_CURSOR.x = w.x; MY_CURSOR.y = w.y;
     scheduleCursorPost();
     // v1173 手書き: 描画中は世界座標で点を追加、SVG に反映
-    // v1188 マウスは mouse 経路 に 委譲 (pointer 経路 は touch/pen のみ 走らせる)
-    if (DRAG.mode === 'draw' && CURRENT_STROKE && e.pointerType !== 'mouse') {
+    // v1191 pointerType 分岐 撤廃 (v1188 の mouse skip を 取消)
+    if (DRAG.mode === 'draw' && CURRENT_STROKE) {
       const last = CURRENT_STROKE.points[CURRENT_STROKE.points.length - 1];
       // 隣接点間の距離が最低 2px 以上あるときだけ追加 (点数節約)
       const dx = w.x - last.x, dy = w.y - last.y;
@@ -595,8 +599,8 @@ function wireCanvas() {
       if (DRAG.mode !== 'draw' && ACTIVE_POINTERS.size === 0) DRAG.mode = null;
     }
     // v1173 手書き完了: サーバ保存
-    // v1188 マウスは mouse 経路 に 委譲
-    if (DRAG.mode === 'draw' && CURRENT_STROKE && e.pointerType !== 'mouse') {
+    // v1191 pointerType 分岐 撤廃
+    if (DRAG.mode === 'draw' && CURRENT_STROKE) {
       try { vp.releasePointerCapture(e.pointerId); } catch (_) {}
       const stroke = CURRENT_STROKE;
       CURRENT_STROKE = null;
@@ -665,51 +669,10 @@ function wireCanvas() {
     zoomAtScreen(e.clientX, e.clientY, VIEW.scale * factor);
   }, { passive: false });
 
-  // v1178 中村さん報告「手書きできないねぇ」→ pointerdown がマウスで想定通り走らない
-  //   ケース (どの環境か不明、一部ブラウザで SVG overlay や user-select 絡み) を回避する
-  //   ため mousedown/move/up を描画モード限定で保険実装。 mode='draw' の時のみ動作、
-  //   ポインタイベントと二重発火する可能性はあるが、 CURRENT_STROKE の有無チェックで
-  //   二回目起動を弾く。
-  vp.addEventListener('mousedown', (e) => {
-    if (MODE !== 'draw') return;
-    if (e.target.closest('button, .bnote')) return;
-    if (CURRENT_STROKE) return;  // pointerdown で既に開始済み
-    e.preventDefault();
-    const w = screenToWorld(e.clientX, e.clientY);
-    CURRENT_STROKE = { points: [{ x: w.x, y: w.y }], color: PEN_COLOR, width: PEN_WIDTH };
-    DRAG.mode = 'draw';
-    renderCurrentStroke();
-  });
-  window.addEventListener('mousemove', (e) => {
-    if (DRAG.mode !== 'draw' || !CURRENT_STROKE) return;
-    const w = screenToWorld(e.clientX, e.clientY);
-    const last = CURRENT_STROKE.points[CURRENT_STROKE.points.length - 1];
-    const dx = w.x - last.x, dy = w.y - last.y;
-    if (dx * dx + dy * dy > 4) {
-      CURRENT_STROKE.points.push({ x: w.x, y: w.y });
-      renderCurrentStroke();
-    }
-  });
-  window.addEventListener('mouseup', async (e) => {
-    if (DRAG.mode !== 'draw' || !CURRENT_STROKE) return;
-    const stroke = CURRENT_STROKE;
-    CURRENT_STROKE = null;
-    DRAG.mode = null;
-    if (stroke.points.length < 2) { renderCurrentStroke(); return; }
-    try {
-      const r = await post(`/api/board/rooms/${ROOM_ID}/strokes`, {
-        points: stroke.points, color: stroke.color, width: stroke.width,
-      });
-      if (r && r.stroke) {
-        STROKE_MAP[r.stroke.id] = r.stroke;
-        STROKES = Object.values(STROKE_MAP);
-      }
-    } catch (err) {
-      toast('保存失敗: ' + err.message);
-    }
-    renderCurrentStroke();
-    renderStrokes();
-  });
+  // v1191 中村さん再報告「手書きできない」の 決定版 修正: v1178 の mousedown 保険 と
+  //   window mousemove/mouseup は 撤去。 pointer events 単独で 全ての 入力を 扱う (二重
+  //   発火 の 誤解を 排除)。 pointerType が mouse/pen/touch のどれでも 上の pointerdown/
+  //   move/up の 一本道 で 完結。
 }
 
 function zoomAtScreen(sx, sy, newScale) {
@@ -1614,6 +1577,11 @@ function setMode(m) {
     b.style.background = active ? '#7b3fa0' : '';
     b.style.color      = active ? '#fff'   : '';
   });
+  // v1191 diagnostic: モード切替 が 効いた ことを 中村さんが 目視 で 確認 できる
+  if (window.__board_debug !== false) {
+    const label = m === 'select' ? '🖱 選択' : m === 'draw' ? '✏️ 手書き' : m === 'arrow' ? '↗ 矢印' : '🩹 消しゴム';
+    toast(`モード: ${label}`, 900);
+  }
   const pen = document.getElementById('board-pen-group');
   if (pen) pen.style.display = (m === 'draw') ? 'flex' : 'none';
   const svg = document.getElementById('board-strokes-svg');
