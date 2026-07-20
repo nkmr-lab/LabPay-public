@@ -60,7 +60,15 @@ export async function renderBoardCanvas({ params }) {
   ROOM_ID = parseInt(params?.id, 10);
   if (!ROOM_ID) { navigate('/board'); return; }
   const app = document.getElementById('app');
-  app.innerHTML = shellHtml();
+  // v1194 中村さん報告「左右両端まで行かない」→ main#app の padding が 干渉している 疑い。
+  //   board-shell は position:fixed だが safety-first で document.body 直下 に 挿入
+  //   (前回残置分を掃除)。 app は 空に して SPA の期待 に 合わせる。
+  document.querySelectorAll('#board-shell').forEach(el => el.remove());
+  app.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = shellHtml();
+  const shell = wrap.firstElementChild;
+  document.body.appendChild(shell);
   // v1104 miro モードは画面いっぱいで使いたい (トップバー / タブバーを隠す)
   const topbar = document.getElementById('topbar');
   const tabs   = document.getElementById('tabs');
@@ -74,6 +82,8 @@ export async function renderBoardCanvas({ params }) {
   startPolling();
   LEAVE_HANDLER = () => {
     stopPolling();
+    // v1194 body 直下 に 移した shell を 掃除
+    document.querySelectorAll('#board-shell').forEach(el => el.remove());
     if (topbar) topbar.style.display = wasTopHidden  ? '' : '';
     if (tabs)   tabs.style.display   = wasTabsHidden ? '' : '';
     // display を消せば hidden 属性の元制御に戻る
@@ -86,6 +96,16 @@ export async function renderBoardCanvas({ params }) {
 function shellHtml() {
   return `
     <style>
+      /* v1194 board-shell を 確実 に フルスクリーン に (親要素 の 制約 を 全上書き) */
+      #board-shell {
+        position: fixed !important;
+        top: 0 !important; left: 0 !important;
+        right: 0 !important; bottom: 0 !important;
+        width: 100vw !important; height: 100vh !important;
+        margin: 0 !important; padding: 0 !important;
+        max-width: none !important; max-height: none !important;
+        box-sizing: border-box !important;
+      }
       #board-shell .bnote-body::-webkit-scrollbar,
       #board-shell .bnote-editta::-webkit-scrollbar { display:none }
       #board-shell .bnote-body,
@@ -1612,13 +1632,14 @@ function setMode(m) {
   }
   const pen = document.getElementById('board-pen-group');
   if (pen) pen.style.display = (m === 'draw') ? 'flex' : 'none';
+  // v1194 中村さん報告「arrow / erase で drag に なる、 falling-through」の 真犯人:
+  //   svg.style.pointerEvents='auto' に する と 20000×20000 の SVG box 全体 が click を
+  //   吸収し、 e.target が SVG 本体 = closest('.bnote') が null → arrow/erase 分岐 が
+  //   noteEl を 見つけられず fall-through していた。 修正: SVG 本体 は 常に none、
+  //   個別 path/line に pointer-events="stroke" を 付けた 部分 だけ が click を 拾う
+  //   (v1173 から の path 属性 は 既に そう なっている ので これで 十分)。
   const svg = document.getElementById('board-strokes-svg');
-  if (svg) {
-    // draw モードでは stroke SVG を pointer 透過に (下の viewport で drawing 開始できるように)
-    // erase モードでは pointer を受けて stroke タップ削除
-    // select モードでも stroke は当たり判定不要 (下の note/pan を邪魔しない)
-    svg.style.pointerEvents = (m === 'erase') ? 'auto' : 'none';
-  }
+  if (svg) svg.style.pointerEvents = 'none';
   const vp = document.getElementById('board-viewport');
   if (vp) {
     vp.style.cursor = m === 'draw' ? 'crosshair'
@@ -1740,11 +1761,10 @@ function renderArrows() {
   }
   // defs は 残して 本体を差替え
   svg.innerHTML = (defs ? defs.outerHTML : '') + parts.join('');
-  // 矢印 の pointerEvents: arrow / erase / select モード で 有効
-  //   arrow: タップ で 選択/削除 メニュー
-  //   erase: タップ で 削除
-  //   select: タップ で 編集 (label/color/style) — 便利なので有効
-  svg.style.pointerEvents = (MODE === 'draw') ? 'none' : 'auto';
+  // v1194 SVG 本体 は 常に none、 個別 line に pointer-events="stroke" を 付けた
+  //   透明ヒット領域 (14px 幅) が click を 拾う。 これで note を 覆う SVG が
+  //   click を 吸収して 「arrow/erase で drag に なる」問題 が 解消する。
+  svg.style.pointerEvents = 'none';
   // 各矢印線 に click ハンドラ
   svg.querySelectorAll('[data-arrow-id]').forEach(el => {
     el.addEventListener('click', (ev) => {
