@@ -50,6 +50,39 @@ let CURRENT_STROKE = null;  // 描画中: { points:[{x,y},...], color, width }
 let ARROWS = [];      // 全矢印
 let ARROW_MAP = {};   // id → arrow
 let ARROW_SOURCE_NOTE_ID = null;  // arrow モードで 1 本目タップ済 の source note id (2 本目タップで確定)
+// v1196 Undo スタック — 各アクション を {label, undo: async fn} で 積む、 ↶ ボタン / Ctrl+Z で pop
+const UNDO_STACK = [];
+const UNDO_LIMIT = 40;
+function pushUndo(label, undoFn) {
+  UNDO_STACK.push({ label, undo: undoFn });
+  if (UNDO_STACK.length > UNDO_LIMIT) UNDO_STACK.shift();
+  const btn = document.getElementById('board-undo');
+  if (btn) btn.disabled = UNDO_STACK.length === 0;
+}
+async function doUndo() {
+  const action = UNDO_STACK.pop();
+  const btn = document.getElementById('board-undo');
+  if (btn) btn.disabled = UNDO_STACK.length === 0;
+  if (!action) { toast('取り消せる操作 が ないよ', 900); return; }
+  try {
+    await action.undo();
+    toast('↶ ' + action.label, 900);
+  } catch (e) {
+    toast('取消 失敗: ' + e.message);
+  }
+}
+function boardKeydown(ev) {
+  // 編集中 の textarea / input では Ctrl+Z が 効かなくなると 困る の で、 board-shell 内 の 入力欄 で は 通す
+  if (!document.getElementById('board-shell')) return;
+  const t = ev.target;
+  const tag = t?.tagName;
+  if (tag === 'TEXTAREA' || tag === 'INPUT' || t?.isContentEditable) return;
+  const ctrl = ev.ctrlKey || ev.metaKey;
+  if (ctrl && !ev.shiftKey && (ev.key === 'z' || ev.key === 'Z')) {
+    ev.preventDefault();
+    doUndo();
+  }
+}
 // v1182 fb#492 スマホの 2 本指 pinch 拡大縮小用の追跡
 const ACTIVE_POINTERS = new Map();  // pointerId → {x, y} (touch のみ、 mouse は追跡しない)
 let PINCH_STATE = null;  // { d0, scale0 } / null なら pinch 中でない
@@ -87,6 +120,9 @@ export async function renderBoardCanvas({ params }) {
     stopPolling();
     // v1194 body 直下 に 移した shell + host を 掃除
     document.querySelectorAll('#board-shell, #board-host').forEach(el => el.remove());
+    // v1196 undo stack + keydown リスナー を 解放 (Board を 離れたら 有効 に しない)
+    UNDO_STACK.length = 0;
+    window.removeEventListener('keydown', boardKeydown);
     if (topbar) topbar.style.display = wasTopHidden  ? '' : '';
     if (tabs)   tabs.style.display   = wasTabsHidden ? '' : '';
     // display を消せば hidden 属性の元制御に戻る
@@ -154,6 +190,7 @@ function shellHtml() {
         <button class="b-icon-btn board-mode" data-mode="arrow"  title="矢印 (付箋 → 付箋)">↗</button>
         <button class="b-icon-btn board-mode" data-mode="erase"  title="消しゴム (ストローク/矢印 タップで削除)">🩹</button>
         <div class="b-sep"></div>
+        <button class="b-icon-btn" id="board-undo" title="取り消す (Ctrl+Z)" disabled>↶</button>
         <button class="b-icon-btn" id="board-add" title="ノートを追加">➕</button>
         <div id="board-import-wrap" style="position:relative">
           <button class="b-icon-btn" id="board-import" title="インポート">📥</button>
@@ -201,9 +238,10 @@ function shellHtml() {
       <div id="board-viewport" style="position:absolute; top:0; left:0; right:0; bottom:0; overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; background:#fafafa">
         <div id="board-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform">
           <!-- v1173 手書きストローク SVG (world 座標。 board-layer の transform に追随) -->
-          <svg id="board-strokes-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible"></svg>
-          <!-- v1189 note-to-note 矢印 SVG (strokes と 同じ座標系。 note の 上 に 出す ため z-index 高め) -->
-          <svg id="board-arrows-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible; z-index:5">
+          <!-- v1196 pointer-events:visiblePainted に して 個別 path の pointer-events="stroke" が 効くように -->
+          <svg id="board-strokes-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:visiblePainted; overflow:visible; z-index:1"></svg>
+          <!-- v1189 note-to-note 矢印 SVG (strokes と 同じ座標系) v1196: notes より下 (z-index:2), notes-container が 上 (10) で 掴める -->
+          <svg id="board-arrows-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:visiblePainted; overflow:visible; z-index:2">
             <defs>
               <marker id="board-arrow-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse" markerUnits="strokeWidth">
                 <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/>
@@ -213,8 +251,12 @@ function shellHtml() {
           <!-- v1192 中村さん報告「線が引けない」の 決定的 バグ 修正:
                従来 renderAll で layer.innerHTML = notesHtml していたため
                SVG (strokes / arrows) が 毎回 破棄されていた。 notes 専用の 別 container に
-               分離し、 SVG は layer 直下 に 残す。 z-index で notes を SVG より 上 に。 -->
-          <div id="board-notes-container" style="position:absolute; left:0; top:0; z-index:2"></div>
+               分離し、 SVG は layer 直下 に 残す。
+               v1196 中村さん再報告「矢印/消しゴム 効かない」→ SVG hit-test に 頼らず
+               z-index で notes を 最上位 に (z-index:10)、 note tap の 判定 を 確実に する。
+               arrow / stroke の hit test は 個別 line/path の pointer-events="stroke" と
+               svg pointer-events:visiblePainted で 拾う。 -->
+          <div id="board-notes-container" style="position:absolute; left:0; top:0; z-index:10"></div>
         </div>
         <!-- v1104 他人カーソルオーバーレイ (screen 座標、変形しないので上のレイヤ) -->
         <div id="board-cursors" style="position:absolute; inset:0; pointer-events:none; overflow:hidden"></div>
@@ -511,11 +553,11 @@ function wireCanvas() {
       const nEl0 = e.target.closest('.bnote');
       if (nEl0) {
         toast('消しゴムモード: ペンの線 or 矢印 をタップしてね', 1400);
-        updateDebug('erase:blocked-note');
+        updateDebug('erase:blocked-note', e.target.tagName);
         return;
       }
       // 空白タップ は pan させる (下の通常分岐に fall through)
-      updateDebug('erase:falling-through-to-pan');
+      updateDebug('erase:fall-thr', e.target.tagName + '#' + (e.target.id || '-'));
     }
     // v1189 矢印モード: ノートタップ → source, 2 本目ノートタップ → 矢印作成
     if (MODE === 'arrow') {
@@ -544,7 +586,7 @@ function wireCanvas() {
         ARROW_SOURCE_NOTE_ID = null;
         renderArrows();
       }
-      updateDebug('arrow:falling-through');
+      updateDebug('arrow:fall-thr', e.target.tagName + '#' + (e.target.id || '-'));
     }
     // 何に触れたか
     const noteEl   = e.target.closest('.bnote');
@@ -663,6 +705,14 @@ function wireCanvas() {
         if (r && r.stroke) {
           STROKE_MAP[r.stroke.id] = r.stroke;
           STROKES = Object.values(STROKE_MAP);
+          // v1196 undo: 直近ストロークを削除
+          const sid = r.stroke.id;
+          pushUndo('手書きを取消', async () => {
+            await del(`/api/board/strokes/${sid}`).catch(() => {});
+            delete STROKE_MAP[sid];
+            STROKES = Object.values(STROKE_MAP);
+            renderStrokes();
+          });
         }
       } catch (err) {
         toast('保存失敗: ' + err.message);
@@ -765,6 +815,9 @@ function wireToolbar() {
   });
   document.getElementById('board-pen-color').addEventListener('input', (e) => { PEN_COLOR = e.target.value; });
   document.getElementById('board-pen-width').addEventListener('change', (e) => { PEN_WIDTH = Number(e.target.value) || 2.5; });
+  // v1196 Undo
+  document.getElementById('board-undo')?.addEventListener('click', () => doUndo());
+  window.addEventListener('keydown', boardKeydown);
   setMode('select');
   document.getElementById('board-zoom-in').addEventListener('click', () => {
     const vp = document.getElementById('board-viewport');
@@ -982,6 +1035,14 @@ async function createNoteAtCenter() {
     NOTE_MAP[r.id] = r.note;
     NOTES = Object.values(NOTE_MAP);
     renderAll();
+    // v1196 undo: 追加したノートを削除
+    const nid = r.id;
+    pushUndo('ノート追加を取消', async () => {
+      await del(`/api/board/notes/${nid}`).catch(() => {});
+      delete NOTE_MAP[nid];
+      NOTES = Object.values(NOTE_MAP);
+      renderAll();
+    });
   } catch (e) { toast('追加失敗: ' + e.message); }
 }
 
@@ -1635,14 +1696,10 @@ function setMode(m) {
   }
   const pen = document.getElementById('board-pen-group');
   if (pen) pen.style.display = (m === 'draw') ? 'flex' : 'none';
-  // v1194 中村さん報告「arrow / erase で drag に なる、 falling-through」の 真犯人:
-  //   svg.style.pointerEvents='auto' に する と 20000×20000 の SVG box 全体 が click を
-  //   吸収し、 e.target が SVG 本体 = closest('.bnote') が null → arrow/erase 分岐 が
-  //   noteEl を 見つけられず fall-through していた。 修正: SVG 本体 は 常に none、
-  //   個別 path/line に pointer-events="stroke" を 付けた 部分 だけ が click を 拾う
-  //   (v1173 から の path 属性 は 既に そう なっている ので これで 十分)。
+  // v1196 SVG root は visiblePainted 固定 (子の pointer-events="stroke" が 効く条件)。
+  //   note は z-index:10 で SVG より上、 note 上 の click は 必ず note に 届く。
   const svg = document.getElementById('board-strokes-svg');
-  if (svg) svg.style.pointerEvents = 'none';
+  if (svg) svg.style.pointerEvents = 'visiblePainted';
   const vp = document.getElementById('board-viewport');
   if (vp) {
     vp.style.cursor = m === 'draw' ? 'crosshair'
@@ -1672,7 +1729,7 @@ function renderStrokes() {
 }
 
 // v1192 diagnostic
-function updateDebug(lastEvent) {
+function updateDebug(lastEvent, targetTag) {
   const m = document.getElementById('board-dbg-mode');
   const d = document.getElementById('board-dbg-drag');
   const p = document.getElementById('board-dbg-pts');
@@ -1680,7 +1737,7 @@ function updateDebug(lastEvent) {
   if (m) m.textContent = 'MODE=' + MODE;
   if (d) d.textContent = 'DRAG=' + (DRAG.mode || '_');
   if (p) p.textContent = 'pts=' + (CURRENT_STROKE ? CURRENT_STROKE.points.length : 0);
-  if (l && lastEvent) l.textContent = 'last=' + lastEvent;
+  if (l && lastEvent) l.textContent = 'last=' + lastEvent + (targetTag ? '|t=' + targetTag : '');
 }
 
 function renderCurrentStroke() {
@@ -1709,10 +1766,26 @@ function renderCurrentStroke() {
 }
 
 async function deleteStroke(sid) {
+  const backup = STROKE_MAP[sid];
   await del(`/api/board/strokes/${sid}`);
   delete STROKE_MAP[sid];
   STROKES = Object.values(STROKE_MAP);
   renderStrokes();
+  // v1196 undo: 消したストロークを再作成
+  if (backup && backup.points) {
+    pushUndo('線の削除を取消', async () => {
+      try {
+        const r = await post(`/api/board/rooms/${ROOM_ID}/strokes`, {
+          points: backup.points, color: backup.color, width: backup.width,
+        });
+        if (r && r.stroke) {
+          STROKE_MAP[r.stroke.id] = r.stroke;
+          STROKES = Object.values(STROKE_MAP);
+          renderStrokes();
+        }
+      } catch (e) { toast('再作成失敗: ' + e.message); }
+    });
+  }
 }
 
 // ─── v1189 note-to-note 矢印 ───────────────────────────────────
@@ -1764,10 +1837,9 @@ function renderArrows() {
   }
   // defs は 残して 本体を差替え
   svg.innerHTML = (defs ? defs.outerHTML : '') + parts.join('');
-  // v1194 SVG 本体 は 常に none、 個別 line に pointer-events="stroke" を 付けた
-  //   透明ヒット領域 (14px 幅) が click を 拾う。 これで note を 覆う SVG が
-  //   click を 吸収して 「arrow/erase で drag に なる」問題 が 解消する。
-  svg.style.pointerEvents = 'none';
+  // v1196 visiblePainted に して 個別 line の pointer-events="stroke" 透明ヒット (14px) が 効く。
+  //   note は z-index:10 で SVG (z-index:2) の 上、 note を 掴む 操作 に 干渉 しない。
+  svg.style.pointerEvents = 'visiblePainted';
   // 各矢印線 に click ハンドラ
   svg.querySelectorAll('[data-arrow-id]').forEach(el => {
     el.addEventListener('click', (ev) => {
@@ -1800,11 +1872,28 @@ async function patchArrow(aid, body) {
   } catch (e) { toast('矢印更新失敗: ' + e.message); }
 }
 async function deleteArrow(aid) {
+  const backup = ARROW_MAP[aid];
   try {
     await del(`/api/board/arrows/${aid}`);
     delete ARROW_MAP[aid];
     ARROWS = Object.values(ARROW_MAP);
     renderArrows();
+    // v1196 undo: 消した矢印を再作成
+    if (backup && backup.from_note_id && backup.to_note_id) {
+      pushUndo('矢印の削除を取消', async () => {
+        try {
+          const r = await post(`/api/board/rooms/${ROOM_ID}/arrows`, {
+            from_note_id: backup.from_note_id, to_note_id: backup.to_note_id,
+            color: backup.color, style: backup.style, label: backup.label,
+          });
+          if (r && r.arrow) {
+            ARROW_MAP[r.arrow.id] = r.arrow;
+            ARROWS = Object.values(ARROW_MAP);
+            renderArrows();
+          }
+        } catch (e) { toast('再作成失敗: ' + e.message); }
+      });
+    }
   } catch (e) { toast('矢印削除失敗: ' + e.message); }
 }
 
@@ -1815,10 +1904,20 @@ async function tryCreateArrow(fromId, toId) {
       from_note_id: fromId, to_note_id: toId,
     });
     if (r && r.arrow) {
+      const wasNew = !r.existed;
       ARROW_MAP[r.arrow.id] = r.arrow;
       ARROWS = Object.values(ARROW_MAP);
       renderArrows();
       toast(r.existed ? '既にある矢印を選択' : '矢印を追加');
+      if (wasNew) {
+        const aid = r.arrow.id;
+        pushUndo('矢印を取消', async () => {
+          await del(`/api/board/arrows/${aid}`).catch(() => {});
+          delete ARROW_MAP[aid];
+          ARROWS = Object.values(ARROW_MAP);
+          renderArrows();
+        });
+      }
     }
   } catch (e) { toast('矢印作成失敗: ' + e.message); }
 }
