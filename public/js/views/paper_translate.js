@@ -795,7 +795,9 @@ function _renderPaperTabBar(d, currentKind) {
   const fullTab = tabHtml('📑 全訳', currentKind === 'full',
     fullRef ? `#/${escapeHtml(fullRef.url_slug)}/r/${escapeHtml(fullRef.share_token)}` : null,
     'pt-make-full', canCreateFull);
-  return `<div class="row" style="gap:4px; margin-top:6px; border-bottom:2px solid #7b3fa0; padding-bottom:0">${summaryTab}${fullTab}</div>`;
+  // v1217 中村さん指摘「タブ 表示 が おかしい」→ .row は 子要素 を flex:1 で 引き伸ばす CSS が あり
+  //   タブ が 巨大化 していた。 単純 な display:flex で 幅 を 子要素 の 実サイズ に。
+  return `<div style="display:flex; gap:4px; margin-top:6px; border-bottom:2px solid #7b3fa0; padding-bottom:0; flex-wrap:wrap">${summaryTab}${fullTab}</div>`;
 }
 
 // 「📑 全訳を作る」ボタンのクリックハンドラ。 paintResult 後に bind。
@@ -822,18 +824,21 @@ async function bindMakeFullTranslate(d) {
       <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px">
         <input type="checkbox" id="mft-auto-share"> 🌐 完了と同時に公開 ON
       </label>`;
+    // v1217 中村さん報告「キャンセルが押せない」の 原因: openModal の onClick は
+    //   (api) を 受け取る 契約 だが (close) と 誤解し 呼ぶと api() = TypeError で 沈黙。
+    //   primary: true も 効かない (kind: 'primary' が 正解)。 両方 修正。
     openModal({
       title: '📑 全訳を作る',
       bodyHtml: html,
       buttons: [
-        { label: 'キャンセル', onClick: (close) => close() },
-        { label: '開始', primary: true, onClick: async (close) => {
+        { label: 'キャンセル', kind: 'btn', onClick: (m) => m.close() },
+        { label: '開始', kind: 'primary', onClick: async (m) => {
           const direction = document.getElementById('mft-dir')?.value || 'en2ja';
           const model     = document.getElementById('mft-model')?.value || 'gpt-5';
           const auto_share = !!document.getElementById('mft-auto-share')?.checked;
           try {
             const j = await post(`/api/ai/paper_full_translate/from_summary/${d.id}`, { direction, model, auto_share });
-            close();
+            m.close();
             toast('📑 全訳を開始しました');
             if (j?.share_token) location.hash = '#/paper-translate-full/r/' + encodeURIComponent(j.share_token);
           } catch (e) { toast('失敗: ' + (e?.message || e)); }
