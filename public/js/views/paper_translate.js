@@ -46,6 +46,29 @@ export async function renderPaperTranslate() {
     </div>
     <details class="card" id="pt-form">
       <summary style="cursor:pointer; font-weight:600; padding:4px 0; user-select:none">➕ 新しい論文要約を依頼</summary>
+      <!-- v1221 中村さん要望「同時依頼 チェック は 依頼ボタン すぐ下 に、 default ON、
+           モデル 額 は チェック 有無 で 切替、 共有 も default ON、 ラベル を 共有チェック に」 -->
+      <fieldset class="field" style="border:1px dashed #7b3fa0; border-radius:6px; padding:8px; margin:8px 0; background:#faf5ff">
+        <legend style="font-size:12px; color:#4a106d; font-weight:600">📑📑 同時 依頼</legend>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600">
+          <input type="checkbox" id="pt-also-full" checked>
+          要約 と 全訳 を 同時に 依頼 する (お得!)
+        </label>
+        <div id="pt-also-full-opts" style="margin-top:6px">
+          <label class="field" style="margin:4px 0">
+            <span class="lbl" style="font-size:11px">全訳 の 翻訳方向</span>
+            <select id="pt-ft-direction" style="font-size:12px">
+              <option value="en2ja" selected>英語 → 日本語 (E→J)</option>
+              <option value="ja2en">日本語 → 英語 (J→E、 5x 料金)</option>
+            </select>
+          </label>
+          <label class="field" style="margin:4px 0">
+            <span class="lbl" style="font-size:11px">全訳モデル</span>
+            <select id="pt-ft-model" style="font-size:12px"></select>
+            <div class="hint-sm" id="pt-ft-cost-info" style="font-size:11px; margin-top:2px"></div>
+          </label>
+        </div>
+      </fieldset>
       <p class="hint" style="font-size:13px; margin:8px 0">
         論文 PDF をアップすると、全体要約 → RQ/仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) →
         今後の課題 → 落合メソッドまとめという順番で構造化して返します。全体 1500-2500 字 (≒ 3-5 分で読める分量)。
@@ -62,38 +85,17 @@ export async function renderPaperTranslate() {
         <input type="file" id="pt-file" accept="application/pdf,.pdf">
         <div class="hint-sm" id="pt-file-status" style="margin-top:4px"></div>
       </label>
-      <!-- v916 共有=半額割引をもっと目立たせる。チェックボックスに「ON で半額!」を直書き。 -->
+      <!-- v916/v1221 共有=半額割引 (default ON) -->
       <div style="background:linear-gradient(135deg, #dcfce7, #bbf7d0); border:2px solid #22c55e; border-radius:10px; padding:14px 16px; margin:8px 0; box-shadow:0 2px 6px rgba(34,197,94,0.15)">
         <label style="display:flex; align-items:center; gap:10px; cursor:pointer">
-          <input type="checkbox" id="pt-auto-share" style="width:20px; height:20px; accent-color:#16a34a; cursor:pointer">
-          <span style="font-size:16px; font-weight:700; color:#14532d">🎁 チェック ON で半額になります!</span>
+          <input type="checkbox" id="pt-auto-share" checked style="width:20px; height:20px; accent-color:#16a34a; cursor:pointer">
+          <span style="font-size:16px; font-weight:700; color:#14532d">🎁 共有チェック ON で半額になります!</span>
         </label>
         <div style="font-size:12px; color:#166534; margin-top:8px; line-height:1.6">
           完了と同時に公開 ON にする (= みんなの検索に載せる)。研究室全体で共有すると誰かの参考になる資産なので、共有なら半額割引。<br>
           あとから公開 ON にすると半額分返金 / 公開 OFF に戻すと半額割引分追加課金されます。
         </div>
       </div>
-      <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px; margin-top:4px">
-        <legend style="font-size:12px; color:#6b7280">📑📑 同時に全訳も走らせる (任意)</legend>
-        <label style="display:flex; align-items:center; gap:6px; font-size:13px">
-          <input type="checkbox" id="pt-also-full">
-          全訳 (章ごと + back-translation) も一緒に開始
-        </label>
-        <div id="pt-also-full-opts" style="margin-top:6px; display:none">
-          <label class="field" style="margin:4px 0">
-            <span class="lbl" style="font-size:11px">方向</span>
-            <select id="pt-ft-direction" style="font-size:12px">
-              <option value="en2ja" selected>英→日</option>
-              <option value="ja2en">日→英 (5x)</option>
-            </select>
-          </label>
-          <label class="field" style="margin:4px 0">
-            <span class="lbl" style="font-size:11px">全訳モデル</span>
-            <select id="pt-ft-model" style="font-size:12px"></select>
-            <div class="hint-sm" id="pt-ft-cost-info" style="font-size:11px; margin-top:2px"></div>
-          </label>
-        </div>
-      </fieldset>
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="pt-go" class="primary" disabled>📑 要約を作る</button>
       </div>
@@ -267,7 +269,7 @@ function updateModelInfo(d) {
   refresh();
 }
 
-// v796 #398 全訳オプションのセットアップ
+// v796 #398 全訳オプションのセットアップ / v1221 default ON なので 初期 load 済ませる + 合計 表示
 let ftSettingsCache = null;
 async function setupAlsoFullTranslate() {
   const toggle = document.getElementById('pt-also-full');
@@ -276,19 +278,23 @@ async function setupAlsoFullTranslate() {
   const modSel = document.getElementById('pt-ft-model');
   const info   = document.getElementById('pt-ft-cost-info');
   if (!toggle) return;
-  toggle.addEventListener('change', async () => {
-    opts.style.display = toggle.checked ? '' : 'none';
-    if (toggle.checked && !ftSettingsCache) {
+  const loadAndBuild = async () => {
+    if (!ftSettingsCache) {
       try { ftSettingsCache = await get('/api/ai/paper_full_translate'); }
       catch (e) { toast('全訳設定読込失敗: ' + e.message); return; }
-      rebuildFtModels();
     }
+    rebuildFtModels();
+    refreshTopCombinedCost();
+  };
+  toggle.addEventListener('change', async () => {
+    opts.style.display = toggle.checked ? '' : 'none';
+    if (toggle.checked) await loadAndBuild();
+    else refreshTopCombinedCost();
   });
   function rebuildFtModels() {
     if (!ftSettingsCache) return;
     const models = dirSel.value === 'ja2en' ? ftSettingsCache.models_ja2en : ftSettingsCache.models_en2ja;
     const def = ftSettingsCache.default_model || Object.keys(models)[0];
-    // v916 「共有なら Xpt」も各 option に明記
     modSel.innerHTML = Object.entries(models).map(([m, pt]) =>
       `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)</option>`).join('');
     refreshCost();
@@ -298,16 +304,55 @@ async function setupAlsoFullTranslate() {
     const models = dirSel.value === 'ja2en' ? ftSettingsCache.models_ja2en : ftSettingsCache.models_en2ja;
     const m = modSel.value;
     const base = models[m] || 0;
-    // v914 同じ auto_share チェックボックスを要約と全訳の両方に適用、共有=半額
     const shared = !!document.getElementById('pt-auto-share')?.checked;
     const pt = shared ? Math.floor(base / 2) : base;
     info.innerHTML = `全訳 ${pt}pt` +
       (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
               : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
+    refreshTopCombinedCost();
   }
   dirSel.addEventListener('change', rebuildFtModels);
   modSel.addEventListener('change', refreshCost);
-  document.getElementById('pt-auto-share')?.addEventListener('change', refreshCost);
+  document.getElementById('pt-auto-share')?.addEventListener('change', () => { refreshCost(); refreshTopCombinedCost(); });
+  document.getElementById('pt-model')?.addEventListener('change', refreshTopCombinedCost);
+  // 初期 (default ON) で 全訳 モデル を 読み込む
+  if (toggle.checked) loadAndBuild();
+}
+
+// v1221 モデル 額 は 同時依頼 の チェック 状態 で 「合計」表示 を 切替
+function refreshTopCombinedCost() {
+  const info = document.getElementById('pt-model-info');
+  if (!info) return;
+  const sumSel = document.getElementById('pt-model');
+  const sumBase = _sumModelBaseCost(sumSel?.value);
+  if (sumBase === null) return;   // 呼び出し 元 が すでに 上書き 済 (loadHistory 側)
+  const shared = !!document.getElementById('pt-auto-share')?.checked;
+  const sumPt = shared ? Math.floor(sumBase / 2) : sumBase;
+  const alsoFull = !!document.getElementById('pt-also-full')?.checked;
+  let ftBase = 0;
+  if (alsoFull && ftSettingsCache) {
+    const dir = document.getElementById('pt-ft-direction')?.value || 'en2ja';
+    const models = dir === 'ja2en' ? ftSettingsCache.models_ja2en : ftSettingsCache.models_en2ja;
+    ftBase = models[document.getElementById('pt-ft-model')?.value] || 0;
+  }
+  const ftPt = shared ? Math.floor(ftBase / 2) : ftBase;
+  if (alsoFull && ftBase > 0) {
+    info.innerHTML = `要約 ${sumPt}pt + 全訳 ${ftPt}pt = <b style="color:#4a106d">合計 ${sumPt + ftPt}pt</b>` +
+      (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : '');
+  } else {
+    info.innerHTML = `要約 ${sumPt}pt` +
+      (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : ' <span style="color:#6b7280">(基本額)</span>');
+  }
+}
+// 要約 モデル の 基本額 は loadHistory で option に 埋め込まれる。 select 側 の 値 だけ から は 引けない ので
+// select の 現在 option の text から 「NN pt」を 抽出 する 簡易 実装。
+function _sumModelBaseCost(modelVal) {
+  const sel = document.getElementById('pt-model');
+  if (!sel) return null;
+  const opt = sel.querySelector(`option[value="${CSS.escape(modelVal || '')}"]`);
+  if (!opt) return null;
+  const m = /(\d+)\s*pt/.exec(opt.textContent || '');
+  return m ? Number(m[1]) : null;
 }
 
 async function go() {

@@ -27,6 +27,21 @@ export async function renderPaperTranslateFull() {
     </div>
     <details class="card" id="pft-form">
       <summary style="cursor:pointer; font-weight:600; padding:4px 0; user-select:none">➕ 新しい全訳を依頼</summary>
+      <!-- v1221 中村さん要望「同時依頼 チェック は 依頼ボタン すぐ下 に、 default ON、 モデル 額 は チェック 有無 で 切替」 -->
+      <fieldset class="field" style="border:1px dashed #7b3fa0; border-radius:6px; padding:8px; margin:8px 0; background:#faf5ff">
+        <legend style="font-size:12px; color:#4a106d; font-weight:600">📑📑 同時 依頼</legend>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600">
+          <input type="checkbox" id="pft-also-summary" checked>
+          全訳 と 要約 を 同時に 依頼 する (お得!)
+        </label>
+        <div id="pft-also-summary-opts" style="margin-top:6px">
+          <label class="field" style="margin:4px 0">
+            <span class="lbl" style="font-size:11px">要約モデル</span>
+            <select id="pft-sum-model" style="font-size:12px"></select>
+            <div class="hint-sm" id="pft-sum-cost-info" style="font-size:11px; margin-top:2px"></div>
+          </label>
+        </div>
+      </fieldset>
       <label class="field" style="margin-top:8px">
         <span class="lbl">🌐 翻訳方向</span>
         <select id="pft-direction">
@@ -44,32 +59,17 @@ export async function renderPaperTranslateFull() {
         <input type="file" id="pft-file" accept="application/pdf,.pdf">
         <div class="hint-sm" id="pft-file-status" style="margin-top:4px"></div>
       </label>
-      <!-- v916 共有=半額割引をもっと目立たせる。チェックボックスに「ON で半額!」を直書き。 -->
+      <!-- v916/v1221 共有=半額割引 (default ON) -->
       <div style="background:linear-gradient(135deg, #dcfce7, #bbf7d0); border:2px solid #22c55e; border-radius:10px; padding:14px 16px; margin:8px 0; box-shadow:0 2px 6px rgba(34,197,94,0.15)">
         <label style="display:flex; align-items:center; gap:10px; cursor:pointer">
-          <input type="checkbox" id="pft-auto-share" style="width:20px; height:20px; accent-color:#16a34a; cursor:pointer">
-          <span style="font-size:16px; font-weight:700; color:#14532d">🎁 チェック ON で半額になります!</span>
+          <input type="checkbox" id="pft-auto-share" checked style="width:20px; height:20px; accent-color:#16a34a; cursor:pointer">
+          <span style="font-size:16px; font-weight:700; color:#14532d">🎁 共有チェック ON で半額になります!</span>
         </label>
         <div style="font-size:12px; color:#166534; margin-top:8px; line-height:1.6">
           完了と同時に公開 ON にする (= みんなの検索に載せる)。研究室全体で共有すると誰かの参考になる資産なので、共有なら半額割引。<br>
           あとから公開 ON にすると半額分返金 / 公開 OFF に戻すと半額割引分追加課金されます。
         </div>
       </div>
-      <!-- v798 同時に要約も走らせるオプション -->
-      <fieldset class="field" style="border:1px dashed var(--line); border-radius:6px; padding:8px; margin-top:4px">
-        <legend style="font-size:12px; color:#6b7280">📑📑 同時に要約も走らせる (任意)</legend>
-        <label style="display:flex; align-items:center; gap:6px; font-size:13px">
-          <input type="checkbox" id="pft-also-summary">
-          要約 (落合メソッド + 図表抽出) も一緒に開始
-        </label>
-        <div id="pft-also-summary-opts" style="margin-top:6px; display:none">
-          <label class="field" style="margin:4px 0">
-            <span class="lbl" style="font-size:11px">要約モデル</span>
-            <select id="pft-sum-model" style="font-size:12px"></select>
-            <div class="hint-sm" id="pft-sum-cost-info" style="font-size:11px; margin-top:2px"></div>
-          </label>
-        </div>
-      </fieldset>
       <div class="row" style="gap:6px; justify-content:flex-end">
         <button id="pft-go" class="primary" disabled>📑 全訳開始</button>
       </div>
@@ -236,12 +236,26 @@ function bindEvents() {
     // v914 共有で半額割引
     const shared = !!document.getElementById('pft-auto-share')?.checked;
     const pt = shared ? Math.floor(base / 2) : base;
-    if (info) {
-      info.innerHTML = `選択中: ${escapeHtml(m)} ・ ${pt}pt (${dir.value === 'ja2en' ? '日→英' : '英→日'})` +
-        (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
-                : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
+    // v1221 同時 要約 も 走らせる 場合 は 合計 を 出す
+    const alsoSum = !!document.getElementById('pft-also-summary')?.checked;
+    let sumPt = 0;
+    if (alsoSum && summarySettingsCache) {
+      const sModels = summarySettingsCache.models || {};
+      const sBase = sModels[document.getElementById('pft-sum-model')?.value] || 0;
+      sumPt = shared ? Math.floor(sBase / 2) : sBase;
     }
-    btn.textContent = `📑 全訳開始 (${pt}pt)`;
+    if (info) {
+      const dirLabel = dir.value === 'ja2en' ? '日本語→英語' : '英語→日本語';
+      if (alsoSum && sumPt > 0) {
+        info.innerHTML = `全訳 ${pt}pt + 要約 ${sumPt}pt = <b style="color:#4a106d">合計 ${pt + sumPt}pt</b> (${dirLabel})` +
+          (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : '');
+      } else {
+        info.innerHTML = `選択中: ${escapeHtml(m)} ・ ${pt}pt (${dirLabel})` +
+          (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
+                  : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
+      }
+    }
+    btn.textContent = alsoSum && sumPt > 0 ? `📑 全訳+要約 開始 (${pt + sumPt}pt)` : `📑 全訳開始 (${pt}pt)`;
   }
   dir?.addEventListener('change', rebuildModelOptions);
   sel?.addEventListener('change', refreshCost);
@@ -249,30 +263,34 @@ function bindEvents() {
   btn?.addEventListener('click', go);
   if (settings) rebuildModelOptions();
   // v798 同時に要約も走らせるオプション
-  setupAlsoSummary();
+  setupAlsoSummary(refreshCost);
 }
 
-// v798 同時要約オプションのセットアップ
+// v798/v1221 同時要約オプションのセットアップ (default ON なので 初期 load 済ませる + 合計 更新 コールバック)
 let summarySettingsCache = null;
-async function setupAlsoSummary() {
+async function setupAlsoSummary(onCostChange) {
   const toggle = document.getElementById('pft-also-summary');
   const opts   = document.getElementById('pft-also-summary-opts');
   const modSel = document.getElementById('pft-sum-model');
   const info   = document.getElementById('pft-sum-cost-info');
   if (!toggle) return;
-  toggle.addEventListener('change', async () => {
-    opts.style.display = toggle.checked ? '' : 'none';
-    if (toggle.checked && !summarySettingsCache) {
+  const loadAndBuild = async () => {
+    if (!summarySettingsCache) {
       try { summarySettingsCache = await get('/api/ai/paper_translate'); }
       catch (e) { toast('要約設定読込失敗: ' + e.message); return; }
-      rebuildSummaryModels();
     }
+    rebuildSummaryModels();
+    if (typeof onCostChange === 'function') onCostChange();
+  };
+  toggle.addEventListener('change', async () => {
+    opts.style.display = toggle.checked ? '' : 'none';
+    if (toggle.checked) await loadAndBuild();
+    else if (typeof onCostChange === 'function') onCostChange();
   });
   function rebuildSummaryModels() {
     if (!summarySettingsCache) return;
     const models = summarySettingsCache.models || {};
     const def = summarySettingsCache.default_model || Object.keys(models)[0];
-    // v916 選択肢に「共有なら Xpt」を明記
     modSel.innerHTML = Object.entries(models).map(([m, pt]) =>
       `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)</option>`).join('');
     refreshCost();
@@ -282,15 +300,17 @@ async function setupAlsoSummary() {
     const models = summarySettingsCache.models || {};
     const m = modSel.value;
     const base = models[m] || 0;
-    // v914 同じ auto_share チェックボックスを全訳と要約の両方に適用、共有=半額
     const shared = !!document.getElementById('pft-auto-share')?.checked;
     const pt = shared ? Math.floor(base / 2) : base;
     info.innerHTML = `要約 ${pt}pt` +
       (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
               : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
+    if (typeof onCostChange === 'function') onCostChange();
   }
   modSel.addEventListener('change', refreshCost);
   document.getElementById('pft-auto-share')?.addEventListener('change', refreshCost);
+  // v1221 default ON なので 初期 load
+  if (toggle.checked) loadAndBuild();
 }
 
 async function loadSettings() {
