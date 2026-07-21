@@ -150,7 +150,15 @@ function applyFullscreenMode(topPart, prevHash) {
   } else if (fs && wasFs) {
     // fs 継続中 の 内部 遷移 → カウント +1、 ただし 我々 の history.back() 直後 は skip
     if (fsBackFlag) fsBackFlag = false;
-    else fsInnerNavCount++;
+    else {
+      // v1228 中村さん指摘「✕ で なかなか 戻らない」の 根本対策:
+      //   fullscreen 内 の nav でも 「別 の topPart への 遷移 (兄弟 アプリ 移動、 例: paper-summary → paper-translate-full)」
+      //   の 時 は カウント しない。 count は 「同じ アプリ の 中 で 深く 潜る (list → detail 等)」 の 時 だけ 積む。
+      //   → 兄弟 アプリ 間 の 切替 は ✕ 一発 で entry へ 戻る、 同一 アプリ 内 の 潜り は 段階 back。
+      const prevTop = String(prevHash || '#/').replace(/^#\/?/, '').split(/[/?]/)[0] || '';
+      if (prevTop === topPart) fsInnerNavCount++;
+      else fsInnerNavCount = 0;
+    }
   }
   document.body.classList.toggle('app-fullscreen', fs);
   // 閉じる ✕ ボタンを動的に生成 / 撤去
