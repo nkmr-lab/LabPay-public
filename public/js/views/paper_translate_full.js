@@ -538,11 +538,12 @@ async function refresh(token) {
         <div class="meta" style="font-size:11px; margin-top:6px">
           ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at || '')}
         </div>
+        <!-- v1214 中村さん要望「1 つの論文を扱うので タブで切替 形式に」→ 要約/全訳 タブバー -->
+        ${renderFullCrossRefsAndCreate(d)}
         <!-- v1020 「一覧へ」廃止 (✕で戻れる)、要約へボタンも横並びに -->
         <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
           <button class="btn primary" id="pft-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
           ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を開く</a>` : ''}
-          ${renderFullCrossRefsAndCreate(d)}
           ${shareButton}
         </div>
       </div>
@@ -752,23 +753,40 @@ async function paint(d) {
   mountAuthorAvatars(document.getElementById('app'));
 }
 
-// v813 #406 cross_refs を「📄 要約へ」ボタンに簡素化 + #405 ペアの要約が無い場合は
-//   「📄 要約を作る」ボタンを出す (本人 + PDF 保存済 + status=done なとき)。
+// v813/v1214 cross_refs を「要約 / 全訳」の タブバー に 昇華 (中村さん要望
+//   「1 つの論文を 扱うので タブで 切り替える 形式にしたら 良いのかも」)。
+//   スラッグ は そのまま (URL は 個別)、 タブ UI で 相互リンク を 明示 する。
 function renderFullCrossRefsAndCreate(d) {
+  return _renderPaperTabBar(d, 'full');
+}
+// 共通 tab bar: 現在ページ を active、 反対側は (a) 存在すれば その share_token へ link、
+//   (b) 存在しないが 本人 + status=done + PDF あり なら 「+ 作る」ボタン、 (c) それ以外 は grey。
+function _renderPaperTabBar(d, currentKind) {
   const refs = Array.isArray(d.cross_refs) ? d.cross_refs : [];
   const myUid = Number(state.me?.id || 0);
   const isOwner = !!d.author_id && Number(d.author_id) === myUid;
-  const hasSummary = refs.some(x => x.kind === 'paper_translate');
-  const canCreate = isOwner && d.status === 'done' && !!d.pdf_path && !hasSummary;
-  if (!refs.length && !canCreate) return '';
-  // v1020 中村さん指摘 → 独立カード廃止、生ボタンHTMLだけ返す (呼び出し側の row に混ぜ込む)
-  const refBtns = refs.map(x => `
-    <a class="btn" href="#/${escapeHtml(x.url_slug)}/r/${escapeHtml(x.share_token)}" style="font-size:12px; padding:3px 10px; background:#e0f2fe; color:#0284c7; border-color:#7dd3fc">
-      ${x.kind === 'paper_translate' ? '📄 要約へ' : '📑 全訳へ'}
-    </a>`).join('');
-  const createBtn = canCreate ? `
-    <button class="btn" id="pft-make-summary" style="font-size:12px; padding:3px 10px; background:#e0f2fe; color:#0284c7; border-color:#7dd3fc">📄 要約を作る</button>` : '';
-  return refBtns + createBtn;
+  const summaryRef = refs.find(x => x.kind === 'paper_translate');
+  const fullRef    = refs.find(x => x.kind === 'paper_full_translation');
+  const canCreateSummary = isOwner && d.status === 'done' && !!d.pdf_path && !summaryRef;
+  const canCreateFull    = isOwner && d.status === 'done' && !!d.pdf_path && !fullRef;
+  const active = 'background:#7b3fa0; color:#fff; border:1px solid #7b3fa0; border-bottom:1px solid #7b3fa0';
+  const linked = 'background:#f9fafb; color:#374151; border:1px solid #d1d5db; text-decoration:none';
+  const create = 'background:#fff; color:#7b3fa0; border:1px dashed #7b3fa0';
+  const grey   = 'background:#f3f4f6; color:#9ca3af; border:1px solid #e5e7eb; opacity:0.7';
+  const base   = 'display:inline-block; font-size:13px; padding:6px 14px; border-radius:6px 6px 0 0';
+  const tabHtml = (label, isActive, href, createId, canCreate) => {
+    if (isActive) return `<span style="${base}; ${active}; font-weight:600">${label}</span>`;
+    if (href)     return `<a href="${href}" style="${base}; ${linked}">${label}</a>`;
+    if (canCreate) return `<button class="btn" id="${createId}" style="${base}; ${create}; cursor:pointer">＋ ${label} を 作る</button>`;
+    return `<span style="${base}; ${grey}">${label} (未作成)</span>`;
+  };
+  const summaryTab = tabHtml('📄 要約', currentKind === 'summary',
+    summaryRef ? `#/${escapeHtml(summaryRef.url_slug)}/r/${escapeHtml(summaryRef.share_token)}` : null,
+    'pft-make-summary', canCreateSummary);
+  const fullTab = tabHtml('📑 全訳', currentKind === 'full',
+    fullRef ? `#/${escapeHtml(fullRef.url_slug)}/r/${escapeHtml(fullRef.share_token)}` : null,
+    'pt-make-full', canCreateFull);
+  return `<div class="row" style="gap:4px; margin-top:6px; border-bottom:2px solid #7b3fa0; padding-bottom:0">${summaryTab}${fullTab}</div>`;
 }
 
 async function bindMakeSummary(d) {
