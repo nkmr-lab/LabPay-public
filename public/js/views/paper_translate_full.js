@@ -741,18 +741,20 @@ async function paint(d) {
   }
   // v813 #405 ペアの要約を作るボタン
   bindMakeSummary(d);
-  // v1224 キーワード が sync 抽出 で 空 の 場合、 sibling summary (cross_refs) から fetch して 補完
+  // v1224/v1225 キーワード: sibling summary が あれば その keywords を 優先 (中村さん指摘
+  //   「要約 と 全訳 で 表示 される キーワード 違う の 気持ち悪い」)。 summary は AI 構造化 の
+  //   r.keywords、 全訳 は Keywords 章 抽出 で 一致 しない ため、 sibling が あれば 上書きで 統一。
+  //   sibling 無し の 場合 のみ 全訳側 の chapters 抽出 (sync render で 既に 入っている) を 使う。
   const kwSlot = document.getElementById('pft-kw-slot');
-  if (kwSlot && !kwSlot.innerHTML.trim()) {
+  if (kwSlot) {
     const summaryRef = (d.cross_refs || []).find(x => x.kind === 'paper_translate');
     if (summaryRef && summaryRef.share_token) {
       (async () => {
         try {
           const sib = await get('/api/ai/paper_translate/r/' + encodeURIComponent(summaryRef.share_token));
           const sibKws = Array.isArray(sib?.result?.keywords) ? sib.result.keywords.filter(x => x && typeof x === 'string').slice(0, 20) : [];
-          if (sibKws.length && kwSlot && !kwSlot.innerHTML.trim()) {
+          if (sibKws.length && kwSlot) {
             kwSlot.innerHTML = renderKwCardHtml(sibKws);
-            // 新規 出た button に click 配線
             kwSlot.querySelectorAll('[data-pft-kw]').forEach(b => {
               b.addEventListener('click', (ev) => {
                 ev.preventDefault();
