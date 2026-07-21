@@ -4042,6 +4042,11 @@ const PAPER_FULL_TRANSLATE_SYSTEM_PROMPT_EN2JA = <<<'PROMPT'
    訳が終わったあと、全体ポリッシュで用語ブレを直す。
 5. **「論文では〜と述べている」などのメタ解説で包まない**。原文と同じ主張で直接訳す。
 6. 日本語の文中に不要な半角スペースを入れない (英数字 / 記号との境界は OK)。
+7. **PDF レイアウト由来の 不要要素 を 含めない**: ページ番号 (単独数字 / 「Page N of M」 / 「N ページ」)、
+   running header / running footer (毎ページ 繰り返される 論文タイトル・章名・会議名)、
+   透かし / 「Preprint」/ 「Draft」等 の 印刷用 マーカー、 line-number 付き PDF の 行番号 は
+   訳文 に 含めない (translation フィールド から 完全 除外)。 数式や 図表 の 「Fig. 2, p. 5」 など
+   本文中 の 参照 は そのまま 残す (単独 の ページ番号 だけ を 落とす)。
 
 # 出力 JSON スキーマ (これをそのまま返却)
 
@@ -4100,6 +4105,10 @@ to verify fidelity, then perform a final polish pass that:
    person where the original implies it.
 6. **GPT-ism removal**: scrub em-dashes "—" (replace with commas, parens, or rewrites), avoid
    over-using "moreover/furthermore", avoid "delve into / dive into / leverage" filler.
+7. **Exclude PDF layout artifacts**: do not include page numbers (standalone digits, "Page N of M",
+   "N ページ"), running headers/footers (paper title / section name / conference name repeated on
+   every page), watermarks ("Preprint", "Draft"), or line numbers from line-numbered PDFs. In-line
+   figure/page references like "Fig. 2, p. 5" stay — only drop the standalone page-number noise.
 
 # Output JSON schema (return this exact shape, JSON only — no markdown fences)
 

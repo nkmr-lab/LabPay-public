@@ -1025,17 +1025,33 @@ function renderAuthorCards(authors) {
     </div>`;
 }
 
+// v1226 中村さん指摘「全訳 に ページ番号 が 混じる ケース」対策 の 描画時 サニタイザ。
+//   PDF 由来 の 単独行 ページ番号 / 「Page N of M」/ 「N ページ」/ 章 の 末尾 空白 を 除去。
+//   段落 の 途中 に 現れる 数字 は 触らない (引用/数式/年号 で 混乱 する ので)。
+function sanitizeChapterTranslation(text) {
+  if (!text) return '';
+  let s = String(text);
+  // 単独行 の ページ番号 (1〜4 桁)
+  s = s.replace(/(^|\n)\s*\d{1,4}\s*(?=\n|$)/g, '\n');
+  // 「Page N (of M)?」/「p. N」/「N ページ」 単独行
+  s = s.replace(/(^|\n)\s*(?:Page|Pg\.?|p\.?|ページ|頁)\s*\d+(?:\s*(?:of|\/|・)?\s*\d+)?\s*(?=\n|$)/gi, '\n');
+  // 3 連 以上 の 空行 を 2 連 に 圧縮
+  s = s.replace(/\n{3,}/g, '\n\n');
+  return s.trim();
+}
+
 function renderChapter(ch, idx, direction) {
   const titleOrig = ch.chapter_title_original || '';
   const titleTrans = ch.chapter_title_translated || '';
   const samples = Array.isArray(ch.back_translation_samples) ? ch.back_translation_samples : [];
   const terms = Array.isArray(ch.key_terms) ? ch.key_terms : [];
+  const cleanedTranslation = sanitizeChapterTranslation(ch.translation || '');
   // v808 #399 章番号 (1, 2, ...) を出さない。元タイトルに既に「1.」「Chapter 1」「第1章」等
   //   が含まれてるケースが多く、二重表記で違和感があった。タイトルをそのまま出す。
   return `
     <div style="padding:10px 12px; border-left:3px solid var(--primary); background:#fafafa; border-radius:0 6px 6px 0">
       <div class="bold" style="font-size:14px; color:var(--primary)">${escapeHtml(titleTrans || '(無題)')} ${titleOrig ? `<span style="font-size:12px; color:#6b7280; font-weight:400">(${escapeHtml(titleOrig)})</span>` : ''}</div>
-      <div style="font-size:13.5px; line-height:1.85; margin-top:8px; white-space:pre-wrap">${escapeHtml(ch.translation || '')}</div>
+      <div style="font-size:13.5px; line-height:1.85; margin-top:8px; white-space:pre-wrap">${escapeHtml(cleanedTranslation)}</div>
       ${samples.length ? `
         <details style="margin-top:8px; background:#fff; padding:6px 10px; border-radius:6px">
           <summary style="cursor:pointer; font-size:12.5px; color:#0284c7; font-weight:600">🔁 back-translation チェック (${samples.length} 件)</summary>
