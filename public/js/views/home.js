@@ -672,6 +672,12 @@ export async function renderHome() {
         <h2 class="row-title">📑 論文要約 / 全訳 (新着)</h2>
         <a href="#/papers-recent" class="hint" style="margin-left:auto">すべて →</a>
       </div>
+      <!-- v1218 中村さん要望「新着 widget に 要約/全訳 の タブ を 設定して」→ 3 択 filter (すべて / 要約 / 全訳) -->
+      <div id="home-papers-recent-tabs" style="display:flex; gap:4px; margin-bottom:6px; font-size:12px">
+        <button class="btn hpr-tab" data-hpr-tab="all"     style="padding:2px 10px">すべて</button>
+        <button class="btn hpr-tab" data-hpr-tab="summary" style="padding:2px 10px">📄 要約</button>
+        <button class="btn hpr-tab" data-hpr-tab="full"    style="padding:2px 10px">📑 全訳</button>
+      </div>
       <div id="home-papers-recent" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
@@ -3330,24 +3336,61 @@ async function renderHomeNkmrAlbums() {
 
 // v809 論文要約 / 全訳 (公開 + 自分) の直近 10 件を時系列で表示。
 //   行タップで各結果ページ (paper-summary / paper-translate-full) へ。
+// v1218 中村さん要望「新着 widget に 要約/全訳 の タブ」→ 3 択 filter (all/summary/full)、 localStorage 永続
+const HPR_TAB_KEY = 'labpay-home-papers-recent-tab';
+function readHprTab() {
+  const v = localStorage.getItem(HPR_TAB_KEY);
+  return (v === 'summary' || v === 'full') ? v : 'all';
+}
+function writeHprTab(v) {
+  try { localStorage.setItem(HPR_TAB_KEY, v); } catch {}
+}
+
 async function renderHomePapersRecent() {
   const card = document.getElementById('home-papers-recent-card');
   const root = document.getElementById('home-papers-recent');
   if (!card || !root) return;
+  // タブ の active 見た目 と click bind (1 度だけ)
+  const tabsWrap = document.getElementById('home-papers-recent-tabs');
+  const curTab = readHprTab();
+  if (tabsWrap && !tabsWrap.dataset.bound) {
+    tabsWrap.dataset.bound = '1';
+    tabsWrap.querySelectorAll('.hpr-tab').forEach(b => {
+      b.addEventListener('click', () => {
+        writeHprTab(b.dataset.hprTab);
+        renderHomePapersRecent();
+      });
+    });
+  }
+  if (tabsWrap) {
+    tabsWrap.querySelectorAll('.hpr-tab').forEach(b => {
+      const active = b.dataset.hprTab === curTab;
+      b.style.background = active ? 'var(--primary)' : '';
+      b.style.color = active ? '#fff' : '';
+      b.style.fontWeight = active ? '600' : '';
+    });
+  }
   try {
-    const d = await get('/api/ai/paper_recent?limit=10');
-    const items = d.items || [];
+    const d = await get('/api/ai/paper_recent?limit=20');
+    let items = d.items || [];
+    // filter: 要約 だけ / 全訳 だけ
+    if (curTab === 'summary') items = items.filter(x => x.kind === 'summary');
+    else if (curTab === 'full') items = items.filter(x => x.kind === 'full');
     if (!items.length) {
       card.hidden = false;
-      root.innerHTML = '<div class="hint" style="font-size:12px">まだ 1 件もありません・ <a href="#/paper-summary">📑 要約</a> / <a href="#/paper-translate-full">📑 全訳</a> を試す</div>';
+      const emptyLabel = curTab === 'summary' ? '要約はまだありません' : curTab === 'full' ? '全訳はまだありません' : 'まだ 1 件もありません';
+      root.innerHTML = `<div class="hint" style="font-size:12px">${emptyLabel}・ <a href="#/paper-summary">📑 要約</a> / <a href="#/paper-translate-full">📑 全訳</a> を試す</div>`;
       return;
     }
     card.hidden = false;
-    // v1213 中村さん要望「要約 と 全訳 の 両方 ある paper は 1 行 で 両方 の タグ を 出す。 direction 表記 は 不要」
-    //   → papers_recent.js の groupByPaper を 動的 import して 束ね、 各 group を 1 行 で render。
-    const { groupByPaper } = await import('./papers_recent.js');
-    const groups = groupByPaper(items);
-    root.innerHTML = groups.map(g => renderPaperRecentRow(g.primary, g.variants)).join('');
+    // 「すべて」は 従来 通り 同一 PDF ペア を merge、 filter モード は 個別 に (merge しない = 選んだ kind の 全件 を そのまま)
+    if (curTab === 'all') {
+      const { groupByPaper } = await import('./papers_recent.js');
+      const groups = groupByPaper(items);
+      root.innerHTML = groups.slice(0, 10).map(g => renderPaperRecentRow(g.primary, g.variants)).join('');
+    } else {
+      root.innerHTML = items.slice(0, 10).map(it => renderPaperRecentRow(it, [it])).join('');
+    }
   } catch (_) { card.hidden = true; }
 }
 

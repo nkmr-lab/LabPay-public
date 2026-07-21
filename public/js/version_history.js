@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v1218', d: '2026-07-21', s: '📑 論文要約/全訳 新着 widget に 3 択 filter タブ を 追加 (中村さん要望「新着 widget に 要約/全訳 タブ を 設定して」)。 すべて / 📄 要約 / 📑 全訳 の 3 択、 現在選択 は 紫背景 で 強調、 localStorage で 永続。 「すべて」 は 従来通り 同一 PDF ペア を merge、 filter モード は 選んだ kind の 全件 を そのまま (merge しない)。 fetch limit を 10 → 20 に して filter 後の 件数 確保、 表示 は 上位 10 件 で 打ち切り。 sw.js v1218 bump。' },
   { v: 'v1217', d: '2026-07-21', s: '🐛 論文詳細 タブバー 2 件 修正 (中村さん報告)。 (1)「タブ 表示 が おかしい」 — .row クラス に > * flex:1 1 auto の CSS が あり タブ が 半分半分 に 引き伸ばされて 巨大化 していた。 単純な display:flex 直書き に 変更、 flex-wrap:wrap で スマホ 縦幅 でも 折り返し。 (2)「全訳/要約 を 作る を 押した 後 キャンセル が 押せない」 — openModal の button onClick は (api) を 受け取る 契約 だが (close) と 誤解 して close を 関数呼びして api() = TypeError で 沈黙。 更に primary: true フラグ は 効かず kind primary が 正解 だった (デフォ の btn クラス が 効いていた)。 両方 修正 (bindMakeFullTranslate + bindMakeSummary)。 sw.js v1217 bump。' },
   { v: 'v1216', d: '2026-07-21', s: '🏷 論文新着 の 要約・全訳 表示 を .tag クラス で 色付き pill に (中村さん要望「他 の タグ表記 と 同じ 感じ で 色 を 付けて」)。 要約=tag (primary 紫)、 全訳=tag ok (緑)、 両方=tag warn (橙)。 papers_recent + home widget 両方 修正。 sw.js v1216 bump。' },
   { v: 'v1215', d: '2026-07-21', s: '📑 新着 の レイアウト崩れ 修正 (中村さん指摘「レイアウト崩れまくり、 1 アイテム で 良い、 中に 要約・全訳 / 要約 / 全訳 の 情報 が 出れば OK、 切替 は 詳細 で」)。 v1213 で 2 つの タグ を chip link にして いたが、 タイル <a> の 中に <a> を ネスト していた ため HTML 無効 で 崩れ ていた。 修正: プレーンテキスト タグ (「要約・全訳」/「要約」/「全訳」) に 変更、 タイル 全体 は primary へ 直接 遷移、 反対側 の 切替 は 詳細ページ の タブバー (v1214) に 任せる。 papers_recent.js と home.js の renderPaperRecentRow 両方 修正。 sw.js v1215 bump。' },
