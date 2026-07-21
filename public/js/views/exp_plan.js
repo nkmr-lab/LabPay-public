@@ -4,7 +4,7 @@
 //     - タブで内容を両方チェックできるようにするのも手
 //     - 一覧に戻ると入力ページになってしまう (履歴を先に出したい)
 
-import { escapeHtml } from '../router.js';
+import { escapeHtml, resetFsInnerNav } from '../router.js';
 import { get, post, del } from '../api.js';
 import { toast, setAiContext } from '../app.js';
 import { renderChecklistBox, renderAskAiButton } from '../ai_checklist.js';   // v1141 + v1144
@@ -184,6 +184,8 @@ function statusStyle(s) {
 let _currentTab = 'student';
 
 export async function renderExpPlanDetail({ params }) {
+  // v1227 ✕ 一発 で 戻れる ように fsInnerNavCount リセット
+  resetFsInnerNav();
   const app = document.getElementById('app');
   const id = Number(params.id);
   app.innerHTML = `<div class="card">読み込み中…</div>`;

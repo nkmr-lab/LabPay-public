@@ -4,7 +4,7 @@
 //   - 起案者が事前設定した system prompt と共有対象 user (= 主著/共著等) を尊重
 
 import { get, put } from '../api.js';
-import { escapeHtml, avatarHtml } from '../router.js';
+import { escapeHtml, avatarHtml, resetFsInnerNav } from '../router.js';
 import { state, toast, setAiContext } from '../app.js';
 import { createMemberPicker } from '../member_picker.js';
 import { renderChecklistBox, renderAskAiButton } from '../ai_checklist.js';   // v1141 + v1144
@@ -233,6 +233,8 @@ async function go() {
 
 let sharedPollTimer = null;
 export async function renderPaperReviewShared({ params }) {
+  // v1227 ✕ 一発 で 戻れる ように fsInnerNavCount リセット
+  resetFsInnerNav();
   const token = params.token;
   const app = document.getElementById('app');
   app.innerHTML = `<div class="card"><div class="muted">読み込み中…</div></div>`;

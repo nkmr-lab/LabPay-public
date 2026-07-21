@@ -4,7 +4,7 @@
 //   全体を重ね合わせてまとめる。結果は share_token で URL 共有可能。
 
 import { get, patch, post, del } from '../api.js';
-import { escapeHtml, avatarHtml } from '../router.js';
+import { escapeHtml, avatarHtml, resetFsInnerNav } from '../router.js';
 import { renderAuthorAvatar, mountAuthorAvatars, initLabUsersCache } from '../author_avatar.js';
 import { state, toast, setAiContext } from '../app.js';
 import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
@@ -565,6 +565,9 @@ async function loadSharedList(q) {
 
 // /#/paper-summary/r/:token  個別結果ページ。
 export async function renderPaperTranslateShared() {
+  // v1227 中村さん指摘「✕ で なかなか 戻らない」→ tab で 全訳 ↔ 要約 を 何度 か 切り替える と
+  //   fsInnerNavCount が 積み上がる ので、 detail 入場 で 常に 0 リセット。 ✕ 一発 で 元 の 場所 (papers-recent) へ。
+  resetFsInnerNav();
   const token = decodeURIComponent(location.hash.split('/').pop() || '');
   const app = document.getElementById('app');
   if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }

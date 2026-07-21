@@ -5,7 +5,7 @@
 // paper-review より軽い (テキスト入力 / 短文 / より速い)。
 
 import { get, post } from '../api.js';
-import { escapeHtml, navigate } from '../router.js';
+import { escapeHtml, navigate, resetFsInnerNav } from '../router.js';
 import { state, toast, setAiContext } from '../app.js';
 import { renderChecklistBox, renderAskAiButton } from '../ai_checklist.js';   // v1141 + v1144
 
@@ -119,6 +119,8 @@ function statusBadge(st) {
 
 let pollTimer = null;
 export async function renderResumeCheckDetail({ params }) {
+  // v1227 ✕ 一発 で 戻れる ように fsInnerNavCount リセット
+  resetFsInnerNav();
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   const id = Number(params.id);
   const app = document.getElementById('app');
