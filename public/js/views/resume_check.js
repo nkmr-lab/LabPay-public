@@ -290,9 +290,9 @@ async function loadAndPaint(id) {
     sourceId: Number(d.id),
     resultJson: r,
   });
-  // v1144 AI と話す
-  renderAskAiButton(document.getElementById('rc-ask-ai-mount'), {
+  // v1219 中村さん要望「inline ボタン は 不要、 floating AI bubble」 → context 登録のみ
+  window.__labpay_ai_context = {
     sourceType: 'resume_check', sourceId: Number(d.id),
     title: (r.summary_one_line || d.title || '原稿チェック'),
-  });
+  };
 }

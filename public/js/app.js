@@ -819,6 +819,11 @@ function isPublicGatewayHash(hash) {
     }
     start();
   }
+  // v1219 中村さん要望「AI エージェント と の 対話 の 吹き出し アイコン を 画面 に 配置、
+  //   任意 の 場所 で AI と チャット できる ように」→ 全 ページ に フローティング 💬 バブル。
+  //   ページ側 で window.__labpay_ai_context = {sourceType,sourceId,title} を セット している 場合、
+  //   その context を seed に 新 スレッド を 作成 → research-ai へ 遷移。 未セット時 は 単に research-ai へ。
+  if (state.me) installAiFab();
   // Periodic unread refresh — 1 分間隔。タブが裏 (visibility hidden) の時は
   // スキップして、表に戻った瞬間に即 1 回叩く。これでスマホをロックしてた
   // 間にバッテリーを使わず、戻ってきた直後にバッジが正しく出る。
@@ -834,3 +839,51 @@ function isPublicGatewayHash(hash) {
   // already cached it in deferredInstallPrompt — show now that the user is in.
   maybeShowInstallBanner();
 })();
+
+// v1219 中村さん要望「AI エージェント と の 対話 の 吹き出し アイコン を 画面 に 配置」
+function installAiFab() {
+  if (document.getElementById('lp-ai-fab')) return;   // 二重挿入 防止
+  const fab = document.createElement('button');
+  fab.id = 'lp-ai-fab';
+  fab.type = 'button';
+  fab.title = '💬 AI と 話す';
+  fab.textContent = '💬';
+  fab.style.cssText = 'position:fixed; right:14px; bottom:14px; width:52px; height:52px; border-radius:50%; border:none; background:#4a106d; color:#fff; font-size:26px; line-height:52px; padding:0; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.25); z-index:900; transition:transform 0.12s';
+  fab.addEventListener('mouseenter', () => { fab.style.transform = 'scale(1.05)'; });
+  fab.addEventListener('mouseleave', () => { fab.style.transform = 'scale(1)'; });
+  fab.addEventListener('click', onAiFabClick);
+  document.body.appendChild(fab);
+  // v1211 と 同じ 発想 で、 hash 変更 で context を 自動 クリア (直前 ページ の 情報 を 引きずらない)
+  window.addEventListener('hashchange', () => { window.__labpay_ai_context = null; });
+}
+async function onAiFabClick() {
+  const ctx = window.__labpay_ai_context;
+  const fab = document.getElementById('lp-ai-fab');
+  if (ctx && ctx.sourceType && ctx.sourceId) {
+    // このページ について 話す か / 空 で 始める か を 短い prompt で 選ぶ
+    const choice = confirm(`このページ (${ctx.title || ctx.sourceType}) について AI と 話しますか?\n\nOK: この結果 を context に した 新しい スレッド\nキャンセル: 何も せず 閉じる (空 の チャット は #/research-ai から)`);
+    if (!choice) return;
+    if (fab) { fab.disabled = true; fab.textContent = '⏳'; }
+    try {
+      const r = await post('/api/research-ai/threads', {
+        title: (String(ctx.title || '').slice(0, 60) || 'AI 結果') + ' について 話す',
+        template_key: 'freetalk',
+        seed_source_type: ctx.sourceType,
+        seed_source_id: ctx.sourceId,
+      });
+      try { localStorage.setItem('labpay-rai-open-tid', String(r.id)); } catch(_) {}
+      navigate('#/research-ai');
+    } catch (e) {
+      const isUnsub = e.status === 403 || e.code === 'forbidden' || /サブスク/.test(e.message || '');
+      if (isUnsub) {
+        if (confirm('研究 AI サブスク未加入 か クォータ不足 です。 サブスク ページ へ 移動しますか?')) navigate('#/research-ai');
+      } else {
+        alert('失敗: ' + e.message);
+      }
+    } finally {
+      if (fab) { fab.disabled = false; fab.textContent = '💬'; }
+    }
+  } else {
+    navigate('#/research-ai');
+  }
+}

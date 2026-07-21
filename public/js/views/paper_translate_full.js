@@ -718,16 +718,12 @@ async function paint(d) {
         mod.mountInteractionsCard({ apiBase: '/api/ai/paper_full_translate', refId: d.id });
       }
     } catch (_) {}
-    // v1144 AI と話す (全訳ヘッダの末尾に mount)
-    const mount = document.createElement('div');
-    mount.id = 'pft-ask-ai-mount';
-    mount.style.margin = '8px 0';
-    const header = document.querySelector('.page-header') || document.querySelector('.card');
-    if (header && !document.getElementById('pft-ask-ai-mount')) header.appendChild(mount);
-    renderAskAiButton(mount, {
+    // v1219 中村さん要望「inline ボタン は 不要、 floating AI bubble から 話せる ように」
+    //   → 各詳細ページ は window.__labpay_ai_context に seed 情報 だけ 登録、 bubble が 読む。
+    window.__labpay_ai_context = {
       sourceType: 'paper_translate_full', sourceId: Number(d.id),
       title: (d.pdf_name || '論文全訳'),
-    });
+    };
   }
   // v813 #405 ペアの要約を作るボタン
   bindMakeSummary(d);

@@ -680,11 +680,12 @@ async function paintResult(d, token) {
         mod.mountInteractionsCard({ apiBase: '/api/ai/paper_translate', refId: d.id });
       }
     } catch (_) { /* fall through */ }
-    // v1144 AI と話す
-    renderAskAiButton(document.getElementById('pt-ask-ai-mount'), {
+    // v1219 中村さん要望「inline ボタン は 不要、 floating AI bubble から 話せる ように」
+    //   → 各詳細ページ は window.__labpay_ai_context に seed 情報 だけ 登録、 bubble が 読む。
+    window.__labpay_ai_context = {
       sourceType: 'paper_translate', sourceId: Number(d.id),
       title: (r.title_ja || r.title_orig || d.pdf_name || '論文要約'),
-    });
+    };
   }
   // v1018 「PDFにする」ボタンは共有モーダル内に移動
   document.getElementById('pt-share-dialog')?.addEventListener('click', () => {

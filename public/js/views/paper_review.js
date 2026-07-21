@@ -566,11 +566,11 @@ function paint(d, shareToken, isShared) {
       sourceId: Number(d.id),
       resultJson: d,   // paper_review は d 全体を渡す (extract 側で d.review を見る)
     });
-    // v1144 AI と話す ボタン
-    renderAskAiButton(document.getElementById('pr-ask-ai-mount'), {
+    // v1219 中村さん要望「inline ボタン は 不要、 floating AI bubble」 → context 登録のみ
+    window.__labpay_ai_context = {
       sourceType: 'paper_review', sourceId: Number(d.id),
       title: (d.review?.summary_one_line || d.venue || '査読結果'),
-    });
+    };
   }
 }
 
