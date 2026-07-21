@@ -7,7 +7,7 @@
 import { get, post, del, patch } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
 import { renderAuthorAvatar, mountAuthorAvatars, initLabUsersCache } from '../author_avatar.js';
-import { state, toast } from '../app.js';
+import { state, toast, setAiContext } from '../app.js';
 import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
 import { shareDialog } from '../share_to_sns.js';
 import { renderAskAiButton } from '../ai_checklist.js';   // v1144
@@ -718,12 +718,11 @@ async function paint(d) {
         mod.mountInteractionsCard({ apiBase: '/api/ai/paper_full_translate', refId: d.id });
       }
     } catch (_) {}
-    // v1219 中村さん要望「inline ボタン は 不要、 floating AI bubble から 話せる ように」
-    //   → 各詳細ページ は window.__labpay_ai_context に seed 情報 だけ 登録、 bubble が 読む。
-    window.__labpay_ai_context = {
+    // v1219/v1220 詳細ページ で だけ 💬 fab を 出す
+    setAiContext({
       sourceType: 'paper_translate_full', sourceId: Number(d.id),
       title: (d.pdf_name || '論文全訳'),
-    };
+    });
   }
   // v813 #405 ペアの要約を作るボタン
   bindMakeSummary(d);

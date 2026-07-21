@@ -5,7 +5,7 @@
 
 import { get, put } from '../api.js';
 import { escapeHtml, avatarHtml } from '../router.js';
-import { state, toast } from '../app.js';
+import { state, toast, setAiContext } from '../app.js';
 import { createMemberPicker } from '../member_picker.js';
 import { renderChecklistBox, renderAskAiButton } from '../ai_checklist.js';   // v1141 + v1144
 
@@ -566,11 +566,11 @@ function paint(d, shareToken, isShared) {
       sourceId: Number(d.id),
       resultJson: d,   // paper_review は d 全体を渡す (extract 側で d.review を見る)
     });
-    // v1219 中村さん要望「inline ボタン は 不要、 floating AI bubble」 → context 登録のみ
-    window.__labpay_ai_context = {
+    // v1219/v1220 詳細ページ で だけ 💬 fab を 出す
+    setAiContext({
       sourceType: 'paper_review', sourceId: Number(d.id),
       title: (d.review?.summary_one_line || d.venue || '査読結果'),
-    };
+    });
   }
 }
 

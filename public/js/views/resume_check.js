@@ -6,7 +6,7 @@
 
 import { get, post } from '../api.js';
 import { escapeHtml, navigate } from '../router.js';
-import { state, toast } from '../app.js';
+import { state, toast, setAiContext } from '../app.js';
 import { renderChecklistBox, renderAskAiButton } from '../ai_checklist.js';   // v1141 + v1144
 
 const POLL_MS = 5000;
@@ -290,9 +290,9 @@ async function loadAndPaint(id) {
     sourceId: Number(d.id),
     resultJson: r,
   });
-  // v1219 中村さん要望「inline ボタン は 不要、 floating AI bubble」 → context 登録のみ
-  window.__labpay_ai_context = {
+  // v1219/v1220 詳細ページ で だけ 💬 fab を 出す
+  setAiContext({
     sourceType: 'resume_check', sourceId: Number(d.id),
     title: (r.summary_one_line || d.title || '原稿チェック'),
-  };
+  });
 }

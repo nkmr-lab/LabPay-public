@@ -841,20 +841,33 @@ function isPublicGatewayHash(hash) {
 })();
 
 // v1219 中村さん要望「AI エージェント と の 対話 の 吹き出し アイコン を 画面 に 配置」
+// v1220 中村さん指摘「どこでも ついてくる の 気になる」→ context が セット されて いる ページ (paper 系
+//   詳細 ページ の 5 種) だけ 出す。 それ以外 は 非表示。 fab は 常時 DOM に 置いておき、
+//   setAiContext(ctx) / clearAiContext() で 表示切替 する。
 function installAiFab() {
-  if (document.getElementById('lp-ai-fab')) return;   // 二重挿入 防止
+  if (document.getElementById('lp-ai-fab')) return;
   const fab = document.createElement('button');
   fab.id = 'lp-ai-fab';
   fab.type = 'button';
-  fab.title = '💬 AI と 話す';
+  fab.title = '💬 この結果 について AI と 話す';
   fab.textContent = '💬';
-  fab.style.cssText = 'position:fixed; right:14px; bottom:14px; width:52px; height:52px; border-radius:50%; border:none; background:#4a106d; color:#fff; font-size:26px; line-height:52px; padding:0; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.25); z-index:900; transition:transform 0.12s';
+  fab.style.cssText = 'display:none; position:fixed; right:14px; bottom:14px; width:52px; height:52px; border-radius:50%; border:none; background:#4a106d; color:#fff; font-size:26px; line-height:52px; padding:0; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.25); z-index:900; transition:transform 0.12s';
   fab.addEventListener('mouseenter', () => { fab.style.transform = 'scale(1.05)'; });
   fab.addEventListener('mouseleave', () => { fab.style.transform = 'scale(1)'; });
   fab.addEventListener('click', onAiFabClick);
   document.body.appendChild(fab);
-  // v1211 と 同じ 発想 で、 hash 変更 で context を 自動 クリア (直前 ページ の 情報 を 引きずらない)
-  window.addEventListener('hashchange', () => { window.__labpay_ai_context = null; });
+  // hash 変更 で context を 自動 クリア + fab 非表示 (直前 ページ の 情報 を 引きずらない)
+  window.addEventListener('hashchange', () => { clearAiContext(); });
+}
+export function setAiContext(ctx) {
+  window.__labpay_ai_context = ctx;
+  const fab = document.getElementById('lp-ai-fab');
+  if (fab) fab.style.display = ctx ? 'block' : 'none';
+}
+export function clearAiContext() {
+  window.__labpay_ai_context = null;
+  const fab = document.getElementById('lp-ai-fab');
+  if (fab) fab.style.display = 'none';
 }
 async function onAiFabClick() {
   const ctx = window.__labpay_ai_context;
