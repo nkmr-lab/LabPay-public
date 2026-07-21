@@ -3354,17 +3354,14 @@ async function renderHomePapersRecent() {
 // 1 行の HTML を共通化 (widget + 一覧 page で同じ見た目)。
 // v817 #411 タイトルの下に原題 (= 日本語タイトルと違う場合だけ) と
 //   要約 / アブストの先頭数行を追加で表示。
-// v1213 direction (GB→JP) は 不要 の 中村さん指示 で 削除、 variants (要約/全訳 両方 の paper) は 両方 の タグ を 表示。
+// v1213 direction (GB→JP) は 不要 の 中村さん指示 で 削除、 variants (要約/全訳 両方 の paper) は 両方 の 情報 を 表示。
+// v1215 chip link (nested <a>) は 無効 HTML で 崩れ の 原因、 プレーンテキスト タグ に 戻す。 詳細 タブ で 切替。
 export function renderPaperRecentRow(it, variants) {
   const list = Array.isArray(variants) && variants.length ? variants : [it];
-  const sorted = [...list].sort((a, b) => (a.kind === 'summary' ? -1 : 1));
-  const tagChip = (v) => {
-    const label = v.kind === 'summary' ? '📑 要約' : '📑 全訳';
-    const href = `#/${v.url_slug}/r/${encodeURIComponent(v.share_token)}`;
-    const primary = v === it;
-    return `<a href="${href}" onclick="event.stopPropagation()" style="display:inline-block; padding:1px 6px; font-size:10.5px; border-radius:8px; background:${primary ? '#ede4f3' : '#f3f4f6'}; color:${primary ? '#4a106d' : '#374151'}; text-decoration:none; border:1px solid ${primary ? '#7b3fa0' : '#d1d5db'}">${label}</a>`;
-  };
-  const tagsHtml = sorted.map(tagChip).join(' ');
+  const hasSummary = list.some(v => v.kind === 'summary');
+  const hasFull    = list.some(v => v.kind === 'full');
+  const kindText = (hasSummary && hasFull) ? '📑 要約・全訳' : (hasSummary ? '📑 要約' : '📑 全訳');
+  const tagsHtml = `<span>${kindText}</span>`;
   const statusBadge = it.status === 'done'
     ? (it.is_shared ? '<span style="color:#10b981; font-size:10.5px">🌐 公開</span>' : '')
     : it.status === 'processing' ? '<span style="color:#ea580c; font-size:10.5px">⏳ 処理中</span>'

@@ -124,26 +124,21 @@ function renderTile(group) {
   const it = group.primary;
   const variants = group.variants;
   const title = it.title || it.title_original || it.pdf_name || '(無題)';
+  // v1215 中村さん指摘「レイアウト崩れまくり」「1 アイテム で 良い、 中に 要約・全訳 / 要約 / 全訳 の 情報 が 出れば OK。 切替 は 先 (詳細) で」
+  //   → chip link (nested <a>) は 無効 HTML で 崩れ の 原因、 プレーンテキスト タグ に 戻す。
+  //   タイル全体 の click は primary (最新変異体) に、 詳細ページ の タブバー で 反対側 に 切替。
   const url = `#/${it.url_slug}/r/${escapeHtml(it.share_token)}`;
-  // タグ: variants に summary/full が それぞれ あるか、 個別 link
-  const tagChip = (v) => {
-    const label = v.kind === 'summary' ? '要約' : '全訳';
-    const href = `#/${v.url_slug}/r/${escapeHtml(v.share_token)}`;
-    const primary = v === it;
-    return `<a href="${href}" onclick="event.stopPropagation()" style="display:inline-block; padding:1px 6px; font-size:10.5px; border-radius:8px; background:${primary ? '#ede4f3' : '#f3f4f6'}; color:${primary ? '#4a106d' : '#374151'}; text-decoration:none; border:1px solid ${primary ? '#7b3fa0' : '#d1d5db'}; margin-left:3px">${label}</a>`;
-  };
-  // summary → full 順 で 並べる (見た目 統一)
-  const sorted = [...variants].sort((a, b) => (a.kind === 'summary' ? -1 : 1));
-  const tagsHtml = sorted.map(tagChip).join('');
-  // star / bookmark は primary の 種別 で
+  const hasSummary = variants.some(v => v.kind === 'summary');
+  const hasFull    = variants.some(v => v.kind === 'full');
+  const tagText = (hasSummary && hasFull) ? '要約・全訳' : (hasSummary ? '要約' : '全訳');
   const starRefKind = it.star_kind || (it.kind === 'summary' ? 'paper_translate' : 'paper_full_translation');
-  const sharedMark = variants.some(v => v.is_shared) ? ' 🌐' : (it.is_mine ? ' 自分' : '');
+  const sharedMark = variants.some(v => v.is_shared) ? '🌐' : (it.is_mine ? '自分' : '');
   return `
     <a class="ai-tile" href="${url}">
       <div class="ai-tile-head">
         ${avatarHtml(it.author_name, it.author_avatar, 'xs')}
         <span style="font-size:11px">${escapeHtml(it.author_name || '')}</span>
-        <span style="margin-left:auto; font-size:11px">${tagsHtml}${sharedMark ? ' ・' + sharedMark : ''}</span>
+        <span style="margin-left:auto; font-size:11px">${escapeHtml(tagText)}${sharedMark ? ' ・' + sharedMark : ''}</span>
       </div>
       <div class="ai-tile-title">${escapeHtml(title)}</div>
       ${it.title_original && it.title_original !== title ? `<div style="font-size:11.5px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title_original)}</div>` : ''}
