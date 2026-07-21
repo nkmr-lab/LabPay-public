@@ -677,16 +677,10 @@ async function paint(d) {
       const filtered = r.chapters.filter(ch => !isBoilerplateChapter(ch));
       const authors = mergeAuthors(r.authors, r.chapters);
       let out = renderAuthorCards(authors);
-      if (kws.length) {
-        out += `
-          <div class="card" style="background:#faf5ff">
-            <div class="bold" style="color:#7b3fa0; font-size:13px; margin-bottom:6px">🏷 キーワード</div>
-            <div class="row" style="gap:6px; flex-wrap:wrap">
-              ${kws.map(kw => `<button data-pft-kw="${escapeHtml(kw)}" class="btn" style="background:#f3e8ff; color:#7b3fa0; font-size:12px; padding:2px 10px; border:1px solid #d8b4fe; border-radius:12px; cursor:pointer">${escapeHtml(kw)}</button>`).join('')}
-            </div>
-            <div class="hint-sm" style="margin-top:6px">タップで公開全訳から関連論文を検索</div>
-          </div>`;
-      }
+      // v1224 キーワード スロット (中村さん指摘「全訳 に すると キーワード が 消える」)。
+      //   1. sync: chapters から 抽出 (直接 の Keywords 章 or front matter/abstract の Keywords 行)
+      //   2. async: 空 なら sibling summary の keywords を 取ってきて 差し込む
+      out += `<div id="pft-kw-slot">${kws.length ? renderKwCardHtml(kws) : ''}</div>`;
       // v1214/v1223 中村さん要望「タブ は 著者情報 の 下 に」→ 著者 + キーワード の 後、 章別翻訳 の 前 に 挿入。
       out += renderFullCrossRefsAndCreate(d);
       if (filtered.length) {
@@ -747,6 +741,30 @@ async function paint(d) {
   }
   // v813 #405 ペアの要約を作るボタン
   bindMakeSummary(d);
+  // v1224 キーワード が sync 抽出 で 空 の 場合、 sibling summary (cross_refs) から fetch して 補完
+  const kwSlot = document.getElementById('pft-kw-slot');
+  if (kwSlot && !kwSlot.innerHTML.trim()) {
+    const summaryRef = (d.cross_refs || []).find(x => x.kind === 'paper_translate');
+    if (summaryRef && summaryRef.share_token) {
+      (async () => {
+        try {
+          const sib = await get('/api/ai/paper_translate/r/' + encodeURIComponent(summaryRef.share_token));
+          const sibKws = Array.isArray(sib?.result?.keywords) ? sib.result.keywords.filter(x => x && typeof x === 'string').slice(0, 20) : [];
+          if (sibKws.length && kwSlot && !kwSlot.innerHTML.trim()) {
+            kwSlot.innerHTML = renderKwCardHtml(sibKws);
+            // 新規 出た button に click 配線
+            kwSlot.querySelectorAll('[data-pft-kw]').forEach(b => {
+              b.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                const q = String(b.dataset.pftKw || '').trim();
+                if (q) location.hash = '#/paper-translate-full?q=' + encodeURIComponent(q);
+              });
+            });
+          }
+        } catch (_) { /* silent */ }
+      })();
+    }
+  }
   // v955 キーワードのクリック → 公開全訳一覧の検索に、
   // v1004 著者名のクリック → 著者ページ (/#/authors/{name}) に。
   document.querySelectorAll('[data-pft-kw]').forEach(b => {
@@ -854,13 +872,47 @@ function isBoilerplateChapter(ch) {
   return /^(ccs (concept|categorie)|keywords?|acm reference format|permission|copyright|references|bibliography|acknowledg?ments?|appendix|front matter|title page)/.test(t);
 }
 
-// v955 Keywords 章 (もしあれば) からカンマ / 「;」区切りのキーワードを抽出。
+// v1224 キーワード カード HTML を 生成 (sync/async 両方 で 使う)
+function renderKwCardHtml(kws) {
+  if (!kws || !kws.length) return '';
+  return `
+    <div class="card" style="background:#faf5ff">
+      <div class="bold" style="color:#7b3fa0; font-size:13px; margin-bottom:6px">🏷 キーワード</div>
+      <div class="row" style="gap:6px; flex-wrap:wrap">
+        ${kws.map(kw => `<button data-pft-kw="${escapeHtml(kw)}" class="btn" style="background:#f3e8ff; color:#7b3fa0; font-size:12px; padding:2px 10px; border:1px solid #d8b4fe; border-radius:12px; cursor:pointer">${escapeHtml(kw)}</button>`).join('')}
+      </div>
+      <div class="hint-sm" style="margin-top:6px">タップで公開全訳から関連論文を検索</div>
+    </div>`;
+}
+
+// v955/v1224 Keywords 章 or Front matter / Abstract 章 の 「Keywords: ...」行 から 抽出
+//   多く の 論文 で Keywords が 独立章 に なって いない ので、 front matter や 冒頭章 の 中 も 走査。
+//   中村さん指摘「全訳 に すると キーワードが 消える」対応。
 function extractKeywordsFromChapters(chapters) {
+  const parseLine = (raw) => {
+    let text = String(raw || '').trim();
+    text = text.replace(/^\s*(keywords?|キーワード)\s*[:：]?\s*/i, '').trim();
+    return text.split(/[,;、・；]+/).map(s => s.trim()).filter(s => s.length && s.length <= 60).slice(0, 20);
+  };
+  // (a) 独立 Keywords 章
   const kwCh = chapters.find(c => /^keywords?/i.test(String(c?.chapter_title_original || '').trim()));
-  if (!kwCh) return [];
-  let text = String(kwCh.translation || '');
-  text = text.replace(/^\s*keywords?\s*[:：]?\s*/i, '').trim();
-  return text.split(/[,;、・；]+/).map(s => s.trim()).filter(s => s.length && s.length <= 60).slice(0, 20);
+  if (kwCh) {
+    const kws = parseLine(kwCh.translation);
+    if (kws.length) return kws;
+  }
+  // (b) front matter / abstract / index terms 章 の 中 の 「Keywords: ...」/「キーワード: ...」行
+  for (const c of chapters) {
+    const t = String(c?.chapter_title_original || '').toLowerCase().trim();
+    if (!/^(front matter|title page|abstract|index terms|ccs (concept|categorie))/.test(t)) continue;
+    const body = String(c?.translation || '');
+    // 行単位 で Keywords: ... を 探す
+    const m = /(?:^|\n)\s*(?:keywords?|index terms|キーワード)\s*[:：]([^\n]+)/i.exec(body);
+    if (m) {
+      const kws = parseLine(m[1]);
+      if (kws.length) return kws;
+    }
+  }
+  return [];
 }
 
 // v955/v957 Front matter 章の訳テキストから著者ブロックをパース。
