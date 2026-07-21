@@ -558,8 +558,6 @@ async function refresh(token) {
         <div class="meta" style="font-size:11px; margin-top:6px">
           ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at || '')}
         </div>
-        <!-- v1214 中村さん要望「1 つの論文を扱うので タブで切替 形式に」→ 要約/全訳 タブバー -->
-        ${renderFullCrossRefsAndCreate(d)}
         <!-- v1020 「一覧へ」廃止 (✕で戻れる)、要約へボタンも横並びに -->
         <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
           <button class="btn primary" id="pft-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
@@ -567,6 +565,7 @@ async function refresh(token) {
           ${shareButton}
         </div>
       </div>
+      <!-- v1214/v1223 中村さん要望「タブ は 著者情報 の 下 に」→ 著者カード + キーワード の あと に 独立 配置 (paintResult 内 で 差し込む)。 -->
       <div id="pft-r"></div>`;
     app.innerHTML = header;
     if (d.status === 'pending' || d.status === 'processing') {
@@ -688,6 +687,8 @@ async function paint(d) {
             <div class="hint-sm" style="margin-top:6px">タップで公開全訳から関連論文を検索</div>
           </div>`;
       }
+      // v1214/v1223 中村さん要望「タブ は 著者情報 の 下 に」→ 著者 + キーワード の 後、 章別翻訳 の 前 に 挿入。
+      out += renderFullCrossRefsAndCreate(d);
       if (filtered.length) {
         out += `
           <div class="card">

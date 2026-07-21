@@ -675,8 +675,6 @@ async function paintResult(d, token) {
       <div class="meta" style="font-size:11px; margin-top:6px">
         ${avatarHtml(d.author_name, d.author_avatar, 'xs')} ${escapeHtml(d.author_name)} の依頼 · ${escapeHtml(d.created_at)}
       </div>
-      <!-- v1214 中村さん要望「1 つの論文を扱うので タブで切替 形式に」→ 要約/全訳 タブバー -->
-      ${renderPaperCrossRefsAndCreate(d)}
       <!-- v1020 中村さん指摘「共有URLをコピーは共有モーダルにあるからいらない」「一覧へも不要 (✕で戻れる)」「全訳へボタンも横並びで」 -->
       <div class="row no-print" style="gap:6px; margin-top:8px; flex-wrap:wrap">
         <button class="btn primary" id="pt-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
@@ -694,6 +692,9 @@ async function paintResult(d, token) {
     ${ptRenderAuthorCards(r.authors)}
 
     ${ptRenderKeywords(r.keywords)}
+
+    <!-- v1214/v1223 中村さん要望「タブは 著者情報 の 下 に (著者情報 まで は 同一 の 内容 の はず)」→ 著者カード + キーワード の 直後 に 独立 して 配置。 -->
+    ${renderPaperCrossRefsAndCreate(d)}
 
     ${r.summary_one_paragraph ? `
     <div class="card" style="background:linear-gradient(135deg,#ede4f3,#fafaf5); border-left:4px solid var(--primary)">
