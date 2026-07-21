@@ -320,12 +320,14 @@ async function setupAlsoFullTranslate() {
 }
 
 // v1221 モデル 額 は 同時依頼 の チェック 状態 で 「合計」表示 を 切替
+// v1222 中村さん指摘「下のボタンも 要約&全訳 を 作る (合計pt) に なるべき」→ pt-go ラベル も 同時 更新
 function refreshTopCombinedCost() {
   const info = document.getElementById('pt-model-info');
+  const goBtn = document.getElementById('pt-go');
   if (!info) return;
   const sumSel = document.getElementById('pt-model');
   const sumBase = _sumModelBaseCost(sumSel?.value);
-  if (sumBase === null) return;   // 呼び出し 元 が すでに 上書き 済 (loadHistory 側)
+  if (sumBase === null) return;
   const shared = !!document.getElementById('pt-auto-share')?.checked;
   const sumPt = shared ? Math.floor(sumBase / 2) : sumBase;
   const alsoFull = !!document.getElementById('pt-also-full')?.checked;
@@ -339,9 +341,11 @@ function refreshTopCombinedCost() {
   if (alsoFull && ftBase > 0) {
     info.innerHTML = `要約 ${sumPt}pt + 全訳 ${ftPt}pt = <b style="color:#4a106d">合計 ${sumPt + ftPt}pt</b>` +
       (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : '');
+    if (goBtn) goBtn.textContent = `📑 要約 ＆ 全訳 を 作る (${sumPt + ftPt}pt)`;
   } else {
     info.innerHTML = `要約 ${sumPt}pt` +
       (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : ' <span style="color:#6b7280">(基本額)</span>');
+    if (goBtn) goBtn.textContent = `📑 要約 を 作る (${sumPt}pt)`;
   }
 }
 // 要約 モデル の 基本額 は loadHistory で option に 埋め込まれる。 select 側 の 値 だけ から は 引けない ので
