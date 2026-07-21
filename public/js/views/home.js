@@ -3360,8 +3360,10 @@ export function renderPaperRecentRow(it, variants) {
   const list = Array.isArray(variants) && variants.length ? variants : [it];
   const hasSummary = list.some(v => v.kind === 'summary');
   const hasFull    = list.some(v => v.kind === 'full');
+  // v1216 中村さん要望「要約・全訳 表示 に 色 を つけて タグ表記 と 同じ 感じ で」→ .tag クラス で pill 化
+  const kindCls = (hasSummary && hasFull) ? 'tag warn' : (hasSummary ? 'tag' : 'tag ok');
   const kindText = (hasSummary && hasFull) ? '📑 要約・全訳' : (hasSummary ? '📑 要約' : '📑 全訳');
-  const tagsHtml = `<span>${kindText}</span>`;
+  const tagsHtml = `<span class="${kindCls}">${kindText}</span>`;
   const statusBadge = it.status === 'done'
     ? (it.is_shared ? '<span style="color:#10b981; font-size:10.5px">🌐 公開</span>' : '')
     : it.status === 'processing' ? '<span style="color:#ea580c; font-size:10.5px">⏳ 処理中</span>'

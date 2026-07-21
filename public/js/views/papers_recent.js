@@ -130,6 +130,9 @@ function renderTile(group) {
   const url = `#/${it.url_slug}/r/${escapeHtml(it.share_token)}`;
   const hasSummary = variants.some(v => v.kind === 'summary');
   const hasFull    = variants.some(v => v.kind === 'full');
+  // v1216 中村さん要望「要約・全訳 表示 に 色 を つけて、 他の タグ表記 と 同じ 感じで」→ .tag クラス で pill 化。
+  //   要約=デフォ 紫 / 全訳=ok 緑 / 両方=warn 橙 で 見分け 付ける。
+  const tagCls = (hasSummary && hasFull) ? 'tag warn' : (hasSummary ? 'tag' : 'tag ok');
   const tagText = (hasSummary && hasFull) ? '要約・全訳' : (hasSummary ? '要約' : '全訳');
   const starRefKind = it.star_kind || (it.kind === 'summary' ? 'paper_translate' : 'paper_full_translation');
   const sharedMark = variants.some(v => v.is_shared) ? '🌐' : (it.is_mine ? '自分' : '');
@@ -138,7 +141,9 @@ function renderTile(group) {
       <div class="ai-tile-head">
         ${avatarHtml(it.author_name, it.author_avatar, 'xs')}
         <span style="font-size:11px">${escapeHtml(it.author_name || '')}</span>
-        <span style="margin-left:auto; font-size:11px">${escapeHtml(tagText)}${sharedMark ? ' ・' + sharedMark : ''}</span>
+        <span style="margin-left:auto; font-size:11px; display:inline-flex; align-items:center; gap:6px">
+          <span class="${tagCls}">${escapeHtml(tagText)}</span>${sharedMark ? escapeHtml(sharedMark) : ''}
+        </span>
       </div>
       <div class="ai-tile-title">${escapeHtml(title)}</div>
       ${it.title_original && it.title_original !== title ? `<div style="font-size:11.5px; color:#6b7280; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(it.title_original)}</div>` : ''}
