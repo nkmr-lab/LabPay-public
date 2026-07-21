@@ -303,10 +303,11 @@ function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
     $offset = max(0, (int)($_GET['offset'] ?? 0));
     // 公開 or 本人の要約 + 全訳を UNION ALL で取得、 created_at DESC でソート、
     // limit + offset で切り出す。件数多くても result_json は軽量な title だけ取り出す。
+    // v1213 pdf_sha256 も 返して、 フロント で 同一 PDF ペア を 1 タイル に merge できる ように
     $sql = "
       SELECT * FROM (
         SELECT 'summary' AS kind,
-               pt.id, pt.share_token, pt.user_id, pt.pdf_name, pt.result_json,
+               pt.id, pt.share_token, pt.user_id, pt.pdf_name, pt.pdf_sha256, pt.result_json,
                pt.status, pt.is_shared, pt.created_at, pt.finished_at,
                NULL AS direction,
                u.display_name AS author_name, u.avatar_url AS author_avatar
@@ -316,7 +317,7 @@ function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
             OR (pt.is_shared = 1 AND pt.status = 'done')
         UNION ALL
         SELECT 'full' AS kind,
-               pft.id, pft.share_token, pft.user_id, pft.pdf_name, pft.result_json,
+               pft.id, pft.share_token, pft.user_id, pft.pdf_name, pft.pdf_sha256, pft.result_json,
                pft.status, pft.is_shared, pft.created_at, pft.finished_at,
                pft.direction,
                u.display_name AS author_name, u.avatar_url AS author_avatar
@@ -362,6 +363,7 @@ function ai_paper_recent_feed(PDO $pdo, array $cfg): void {
             'share_token'   => $r['share_token'],
             'url_slug'      => $r['kind'] === 'summary' ? 'paper-summary' : 'paper-translate-full',
             'pdf_name'      => $r['pdf_name'],
+            'pdf_sha256'    => $r['pdf_sha256'] ?: null,  // v1213 同一 PDF ペア merge 用
             'title'         => $title,
             'title_original'=> $titleOrig,
             'snippet'       => $snippet,

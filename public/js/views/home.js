@@ -3343,16 +3343,28 @@ async function renderHomePapersRecent() {
       return;
     }
     card.hidden = false;
-    root.innerHTML = items.map(it => renderPaperRecentRow(it)).join('');
+    // v1213 中村さん要望「要約 と 全訳 の 両方 ある paper は 1 行 で 両方 の タグ を 出す。 direction 表記 は 不要」
+    //   → papers_recent.js の groupByPaper を 動的 import して 束ね、 各 group を 1 行 で render。
+    const { groupByPaper } = await import('./papers_recent.js');
+    const groups = groupByPaper(items);
+    root.innerHTML = groups.map(g => renderPaperRecentRow(g.primary, g.variants)).join('');
   } catch (_) { card.hidden = true; }
 }
 
 // 1 行の HTML を共通化 (widget + 一覧 page で同じ見た目)。
 // v817 #411 タイトルの下に原題 (= 日本語タイトルと違う場合だけ) と
 //   要約 / アブストの先頭数行を追加で表示。
-export function renderPaperRecentRow(it) {
-  const kindIcon = it.kind === 'summary' ? '📑 要約'
-                 : (it.direction === 'ja2en' ? '📑 全訳 (日→英)' : '📑 全訳');
+// v1213 direction (GB→JP) は 不要 の 中村さん指示 で 削除、 variants (要約/全訳 両方 の paper) は 両方 の タグ を 表示。
+export function renderPaperRecentRow(it, variants) {
+  const list = Array.isArray(variants) && variants.length ? variants : [it];
+  const sorted = [...list].sort((a, b) => (a.kind === 'summary' ? -1 : 1));
+  const tagChip = (v) => {
+    const label = v.kind === 'summary' ? '📑 要約' : '📑 全訳';
+    const href = `#/${v.url_slug}/r/${encodeURIComponent(v.share_token)}`;
+    const primary = v === it;
+    return `<a href="${href}" onclick="event.stopPropagation()" style="display:inline-block; padding:1px 6px; font-size:10.5px; border-radius:8px; background:${primary ? '#ede4f3' : '#f3f4f6'}; color:${primary ? '#4a106d' : '#374151'}; text-decoration:none; border:1px solid ${primary ? '#7b3fa0' : '#d1d5db'}">${label}</a>`;
+  };
+  const tagsHtml = sorted.map(tagChip).join(' ');
   const statusBadge = it.status === 'done'
     ? (it.is_shared ? '<span style="color:#10b981; font-size:10.5px">🌐 公開</span>' : '')
     : it.status === 'processing' ? '<span style="color:#ea580c; font-size:10.5px">⏳ 処理中</span>'
@@ -3376,7 +3388,7 @@ export function renderPaperRecentRow(it) {
         ${origLine}
         ${snippetLine}
         <div class="meta" style="font-size:11px; display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:3px">
-          <span>${kindIcon}</span>
+          ${tagsHtml}
           <span>${escapeHtml(it.author_name || '')}</span>
           ${mineBadge}
           ${statusBadge}
