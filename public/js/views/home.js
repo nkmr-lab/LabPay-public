@@ -225,6 +225,9 @@ const SHORTCUT_CARDS_DEFS = [
   { id: 'sc-pomodoro',      title: '🍅 ポモドーロ',      url: '#/pomodoro',      desc: '25 分集中 + 5 分休憩の繰り返しタイマー' },
   { id: 'sc-power',         title: '📐 検定力 / 標本数', url: '#/power',         desc: 'G*Power 相当 + LMM/GLMM シミュ + ベイズ + 予算試算' },
   { id: 'sc-walk-mode',     title: '🚶 散歩モード',      url: '#/walk-mode',     desc: '全画面マップ + GPS 5 秒 polling で軌跡 polyline 記録' },
+  // v1229 外部ポータル系ショートカット (LabPay ホームから 1 タップで飛ぶ)
+  { id: 'sc-fund-portal',   title: '💴 研究費ポータル',  url: 'https://fund.nkmr.io',  desc: '中村研の予算執行DB (科研費/校費/実績/アルバイト代/支払明細/残高)。 nkmr-SSO 保護' },
+  { id: 'sc-photo-portal',  title: '📷 中村研フォト',    url: 'https://photo.nkmr.io', desc: '中村研の写真・動画を全部貯める自前フォト基盤 (Google Photos の代替)。 nkmr-SSO 保護' },
 ];
 
 // v497 #103 ホームに置く要素は「ウィジェット」と呼ぶ。設定画面の表示名も変更。
@@ -709,14 +712,19 @@ export async function renderHome() {
       <div id="recent" class="list" style="margin-top:4px"><div class="home-skel-bars"></div></div>
     </details>
 
-    ${SHORTCUT_CARDS_DEFS.map(c => `
+    ${SHORTCUT_CARDS_DEFS.map(c => {
+      // v1229 外部URL (http/https) は別タブで開く。 LabPay セッションを失わないため
+      const ext = /^https?:\/\//i.test(c.url);
+      const attrs = ext ? ' target="_blank" rel="noopener noreferrer"' : '';
+      return `
     <div class="card" data-card-id="${escapeHtml(c.id)}" hidden>
       <div class="row center" style="margin-bottom:4px">
         <h2 class="row-title" style="margin:0">${escapeHtml(c.title)}</h2>
-        <a href="${escapeHtml(c.url)}" class="hint" style="margin-left:auto">開く →</a>
+        <a href="${escapeHtml(c.url)}"${attrs} class="hint" style="margin-left:auto">開く →</a>
       </div>
       <div class="hint" style="font-size:12px; line-height:1.4">${escapeHtml(c.desc)}</div>
-    </div>`).join('')}
+    </div>`;
+    }).join('')}
 
     <!-- v666 自作ウィジェット (有効化されているものを全部並べる) -->
     <div id="home-custom-widgets"></div>
