@@ -271,6 +271,17 @@ function updateModelInfo(d) {
 
 // v796 #398 全訳オプションのセットアップ / v1221 default ON なので 初期 load 済ませる + 合計 表示
 let ftSettingsCache = null;
+// v1232 fb (中村さん) 「最新の依頼で 同時全訳 が 効いていない」→
+//  PDF 選択 → 即 送信 で ftSettingsCache が まだ 無く、 modSel.value === '' に なって
+//  条件 fail → 全訳 スキップ が root cause。 loadAndBuild の Promise を 外部 (go) から
+//  await できる ように 公開 する。
+let _ftLoadPromise = null;
+async function ensureFtLoaded() {
+  if (ftSettingsCache) return true;
+  if (!_ftLoadPromise) return false;
+  try { await _ftLoadPromise; } catch { /* ignore, checked below */ }
+  return !!ftSettingsCache;
+}
 async function setupAlsoFullTranslate() {
   const toggle = document.getElementById('pt-also-full');
   const opts   = document.getElementById('pt-also-full-opts');
@@ -288,7 +299,7 @@ async function setupAlsoFullTranslate() {
   };
   toggle.addEventListener('change', async () => {
     opts.style.display = toggle.checked ? '' : 'none';
-    if (toggle.checked) await loadAndBuild();
+    if (toggle.checked) { _ftLoadPromise = loadAndBuild(); await _ftLoadPromise; }
     else refreshTopCombinedCost();
   });
   function rebuildFtModels() {
@@ -315,8 +326,8 @@ async function setupAlsoFullTranslate() {
   modSel.addEventListener('change', refreshCost);
   document.getElementById('pt-auto-share')?.addEventListener('change', () => { refreshCost(); refreshTopCombinedCost(); });
   document.getElementById('pt-model')?.addEventListener('change', refreshTopCombinedCost);
-  // 初期 (default ON) で 全訳 モデル を 読み込む
-  if (toggle.checked) loadAndBuild();
+  // 初期 (default ON) で 全訳 モデル を 読み込む。 Promise を 保持して go() から await できる ように
+  if (toggle.checked) _ftLoadPromise = loadAndBuild();
 }
 
 // v1221 モデル 額 は 同時依頼 の チェック 状態 で 「合計」表示 を 切替
@@ -370,8 +381,20 @@ async function go() {
   const startedHash = location.hash;
   // v796 #398 同時全訳オプション
   const alsoFull = document.getElementById('pt-also-full')?.checked;
+  // v1232 fb (中村さん) 「最新の依頼で 同時全訳 が 効いていない」→ setupAlsoFullTranslate の
+  //  loadAndBuild が fire-and-forget で await されておらず、 PDF 選択 直後 に 送信 すると
+  //  ftSettingsCache が 未 load、 modSel.value が '' で 条件 fail → 全訳 スキップ が root cause。
+  //  ここで 同時依頼 チェック時 のみ 明示的 に load 完了 を 待つ。
+  if (alsoFull) await ensureFtLoaded();
   const ftDir   = document.getElementById('pt-ft-direction')?.value;
   const ftModel = document.getElementById('pt-ft-model')?.value;
+  // v1232 同時依頼 ON なのに モデル が 空 は 明示的 に エラー にする (静かな スキップ が
+  //  「効いていない」の 原因 だった の で 二度と 起こさない)
+  if (alsoFull && (!ftDir || !ftModel)) {
+    toast('⚠️ 全訳モデルがまだ読み込まれていません。もう一度お試しください。');
+    btn.disabled = false; btn.textContent = oldText;
+    return;
+  }
   try {
     const fd = new FormData();
     fd.append('file', f);
