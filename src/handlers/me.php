@@ -451,13 +451,19 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
     if ($sub === 'zoom' && ($seg[2] ?? '') === '' && $method === 'GET') {
         // 連携判定は token の有無で。 zoom_user_id / email は scope 不足だと
         // 取れないので、オプショナル表示のみに使う。
+        // v1233 fb#504: shared_available と shared_owner_display_name も 返す。
+        //  自分 が 未連携 でも shared_available=true なら 「中村さん の Zoom を 借りて 使えます」
+        //  UI に できる。
         $st = $pdo->prepare('SELECT zoom_access_token, zoom_email FROM users WHERE id=?');
         $st->execute([$u['id']]);
         $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
         $connected = !empty($row['zoom_access_token']);
+        $eff = Zoom::effectiveAvailability($pdo, $cfg, (int)$u['id']);
         json_response([
             'connected' => $connected,
             'email'     => $connected ? (string)($row['zoom_email'] ?? '') : null,
+            'shared_available' => $eff['shared_available'],
+            'shared_owner_display_name' => $eff['shared_owner_display_name'],
         ]);
         return;
     }
@@ -505,11 +511,14 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $withZoom = !array_key_exists('with_zoom', $body) || !empty($body['with_zoom']);
         $endDt = $startDt->modify('+' . $duration . ' minutes');
 
-        $joinUrl = ''; $passcode = ''; $meeting = null;
+        $joinUrl = ''; $passcode = ''; $meeting = null; $zoomOwner = null;
         if ($withZoom) {
             // Zoom の start_time は「その TZ におけるローカル時刻」 (Z なし)。
-            $zoomStart  = $startDt->setTimezone($localTz)->format('Y-m-d\TH:i:s');
-            $zoomAccess = Zoom::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
+            $zoomStart = $startDt->setTimezone($localTz)->format('Y-m-d\TH:i:s');
+            // v1233 fb#504: 自分 が Zoom 未連携 でも admin (中村さん) の Zoom を 借りて 作れる ように
+            $eff = Zoom::ensureEffectiveAccessToken($pdo, $cfg, (int)$u['id']);
+            $zoomAccess = $eff['access_token'];
+            $zoomOwner  = $eff;
             $meeting = Zoom::createMeeting($zoomAccess, [
                 'topic'      => $topic,
                 'start_time' => $zoomStart,
@@ -532,6 +541,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             $descLines = ['Zoom MTG', $joinUrl];
             if ($passcode !== '')        $descLines[] = 'パスコード: ' . $passcode;
             if (!empty($meeting['id']))  $descLines[] = 'Meeting ID: ' . (string)$meeting['id'];
+            // v1233 fb#504 共有 Zoom (借りて 作成) の 場合 は 誰 の アカウント で 作った か 明示
+            if ($zoomOwner && !empty($zoomOwner['shared'])) {
+                $descLines[] = '(' . $zoomOwner['owner_display_name'] . ' さん の Zoom で 作成)';
+            }
             $event['location']    = $joinUrl;
             $event['description'] = implode("\n", $descLines);
         }
@@ -552,6 +565,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'meeting_id' => $meeting['id']    ?? null,
                 'join_url'   => $joinUrl,
                 'password'   => $passcode,
+                // v1233 fb#504 借りて 作成 した か どうか、 誰 の Zoom で 作った か
+                'shared'     => $zoomOwner ? !empty($zoomOwner['shared']) : false,
+                'owner_display_name' => $zoomOwner ? (string)$zoomOwner['owner_display_name'] : null,
             ] : null,
             'event'      => [
                 'id'        => (string)($created['id']       ?? ''),
@@ -604,7 +620,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($eventTz === '') $eventTz = 'Asia/Tokyo';
         try { $localTz = new DateTimeZone($eventTz); }
         catch (Throwable $e) { $localTz = new DateTimeZone('Asia/Tokyo'); $eventTz = 'Asia/Tokyo'; }
-        $zoomAccess = Zoom::ensureValidAccessToken($pdo, $cfg, (int)$u['id']);
+        // v1233 fb#504 借りて 作成 対応
+        $eff = Zoom::ensureEffectiveAccessToken($pdo, $cfg, (int)$u['id']);
+        $zoomAccess = $eff['access_token'];
         $zoomStart = $startDt->setTimezone($localTz)->format('Y-m-d\TH:i:s');
         $meeting = Zoom::createMeeting($zoomAccess, [
             'topic'      => $title,
@@ -625,6 +643,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $extraLines = ['', '— Zoom MTG —', $joinUrl];
         if ($passcode !== '')         $extraLines[] = 'パスコード: ' . $passcode;
         if (!empty($meeting['id']))   $extraLines[] = 'Meeting ID: ' . (string)$meeting['id'];
+        // v1233 借りて 作成 の 場合、 誰 の アカウント か を description に 記載
+        if (!empty($eff['shared'])) {
+            $extraLines[] = '(' . $eff['owner_display_name'] . ' さん の Zoom で 作成)';
+        }
         $newLocation = $oldLocation === '' ? $joinUrl : ($oldLocation . "\n" . $joinUrl);
         $newDescription = $oldDescription === ''
             ? trim(implode("\n", array_slice($extraLines, 1)))
@@ -649,6 +671,9 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 'join_url' => $joinUrl,
                 'password' => $passcode,
                 'meeting_id' => $meeting['id'] ?? null,
+                // v1233 fb#504 借りて 作成 した か どうか、 誰 の Zoom で 作った か
+                'shared' => !empty($eff['shared']),
+                'owner_display_name' => (string)$eff['owner_display_name'],
             ],
         ]);
         return;

@@ -1696,7 +1696,10 @@ async function renderCalendarEvents({ force = false } = {}) {
           if (r?.invalidate_calendar_cache) {
             try { localStorage.removeItem('labpay-cal-events-cache'); } catch {}
           }
-          toast('Zoom MTG を追加しました');
+          // v1233 fb#504 借りて 追加 した場合 は 誰の Zoom か 明示
+          toast(r?.zoom?.shared
+            ? `Zoom MTG を ${r.zoom.owner_display_name || '中村さん'} の アカウント で 追加しました`
+            : 'Zoom MTG を追加しました');
           await renderCalendarEvents();
         } catch (e) {
           toast('失敗: ' + (e.message || String(e)));
@@ -2276,13 +2279,15 @@ function openMtgModal(opts = {}) {
             <option value="primary">(読み込み中…)</option>
           </select>
         </label>
-        <label style="display:flex; align-items:center; gap:10px; margin:4px 0 10px">
+        <label style="display:flex; align-items:center; gap:10px; margin:4px 0 4px">
           <span class="switch">
             <input type="checkbox" id="mtg-zoom" checked>
             <span class="slider"></span>
           </span>
           <span>📹 Zoom MTG を含める <span class="hint-sm">— OFF なら予定だけ作成</span></span>
         </label>
+        <!-- v1233 fb#504 中村さん の Zoom を 借りて 作成 できる 案内 -->
+        <div id="mtg-zoom-info" class="hint-sm" style="margin:0 0 10px 42px; font-size:11px; color:#6b7280">Zoom 連携状態を確認中…</div>
         <div id="mtg-error" class="muted" style="color:var(--danger); margin:6px 0; min-height:18px"></div>
         <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
           <button id="mtg-cancel">キャンセル</button>
@@ -2326,6 +2331,28 @@ function openMtgModal(opts = {}) {
       return `<option value="${escapeHtml(c.id)}">${escapeHtml(label)}</option>`;
     }).join('');
   })();
+  // v1233 fb#504 Zoom 連携 状態 (自分 or 共有) を 表示
+  (async () => {
+    const info = document.getElementById('mtg-zoom-info');
+    const zoomCb = document.getElementById('mtg-zoom');
+    if (!info || !zoomCb) return;
+    try {
+      const z = await get('/api/me/zoom');
+      if (z?.connected) {
+        info.innerHTML = `📹 自分の Zoom (${escapeHtml(z.email || '連携済み')}) で MTG を作成します`;
+        info.style.color = '#15803d';
+      } else if (z?.shared_available) {
+        info.innerHTML = `🎁 <b>${escapeHtml(z.shared_owner_display_name || '中村さん')}</b> の Zoom を借りて MTG を作成できます (自分での Zoom 連携は不要)`;
+        info.style.color = '#7b3fa0';
+      } else {
+        info.innerHTML = `⚠️ Zoom 未連携 (共有できる admin も 未連携)。 Zoom OFF で 予定 のみ 作成 して ください`;
+        info.style.color = '#dc2626';
+        zoomCb.checked = false;
+      }
+    } catch (e) {
+      info.textContent = 'Zoom 状態確認 失敗: ' + (e?.message || e);
+    }
+  })();
   document.getElementById('mtg-create').addEventListener('click', async () => {
     const btn   = document.getElementById('mtg-create');
     const errEl = document.getElementById('mtg-error');
@@ -2348,7 +2375,12 @@ function openMtgModal(opts = {}) {
       if (r.invalidate_calendar_cache) {
         try { localStorage.removeItem('labpay-cal-events-cache'); } catch {}
       }
-      toast(with_zoom ? 'Zoom MTG を作成しました' : '予定を作成しました');
+      // v1233 fb#504 借りて作成した場合は誰の Zoom か明示
+      const zoomShared = with_zoom && r?.zoom?.shared;
+      const zoomOwnerName = zoomShared ? (r?.zoom?.owner_display_name || '中村さん') : '';
+      toast(with_zoom
+        ? (zoomShared ? `Zoom MTG を ${zoomOwnerName} の アカウント で 作成しました` : 'Zoom MTG を作成しました')
+        : '予定を作成しました');
       close();
       await renderCalendarEvents();
     } catch (e) {

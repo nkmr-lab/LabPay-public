@@ -78,6 +78,102 @@ class Zoom {
         return $data;
     }
 
+    // v1233 fb#504 中村さん要望「私 が zoom の 設定 を している の を 活用 して、 学生さん も
+    //   zoom の オンライン MTG 生成 できる ように したい」
+    // 「自分 の Zoom が 未連携 でも、 admin (中村さん) の Zoom を 借りて MTG を 生成 できる」
+    // ように する 共有 モード。 順序:
+    //   1. まず 自分 の token を 試す (成功 なら 自 host で 作る)
+    //   2. 失敗 (zoom_not_connected) なら admin で zoom_access_token を 持って いる 人 の 中 で
+    //      shared_owner_user_id が cfg で 指定 されて いれば それ、 なければ 最も 若い id の
+    //      admin (実運用上 中村さん) の token を fetch して 「借りて」 MTG を 作る
+    // 戻り値: ['access_token' => ..., 'owner_user_id' => ..., 'shared' => bool,
+    //          'owner_display_name' => ...]
+    // shared=true の 時、 呼び出し側 は MTG description に 「(誰の Zoom で 作成)」 と 添えて
+    // 使用状況 を 透明化 する。
+    public static function ensureEffectiveAccessToken(PDO $pdo, array $cfg, int $userId): array {
+        // 1) 自分 の token
+        try {
+            $tok = self::ensureValidAccessToken($pdo, $cfg, $userId);
+            $st = $pdo->prepare('SELECT display_name FROM users WHERE id=?');
+            $st->execute([$userId]);
+            $name = (string)($st->fetchColumn() ?: '自分');
+            return [
+                'access_token' => $tok,
+                'owner_user_id' => $userId,
+                'owner_display_name' => $name,
+                'shared' => false,
+            ];
+        } catch (ApiException $e) {
+            if ($e->errCode !== 'zoom_not_connected' && $e->errCode !== 'zoom_reauth') {
+                throw $e;
+            }
+            // fall through to shared
+        }
+        // 2) shared owner を 探す
+        $sharedUserId = (int)($cfg['zoom']['shared_owner_user_id'] ?? 0);
+        $st = null;
+        if ($sharedUserId > 0) {
+            $st = $pdo->prepare("SELECT id, display_name FROM users
+                                  WHERE id=? AND zoom_access_token IS NOT NULL LIMIT 1");
+            $st->execute([$sharedUserId]);
+        }
+        $row = $st ? $st->fetch(PDO::FETCH_ASSOC) : null;
+        if (!$row) {
+            // cfg 未指定 or 指定 admin が 未連携 → admin role の 中 で 最古 の 連携済み user を 使う
+            $st = $pdo->prepare("SELECT id, display_name FROM users
+                                  WHERE role='admin' AND kind='human'
+                                    AND zoom_access_token IS NOT NULL
+                               ORDER BY id ASC LIMIT 1");
+            $st->execute();
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+        }
+        if (!$row) {
+            throw new ApiException('zoom_not_connected',
+                'あなた の Zoom も 共有 Zoom (中村さん) も 連携 されて いません', 409);
+        }
+        $sharedId = (int)$row['id'];
+        // shared account の token を refresh して 有効な access_token を返す
+        $tok = self::ensureValidAccessToken($pdo, $cfg, $sharedId);
+        return [
+            'access_token' => $tok,
+            'owner_user_id' => $sharedId,
+            'owner_display_name' => (string)($row['display_name'] ?? '共有'),
+            'shared' => true,
+        ];
+    }
+
+    // 現在 の user が 借りられる Zoom (自分 or shared) の 状態 を まとめて 返す。
+    // 設定画面 / MTG 作成 モーダル で 「🎁 中村さん の Zoom を 借りて 使えます」表示 に。
+    // 戻り値: ['self_connected' => bool, 'shared_available' => bool,
+    //          'shared_owner_display_name' => string|null]
+    public static function effectiveAvailability(PDO $pdo, array $cfg, int $userId): array {
+        $st = $pdo->prepare('SELECT zoom_access_token FROM users WHERE id=?');
+        $st->execute([$userId]);
+        $selfConnected = !empty($st->fetchColumn());
+
+        $sharedUserId = (int)($cfg['zoom']['shared_owner_user_id'] ?? 0);
+        $sharedName = null;
+        if ($sharedUserId > 0) {
+            $st = $pdo->prepare("SELECT display_name FROM users
+                                  WHERE id=? AND zoom_access_token IS NOT NULL LIMIT 1");
+            $st->execute([$sharedUserId]);
+            $sharedName = $st->fetchColumn() ?: null;
+        }
+        if ($sharedName === null) {
+            $st = $pdo->prepare("SELECT display_name FROM users
+                                  WHERE role='admin' AND kind='human'
+                                    AND zoom_access_token IS NOT NULL
+                               ORDER BY id ASC LIMIT 1");
+            $st->execute();
+            $sharedName = $st->fetchColumn() ?: null;
+        }
+        return [
+            'self_connected' => $selfConnected,
+            'shared_available' => $sharedName !== null,
+            'shared_owner_display_name' => $sharedName !== null ? (string)$sharedName : null,
+        ];
+    }
+
     // 取り出した token が期限切れなら refresh して DB に保存、最新の access_token を返す。
     // Zoom は refresh するたびに新しい refresh_token も返してくる (rotate 方式) ので
     // 古いのを残さないよう必ず両方更新。
