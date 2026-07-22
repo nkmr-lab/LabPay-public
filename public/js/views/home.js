@@ -1150,6 +1150,20 @@ async function renderPresence() {
 //     Google に If-None-Match で revalidate。全 cal 変更なしなら
 //     {not_modified:true} で返り cache を続投、変更あれば新 items + 新 etags。
 const CAL_CACHE_KEY = 'labpay-cal-events-cache';
+// v1231 fb#503 「全て表示」トグル (フィルタ を 一時解除)。 localStorage 永続、
+// ON の 間 は 隠された 予定 も 「filtered_out」バッジ 付き で 表示 する。
+const CAL_NOFILTER_KEY = 'labpay-cal-nofilter';
+function readCalNoFilter() {
+  try { return localStorage.getItem(CAL_NOFILTER_KEY) === '1'; } catch { return false; }
+}
+function writeCalNoFilter(v) {
+  try {
+    if (v) localStorage.setItem(CAL_NOFILTER_KEY, '1');
+    else   localStorage.removeItem(CAL_NOFILTER_KEY);
+  } catch {}
+}
+// フィルタ ルール数 の 最新値 (レスポンス から更新)。 タイル表示の 判定用。
+let _lastFilterRuleCount = 0;
 // v1170 中村さん指摘「フロントページのロードがやや重い、特にカレンダーっぽい」
 //   → TTL を 5 → 15 min、かつ SWR (stale-while-revalidate) を導入。
 //   ロード時に cache があれば齢に関係なく即描画 + 裏で etag 検証再取得、
@@ -1465,12 +1479,16 @@ async function renderCalendarEvents({ force = false } = {}) {
   // v1170 SWR ヘルパ: 実際の GCal fetch + cache 更新。 items は「返された予定」を返す。
   //   force=true は cache を無視、 etags も送らない (= 完全 fresh 取得)。
   const _fetchCalendarNow = async (forceFetch) => {
-    const cache = forceFetch ? null : readCalCache();
-    const etagsQuery = (!forceFetch && cache && cache.etags && Object.keys(cache.etags).length)
+    // v1231 no_filter=1 の 時 は etag/cache を 使わない (フィルタ状態 が 混じる の を 避ける)
+    const noFilter = readCalNoFilter();
+    const cache = (forceFetch || noFilter) ? null : readCalCache();
+    const etagsQuery = (!forceFetch && !noFilter && cache && cache.etags && Object.keys(cache.etags).length)
       ? JSON.stringify(cache.etags) : undefined;
     const params = { tz: localTzInfo().iana };
     if (etagsQuery) params.etags = etagsQuery;
+    if (noFilter) params.no_filter = 1;
     const data = await get('/api/me/calendar/events', params);
+    if (typeof data?.filter_rule_count === 'number') _lastFilterRuleCount = data.filter_rule_count;
     if (data && data.not_modified && cache) {
       writeCalCache(cache.items, cache.etags);
       return cache.items;
@@ -1480,7 +1498,8 @@ async function renderCalendarEvents({ force = false } = {}) {
       writeCalCache(cache.items, cache.etags || {});
       return cache.items;
     }
-    writeCalCache(fresh_items, (data && data.etags) || {});
+    // no_filter=1 の 結果 は 通常キャッシュ に 書き戻さない (混入 防止)
+    if (!noFilter) writeCalCache(fresh_items, (data && data.etags) || {});
     return fresh_items;
   };
   try {
@@ -1584,9 +1603,12 @@ async function renderCalendarEvents({ force = false } = {}) {
       : withFlags.map((ev, idx) => {
       const locIsUrl = ev.location && /^https?:\/\//i.test(ev.location.trim());
       const loc = (ev.location && !locIsUrl) ? `<div class="meta">📍 ${escapeHtml(ev.location)}</div>` : '';
+      const filteredBadge = ev.filtered_out
+        ? `<span style="display:inline-block; font-size:10px; padding:1px 6px; border-radius:8px; background:#fee2e2; color:#991b1b; margin-right:4px" title="フィルタで通常は非表示になる予定">🚫 フィルタ済</span>`
+        : '';
       const titleHtml = ev.html_url
-        ? `<a class="bold" href="${escapeHtml(ev.html_url)}" target="_blank" rel="noopener" style="text-decoration:none; color:inherit">${escapeHtml(ev.title)}</a>`
-        : `<span class="bold">${escapeHtml(ev.title)}</span>`;
+        ? `<a class="bold" href="${escapeHtml(ev.html_url)}" target="_blank" rel="noopener" style="text-decoration:none; color:inherit">${filteredBadge}${escapeHtml(ev.title)}</a>`
+        : `<span class="bold">${filteredBadge}${escapeHtml(ev.title)}</span>`;
       // 既に MTG URL がある: 参加ボタン。無い + 終日でない: Zoom 追加ボタン。
       let zoomBtn = '';
       if (ev.url) {
@@ -1596,13 +1618,16 @@ async function renderCalendarEvents({ force = false } = {}) {
       }
       const isNext = idx === nextIdx;
       // box-shadow:inset で左バーを描く (border-left を使うと content が右に
-      // ずれて他の行と縦が揃わなくなるので)。優先順位は過去 → 進行中 → 次 → 翌日。
+      // ずれて他の行と縦が揃わなくなるので)。優先順位は 過去 → フィルタ済 → 進行中 → 次 → 翌日。
       const styles = [
         'align-items:flex-start',
         'gap:8px',
       ];
       if (ev._isPast) {
         styles.push('opacity:0.5', 'filter:grayscale(60%)');
+      } else if (ev.filtered_out) {
+        // フィルタ で 通常 非表示 の 予定 は 目立たない 灰色 で
+        styles.push('opacity:0.65', 'background:#f9fafb', 'box-shadow:inset 4px 0 0 #9ca3af');
       } else if (ev._isInProgress) {
         styles.push('background:var(--primary-soft)', 'box-shadow:inset 4px 0 0 var(--primary)');
       } else if (isNext) {
@@ -1620,14 +1645,27 @@ async function renderCalendarEvents({ force = false } = {}) {
           </div>
         </div>`;
     }).join('');
+    // v1231 fb#503 「全て表示」トグル行。 フィルタ ルール が 1 件以上 ある 時 だけ 出す。
+    //   ON の 間 は 「フィルタ を 戻す (通常表示)」に 切替、 サーバ側 で filtered_out=1 と 印付き の
+    //   予定 も 出す ように なる。
+    const nfNow = readCalNoFilter();
+    const filterToggleRow = (_lastFilterRuleCount > 0)
+      ? `<div class="list-item add-row" id="home-cal-nofilter-toggle" style="cursor:pointer">
+           <div class="grow" style="font-size:12px; color:${nfNow ? '#374151' : 'var(--primary)'}">
+             ${nfNow
+               ? `🔎 フィルタ を 戻す (通常表示)`
+               : `🔍 フィルタ ${_lastFilterRuleCount} 件 を 一時解除 して 全て表示`}
+           </div>
+         </div>`
+      : '';
     // v1210 fingerprint による 差分レンダ: 同じ内容なら DOM 触らない (60秒ポーリング の チカチカ抑止)
-    const _renderKey = 'today|' + calExpanded + '|' + eventsHtml.length + '|' + JSON.stringify(items.map(x => [x.id, x.start, x.title, x.url, x._isInProgress, x._isPast]));
+    const _renderKey = 'today|' + calExpanded + '|' + nfNow + '|' + _lastFilterRuleCount + '|' + eventsHtml.length + '|' + JSON.stringify(items.map(x => [x.id, x.start, x.title, x.url, x._isInProgress, x._isPast, x.filtered_out]));
     if (_renderKey === _calLastRenderKey) {
       // ハンドラは 前回 bind 済 (DOM が 生きて いる)。 何もしない。
       return;
     }
     _calLastRenderKey = _renderKey;
-    root.innerHTML = eventsHtml + expandRow + addRow;
+    root.innerHTML = eventsHtml + filterToggleRow + expandRow + addRow;
     document.getElementById('home-mtg-add')?.addEventListener('click', openMtgModal);
     document.getElementById('home-cal-expand')?.addEventListener('click', () => {
       calExpanded = true;
@@ -1636,6 +1674,12 @@ async function renderCalendarEvents({ force = false } = {}) {
     document.getElementById('home-cal-collapse')?.addEventListener('click', () => {
       calExpanded = false;
       renderCalendarEvents();
+    });
+    document.getElementById('home-cal-nofilter-toggle')?.addEventListener('click', () => {
+      // v1231 fb#503 「全て表示」トグル。 state 切替 → cache 破棄 → force refetch。
+      writeCalNoFilter(!readCalNoFilter());
+      try { localStorage.removeItem(CAL_CACHE_KEY); } catch {}
+      renderCalendarEvents({ force: true });
     });
     // 「＋ Zoom を追加」ボタンの click ハンドラ。押下中はラベル変更 + disable。
     root.querySelectorAll('[data-add-zoom]').forEach(btn => {
@@ -1737,15 +1781,23 @@ async function renderCalendarMonth({ force = false } = {}) {
   const isCurrent = calMonth === currentYm();
   nav.hidden = false;
   // v1210 nav も 内容 変わらない なら 更新しない (60秒 ポーリング 中の チカチカ 抑止)
-  const navKey = `${p.y}|${p.m}|${isCurrent}|${calMonth}`;
+  // v1231 nav 内 に フィルタ 一時解除 チップ も 表示
+  const nfMonthNow = readCalNoFilter();
+  const navKey = `${p.y}|${p.m}|${isCurrent}|${calMonth}|${nfMonthNow}|${_lastFilterRuleCount}`;
   if (nav.dataset.key !== navKey) {
     nav.dataset.key = navKey;
+    const filterChip = (_lastFilterRuleCount > 0)
+      ? `<button class="btn" data-cal-nav="nofilter" style="padding:2px 8px; font-size:11px; ${nfMonthNow ? 'background:#fef3c7; color:#78350f' : ''}" title="フィルタ ${_lastFilterRuleCount} 件">
+           ${nfMonthNow ? '🔎 通常に戻す' : `🔍 全て表示 (フィルタ ${_lastFilterRuleCount} 件)`}
+         </button>`
+      : '';
     nav.innerHTML = `
       <div class="row" style="align-items:center; gap:6px; flex-wrap:wrap">
         <button class="btn" data-cal-nav="prev" aria-label="前月" style="padding:2px 10px">◀</button>
         <div style="font-weight:700; min-width:100px; text-align:center">${p.y}年 ${p.m}月</div>
         <button class="btn" data-cal-nav="next" aria-label="次月" style="padding:2px 10px">▶</button>
         ${!isCurrent ? `<button class="btn" data-cal-nav="today" style="padding:2px 10px; font-size:11px">今月</button>` : ''}
+        ${filterChip}
         <input type="month" data-cal-nav="pick" value="${calMonth}" style="padding:2px 6px; font-size:12px; margin-left:auto">
       </div>`;
     nav.querySelectorAll('[data-cal-nav]').forEach(el => {
@@ -1754,6 +1806,15 @@ async function renderCalendarMonth({ force = false } = {}) {
         el.addEventListener('change', (e) => {
           const v = e.target.value;
           if (/^\d{4}-\d{2}$/.test(v)) { calMonth = v; renderCalendarMonth({}); }
+        });
+      } else if (act === 'nofilter') {
+        el.addEventListener('click', () => {
+          writeCalNoFilter(!readCalNoFilter());
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith(CAL_MONTH_CACHE_PREFIX)) localStorage.removeItem(k);
+          }
+          renderCalendarMonth({ force: true });
         });
       } else {
         el.addEventListener('click', () => {
@@ -1767,16 +1828,21 @@ async function renderCalendarMonth({ force = false } = {}) {
   }
   // v1210 cache が あれば「読み込み中…」プレースホルダ を 出さない (チカチカ抑止)。
   //   キャッシュ なし かつ 未描画 の 時 だけ プレースホルダ。
-  let items = force ? null : readMonthCache(calMonth);
+  // v1231 no_filter 時 は month cache も 使わない (フィルタ済 予定 が 混じる)
+  const nfMonth = readCalNoFilter();
+  let items = (force || nfMonth) ? null : readMonthCache(calMonth);
   const wasEmpty = !root.innerHTML || root.innerHTML.includes('読み込み中');
   if (!items && wasEmpty) {
     root.innerHTML = `<div class="empty">読み込み中…</div>`;
   }
   if (!items) {
     try {
-      const data = await get('/api/me/calendar/events', { tz: localTzIana(), from: p.from, to: p.to });
+      const params = { tz: localTzIana(), from: p.from, to: p.to };
+      if (nfMonth) params.no_filter = 1;
+      const data = await get('/api/me/calendar/events', params);
+      if (typeof data?.filter_rule_count === 'number') _lastFilterRuleCount = data.filter_rule_count;
       items = (data && data.items) || [];
-      writeMonthCache(calMonth, items);
+      if (!nfMonth) writeMonthCache(calMonth, items);
     } catch (e) {
       root.innerHTML = `<div class="empty">読み込み失敗: ${escapeHtml(e?.message || String(e))}</div>`;
       return;
@@ -1934,12 +2000,17 @@ async function renderCalendarDay({ force = false } = {}) {
   if (wasEmpty) root.innerHTML = `<div class="empty">読み込み中…</div>`;
   const ym = ymdToYm(calDay);
   let dayItems = null;
-  const cached = force ? null : readMonthCache(ym);
+  // v1231 no_filter 時 は month cache 由来 の フィルタ済 データ を 使わず 常に fresh fetch
+  const nfDay = readCalNoFilter();
+  const cached = (force || nfDay) ? null : readMonthCache(ym);
   if (cached) {
     dayItems = cached.filter(ev => eventDayYmd(ev) === calDay);
   } else {
     try {
-      const data = await get('/api/me/calendar/events', { tz: localTzIana(), from: calDay, to: calDay });
+      const params = { tz: localTzIana(), from: calDay, to: calDay };
+      if (nfDay) params.no_filter = 1;
+      const data = await get('/api/me/calendar/events', params);
+      if (typeof data?.filter_rule_count === 'number') _lastFilterRuleCount = data.filter_rule_count;
       dayItems = (data && data.items) || [];
     } catch (e) {
       root.innerHTML = `<div class="empty">読み込み失敗: ${escapeHtml(e?.message || String(e))}</div>`;
@@ -1968,11 +2039,18 @@ async function renderCalendarDay({ force = false } = {}) {
               ? `<button class="btn" data-hm-day-addzoom="${escapeHtml(ev.id)}" data-hm-day-cal="${escapeHtml(ev.calendar || 'primary')}" style="padding:4px 10px; font-size:12px; margin-top:6px; align-self:flex-start; color:var(--primary)">＋ Zoom を追加</button>`
               : '');
         const loc = (ev.location && !/^https?:\/\//i.test(ev.location.trim())) ? `<div class="meta">📍 ${escapeHtml(ev.location)}</div>` : '';
+        const filteredBadge = ev.filtered_out
+          ? `<span style="display:inline-block; font-size:10px; padding:1px 6px; border-radius:8px; background:#fee2e2; color:#991b1b; margin-right:4px" title="フィルタで通常は非表示になる予定">🚫 フィルタ済</span>`
+          : '';
         const titleHtml = ev.html_url
-          ? `<a class="bold" href="${escapeHtml(ev.html_url)}" target="_blank" rel="noopener" style="text-decoration:none; color:inherit">${escapeHtml(ev.title || '(無題)')}</a>`
-          : `<span class="bold">${escapeHtml(ev.title || '(無題)')}</span>`;
-        return `<div class="list-item" style="align-items:flex-start; gap:8px; box-shadow:inset 4px 0 0 ${color}">
-                  <div style="min-width:64px; font-weight:700; color:${color}; padding-top:1px">${escapeHtml(fmtTime(ev))}</div>
+          ? `<a class="bold" href="${escapeHtml(ev.html_url)}" target="_blank" rel="noopener" style="text-decoration:none; color:inherit">${filteredBadge}${escapeHtml(ev.title || '(無題)')}</a>`
+          : `<span class="bold">${filteredBadge}${escapeHtml(ev.title || '(無題)')}</span>`;
+        // v1231 フィルタ済 予定 は 目立たない 灰色 枠 に
+        const barColor = ev.filtered_out ? '#9ca3af' : color;
+        const rowStyle = ev.filtered_out ? 'align-items:flex-start; gap:8px; opacity:0.65; background:#f9fafb; box-shadow:inset 4px 0 0 #9ca3af'
+                                          : `align-items:flex-start; gap:8px; box-shadow:inset 4px 0 0 ${color}`;
+        return `<div class="list-item" style="${rowStyle}">
+                  <div style="min-width:64px; font-weight:700; color:${barColor}; padding-top:1px">${escapeHtml(fmtTime(ev))}</div>
                   <div class="grow" style="display:flex; flex-direction:column">
                     ${titleHtml}
                     ${loc}
@@ -1984,12 +2062,31 @@ async function renderCalendarDay({ force = false } = {}) {
                     <div class="grow bold" style="color:var(--primary)">＋ MTG を立てる (${Number(mm)}/${Number(d)} に)</div>
                     <div class="hint">→</div>
                   </div>`;
+  // v1231 fb#503 day モード にも 「全て表示」トグル
+  const nfDayNow = readCalNoFilter();
+  const dayFilterToggleRow = (_lastFilterRuleCount > 0)
+    ? `<div class="list-item add-row" id="home-cal-day-nofilter" style="cursor:pointer">
+         <div class="grow" style="font-size:12px; color:${nfDayNow ? '#374151' : 'var(--primary)'}">
+           ${nfDayNow
+             ? `🔎 フィルタ を 戻す (通常表示)`
+             : `🔍 フィルタ ${_lastFilterRuleCount} 件 を 一時解除 して 全て表示`}
+         </div>
+       </div>`
+    : '';
   // v1210 fingerprint 差分レンダ
-  const dayKey = 'day|' + calDay + '|' + evsHtml.length + '|' + JSON.stringify(dayItems.map(x => [x.id, x.start, x.title, x.url]));
+  const dayKey = 'day|' + calDay + '|' + nfDayNow + '|' + _lastFilterRuleCount + '|' + evsHtml.length + '|' + JSON.stringify(dayItems.map(x => [x.id, x.start, x.title, x.url, x.filtered_out]));
   if (root.dataset.rkey === dayKey) return;
   root.dataset.rkey = dayKey;
-  root.innerHTML = evsHtml + addRow;
+  root.innerHTML = evsHtml + dayFilterToggleRow + addRow;
   document.getElementById('home-cal-day-add')?.addEventListener('click', () => openMtgModal({ dateYmd: calDay }));
+  document.getElementById('home-cal-day-nofilter')?.addEventListener('click', () => {
+    writeCalNoFilter(!readCalNoFilter());
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(CAL_MONTH_CACHE_PREFIX)) localStorage.removeItem(k);
+    }
+    renderCalendarDay({ force: true });
+  });
   root.querySelectorAll('[data-hm-day-addzoom]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const eventId = btn.dataset.hmDayAddzoom;

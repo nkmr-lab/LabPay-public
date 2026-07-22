@@ -1669,6 +1669,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 } catch (Throwable $_) { $perCal[$cid] = null; }
             }
         }
+        // v1231 fb#503 中村さん要望「カレンダーでフィルタされてる場合は、全て表示の機能を用意して、
+        //   全部表示するようにして欲しい」→ ?no_filter=1 で フィルタ を バイパス。 除外されたはず の
+        //   予定 に は filtered_out:1 を 付けて 返す (フロント で 「フィルタ で 消える予定」だと 表示)。
+        //   filter_rule_count で ルール数 も 返し、 フロント は 「フィルタ N 件 を 一時解除」ボタン を
+        //   表示 する か 判断。
+        $noFilter = !empty($_GET['no_filter']);
         $merged = [];
         $etags  = [];
         foreach ($perCal as $cid => $r) {
@@ -1679,7 +1685,8 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $end   = $e['end']['dateTime']   ?? $e['end']['date']   ?? null;
                 if (!$start) continue;
                 $title = (string)($e['summary'] ?? '(無題)');
-                if (calendar_filter_rules_match($filterRules, $title)) continue;
+                $isFilteredOut = calendar_filter_rules_match($filterRules, $title);
+                if ($isFilteredOut && !$noFilter) continue;
                 $merged[] = [
                     'id'       => (string)($e['id'] ?? ''),
                     'calendar' => $cid,
@@ -1690,12 +1697,17 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                     'location' => (string)($e['location'] ?? ''),
                     'url'      => GoogleCalendar::extractMeetingUrl($e),
                     'html_url' => (string)($e['htmlLink'] ?? ''),
+                    'filtered_out' => $isFilteredOut ? 1 : 0,
                 ];
             }
         }
         usort($merged, fn($a, $b) => strcmp($a['start'], $b['start']));
         // etags は (object) でキャストして JSON で {} を出す (空 [] にならないよう)
-        json_response(['items' => $merged, 'etags' => (object)$etags]);
+        json_response([
+            'items' => $merged,
+            'etags' => (object)$etags,
+            'filter_rule_count' => count($filterRules),
+        ]);
         return;
     }
     if ($sub === 'calendar' && ($seg[2] ?? '') === '' && $method === 'DELETE') {
