@@ -277,32 +277,50 @@ async function loadAlbumPage(albumId, before, beforeId, append) {
 
 function thumbTileHtml(it, idx) {
   const isVideo = it.type === 'video';
-  // v1235 fb (中村さん報告「部分的にサムネイル画像がでてない」)
-  //   timeline items は has_thumb フラグ (`it.thumb`) を 持ち、 thumb256 派生 が 無い もの が
-  //   ある (古い/未生成)。 thumb 無し は 直接 medium (view2048) に フォールバック、
-  //   さらに <img onerror> で medium → poster (動画用) → 透明化 の 3 段 フォールバック。
-  const primary = it.thumb ? 'thumb' : 'medium';
-  const src = thumbUrl(it.id, primary);
-  // onerror チェーン: thumb→medium→placeholder / video→poster→placeholder
-  const fbUrl = isVideo
-    ? `${PHOTO_ORIGIN}/media.php?id=${encodeURIComponent(it.id)}&k=poster`
-    : thumbUrl(it.id, 'medium');
-  const onerr = `
-    if(!this.dataset.f1){this.dataset.f1=1; this.src=${JSON.stringify(fbUrl)}; return;}
-    this.style.opacity=0.2; this.removeAttribute('src'); this.parentElement.style.background='#fee';`;
+  // v1236 fb (中村さん報告「サムネ画像がちゃんとでてないやつもある」)
+  //   media.php は derivatives テーブル に kind (thumb256/view2048/video720/poster)
+  //   が 無い と 404 を 返す (原本 は 配信 しない)。 両方 とも 未生成 の 画像 は 現状 表示
+  //   できない。 加えて it.ready===false (生成中) / it.failed===true (失敗) の 状態 も
+  //   区別 する。
+  //   ★戦略: 下敷き に 状態 ラベル を 置き、 その上 に img を 重ねる。 img 読込 成功 で
+  //   カバー、 失敗 で 透明化 → 下 の ラベル が 見える。 これ で 「なぜ 出ない か」 が 分かる。
+  const notReady = !it.ready;
+  const failed = !!it.failed;
+  const takenBrief = it.takenAt ? String(it.takenAt).slice(5, 10).replace('-', '/') : '';
+  const stateEmoji = failed ? '⚠' : (notReady ? '⏳' : (isVideo ? '🎬' : '📷'));
+  const stateLabel = failed ? '生成失敗' : (notReady ? '生成中' : 'サムネ 未 生成');
+  const label = `
+    <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#9ca3af; text-align:center; padding:4px; font-size:10px; line-height:1.3; pointer-events:none">
+      <div style="font-size:22px; opacity:0.7">${stateEmoji}</div>
+      <div style="margin-top:2px">${stateLabel}</div>
+      <div style="margin-top:2px; opacity:0.7">#${escapeHtml(String(it.id))}${takenBrief ? ` · ${takenBrief}` : ''}</div>
+    </div>`;
+  // ready かつ !failed の 時 のみ 画像 読込 を 試す。 生成中/失敗 は placeholder のみ。
+  let imgHtml = '';
+  if (!notReady && !failed) {
+    const primary = it.thumb ? 'thumb' : 'medium';
+    const src = thumbUrl(it.id, primary);
+    // onerror チェーン: thumb→medium→透明 (=下敷き ラベル が 見える)
+    const fbUrl = isVideo
+      ? `${PHOTO_ORIGIN}/media.php?id=${encodeURIComponent(it.id)}&k=poster`
+      : thumbUrl(it.id, 'medium');
+    const onerr = `if(!this.dataset.f1){this.dataset.f1=1; this.src=${JSON.stringify(fbUrl)}; return;} this.style.display='none';`;
+    imgHtml = `<img src="${escapeHtml(src)}" loading="lazy" alt=""
+           style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; background:#f3f4f6"
+           onerror="${onerr}">`;
+  }
   const dur = isVideo && it.durationMs
-    ? `<div style="position:absolute; right:3px; bottom:3px; background:rgba(0,0,0,0.7); color:#fff; padding:1px 5px; border-radius:3px; font-size:10px; font-weight:600">
+    ? `<div style="position:absolute; right:3px; bottom:3px; background:rgba(0,0,0,0.7); color:#fff; padding:1px 5px; border-radius:3px; font-size:10px; font-weight:600; z-index:2">
          ${fmtDuration(it.durationMs)}
        </div>`
     : '';
   const videoBadge = isVideo
-    ? `<div style="position:absolute; left:3px; top:3px; background:rgba(0,0,0,0.6); color:#fff; padding:1px 4px; border-radius:3px; font-size:10px">▶</div>`
+    ? `<div style="position:absolute; left:3px; top:3px; background:rgba(0,0,0,0.6); color:#fff; padding:1px 4px; border-radius:3px; font-size:10px; z-index:2">▶</div>`
     : '';
   return `
     <div data-photo-idx="${idx}" style="position:relative; cursor:pointer; background:#f3f4f6; aspect-ratio:1/1; overflow:hidden; border-radius:2px">
-      <img src="${escapeHtml(src)}" loading="lazy" alt=""
-           style="width:100%; height:100%; object-fit:cover; display:block"
-           onerror="${onerr.replace(/\n\s*/g, ' ')}">
+      ${label}
+      ${imgHtml}
       ${videoBadge}
       ${dur}
     </div>`;
