@@ -130,7 +130,10 @@ export const APPS = [
     desc: '中村研の 予算執行 DB。 科研費 / 校費 / 各種 fund の 予定 と 実績、 アルバイト代の 登録、 支払明細、 予算残高 まで。 nkmr-SSO で保護。 自分宛の 支払いだけ を LabPay 内で 見たい 時 は 💴 自分宛の研究費支払い を どうぞ。', defaultVisible: true },
   // v1229 中村研 写真基盤 (Google Photos 脱出後の自前アルバム)
   { id: 'photo-portal',   cat: 'shared', url: 'https://photo.nkmr.io', title: '📷 中村研フォト (photo.nkmr.io)',
-    desc: '中村研の 写真・動画 を 全部 貯める 自前 フォト基盤 (Google Photos の 代替)。 学会 / 合宿 / 飲み会 / ゼミの 写真 と 動画 を まとめて 保存 + 検索。 nkmr-SSO で保護。 アルバム一覧を LabPay 内で見たい 時 は 📸 中村研アルバム を どうぞ。', defaultVisible: true },
+    desc: '中村研の 写真・動画 を 全部 貯める 自前 フォト基盤 (Google Photos の 代替)。 学会 / 合宿 / 飲み会 / ゼミの 写真 と 動画 を まとめて 保存 + 検索。 nkmr-SSO で保護。 アルバム 一覧 を LabPay 内 で 見たい 時 は 🖼 フォト アルバム を どうぞ。', defaultVisible: true },
+  // v1234 photo.nkmr.io の アルバム を LabPay 内 で 閲覧 (API 直叩き)
+  { id: 'photo',          cat: 'shared', url: '#/photo', title: '🖼 フォト アルバム (LabPay 内)',
+    desc: 'photo.nkmr.io の アルバム を LabPay 内 で 閲覧。 アルバム一覧 → タイル → タップ で 全画面 ライトボックス (前後 スワイプ 可)。 タグ / タイトル で 絞り込み。 nkmr-SSO で 保護。 全機能 は 外部 サイト (📷 中村研フォト) を どうぞ。', defaultVisible: true },
   { id: 'poster-maker',   cat: 'shared', url: 'https://member.nkmr.io', title: '📇 メンバー紹介ポスター作成',
     desc: '研究室メンバー紹介ポスターを Web で入力 → pptx 自動生成。顔写真 / 名前 / 学年 / 研究テーマ / 趣味などを打ち込むと綺麗な A3 ポスターの pptx が落ちてくる。新歓 / 学会準備 / 研究室訪問対応に。 nkmr-SSO で保護。', defaultVisible: true },
   { id: 'file-browser',   cat: 'tools',    url: 'https://file.nkmr.io', title: '🗄 ファイルブラウザ',
