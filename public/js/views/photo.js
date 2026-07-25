@@ -143,10 +143,13 @@ export async function renderPhotoAlbums() {
 }
 
 function albumCardHtml(a) {
+  // v1235 cover が thumb256 派生 を 持たない ケース は medium (view2048) を 試して、 それ も
+  //   ダメ なら placeholder に フォールバック。 medium 表紙 で 先 に 出す (thumb256 が 無い ケース に 強い)。
+  const coverFallback = a.cover ? `${PHOTO_ORIGIN}/media.php?id=${encodeURIComponent(a.cover)}&k=view2048` : '';
   const cover = a.cover
     ? `<img src="${escapeHtml(thumbUrl(a.cover, 'medium'))}" loading="lazy"
-             style="width:100%; aspect-ratio:1/1; object-fit:cover; display:block"
-             onerror="this.style.background='#e5e7eb'; this.removeAttribute('src')">`
+             style="width:100%; aspect-ratio:1/1; object-fit:cover; display:block; background:#e5e7eb"
+             onerror="if(!this.dataset.f1){this.dataset.f1=1; this.src=${JSON.stringify(coverFallback)}; return;} this.style.opacity=0.2; this.removeAttribute('src'); this.parentElement.style.background='#fee';">`
     : `<div style="width:100%; aspect-ratio:1/1; background:linear-gradient(135deg, #ede4f3, #d4b8e8); display:flex; align-items:center; justify-content:center; font-size:32px">🖼</div>`;
   const tags = (a.tags || []).slice(0, 3).map(t =>
     `<span style="display:inline-block; font-size:10px; padding:1px 6px; margin:2px 2px 0 0; background:#e5e7eb; color:#374151; border-radius:8px">${escapeHtml(t)}</span>`
@@ -274,7 +277,19 @@ async function loadAlbumPage(albumId, before, beforeId, append) {
 
 function thumbTileHtml(it, idx) {
   const isVideo = it.type === 'video';
-  const src = thumbUrl(it.id, 'thumb');
+  // v1235 fb (中村さん報告「部分的にサムネイル画像がでてない」)
+  //   timeline items は has_thumb フラグ (`it.thumb`) を 持ち、 thumb256 派生 が 無い もの が
+  //   ある (古い/未生成)。 thumb 無し は 直接 medium (view2048) に フォールバック、
+  //   さらに <img onerror> で medium → poster (動画用) → 透明化 の 3 段 フォールバック。
+  const primary = it.thumb ? 'thumb' : 'medium';
+  const src = thumbUrl(it.id, primary);
+  // onerror チェーン: thumb→medium→placeholder / video→poster→placeholder
+  const fbUrl = isVideo
+    ? `${PHOTO_ORIGIN}/media.php?id=${encodeURIComponent(it.id)}&k=poster`
+    : thumbUrl(it.id, 'medium');
+  const onerr = `
+    if(!this.dataset.f1){this.dataset.f1=1; this.src=${JSON.stringify(fbUrl)}; return;}
+    this.style.opacity=0.2; this.removeAttribute('src'); this.parentElement.style.background='#fee';`;
   const dur = isVideo && it.durationMs
     ? `<div style="position:absolute; right:3px; bottom:3px; background:rgba(0,0,0,0.7); color:#fff; padding:1px 5px; border-radius:3px; font-size:10px; font-weight:600">
          ${fmtDuration(it.durationMs)}
@@ -287,7 +302,7 @@ function thumbTileHtml(it, idx) {
     <div data-photo-idx="${idx}" style="position:relative; cursor:pointer; background:#f3f4f6; aspect-ratio:1/1; overflow:hidden; border-radius:2px">
       <img src="${escapeHtml(src)}" loading="lazy" alt=""
            style="width:100%; height:100%; object-fit:cover; display:block"
-           onerror="this.style.opacity=0.3">
+           onerror="${onerr.replace(/\n\s*/g, ' ')}">
       ${videoBadge}
       ${dur}
     </div>`;
