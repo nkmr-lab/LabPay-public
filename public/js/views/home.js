@@ -268,7 +268,7 @@ export const HOME_CARDS = [
   { id: 'screen-shares',  title: '🖼 共有中の画像' },          // v718 #314
   { id: 'quote',          title: '💬 今日の名言 (偉人 / 漫画 / アニメ + ラボメン登録)' }, // v796 #396 / v804
   { id: 'papers-recent',  title: '📑 論文要約 / 全訳 (新着、公開 + 自分)' }, // v809
-  { id: 'nkmr-albums',    title: '📸 中村研アルバム (新着)' },                // v970
+  // v1238 nkmr-albums (Google Photos 列挙) widget 撤去。 photo-random で 代替。
   { id: 'photo-random',   title: '🎲 今日 の ラボ フォト (photo.nkmr.io)' },    // v1237
   // v580 ショートカットウィジェット (リンクのみ。全アプリをホームに置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
@@ -321,7 +321,7 @@ const NEW_DEFAULT_HIDDEN = [
   'sc-joint-events', 'sc-public-polls', 'sc-expenses', 'sc-buy-requests',
   'sc-my-games', 'sc-quotes', 'sc-news', 'sc-pomodoro', 'sc-power', 'sc-walk-mode',
 ];
-const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines', 'papers-recent', 'nkmr-albums', 'photo-random']; // v641, v649, v651, v671 既存ユーザにも自動表示 / v809 論文新着 widget を既存ユーザにもデフォルト表示 / v970 アルバム widget も既存ユーザに自動 ON / v1237 photo-random も 既存ユーザに 自動 ON
+const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines', 'papers-recent', 'photo-random']; // v641, v649, v651, v671 既存ユーザにも自動表示 / v809 論文新着 widget を既存ユーザにもデフォルト表示 / v1237 photo-random も 既存ユーザに 自動 ON / v1238 nkmr-albums 撤去
 export function readHomeLayout() {
   const merge = (order, hidden) => {
     const orderSet = new Set(order);
@@ -664,13 +664,7 @@ export async function renderHome() {
     </div>
 
     <!-- v970 中村研アルバム新着 (直近 6 件) -->
-    <div class="card" id="home-nkmr-albums-card" data-card-id="nkmr-albums" hidden>
-      <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">📸 中村研アルバム (新着)</h2>
-        <a href="#/albums" class="hint" style="margin-left:auto">すべて →</a>
-      </div>
-      <div id="home-nkmr-albums"><div class="home-skel-bars"></div></div>
-    </div>
+    <!-- v1238 nkmr-albums (Google Photos 列挙) widget 撤去。 下 の photo-random で 代替。 -->
 
     <!-- v1237 fb (中村さん要望) photo.nkmr.io から ランダム 6 枚 (seed=YYYYMMDD で 1 日固定)。
          タップ で ライトボックス、 右上 「📺 フォトフレーム」 で フルスクリーン スライド。 -->
@@ -798,7 +792,7 @@ export async function renderHome() {
     { cardId: 'screen-shares',  fn: renderScreenSharesWidget,  label: 'screen-shares' }, // v718 #314
     { cardId: 'quote',          fn: renderHomeQuote,           label: 'quote' },          // v796 #396 今日の 1 名言
     { cardId: 'papers-recent',  fn: renderHomePapersRecent,    label: 'papers' },         // v809 論文要約 / 全訳新着
-    { cardId: 'nkmr-albums',    fn: renderHomeNkmrAlbums,      label: 'nkmr-albums' },    // v970 中村研アルバム新着
+    // v1238 nkmr-albums renderer 撤去 (widget 廃止)
     { cardId: 'photo-random',   fn: renderHomePhotoRandom,     label: 'photo-random' },   // v1237 今日 の ラボ フォト
     { cardId: 'my-fund',        fn: renderHomeMyFund,          label: 'my-fund' },        // v1086 自分宛研究費支払い (fund.nkmr.io)
   ];
@@ -981,7 +975,7 @@ async function doHomePoll() {
     skip('todos')          ? null : renderHomeTodos(),
     skip('history')        ? null : renderRecentTx(),
     skip('papers-recent')  ? null : renderHomePapersRecent(), // v809 論文新着 widget
-    skip('nkmr-albums')    ? null : renderHomeNkmrAlbums(),   // v970 アルバム新着 widget
+    // v1238 nkmr-albums widget 撤去
     skip('photo-random')   ? null : renderHomePhotoRandom(),  // v1237 今日 の ラボ フォト widget
     skip('my-fund')        ? null : renderHomeMyFund(),        // v1086 自分宛研究費支払い widget
   ].filter(Boolean);
@@ -3436,55 +3430,9 @@ async function renderHomeQuote() {
   } catch (e) { card.hidden = true; }
 }
 
-// v970 中村研アルバムの新着 6 件をタイルで表示。
-//   実データは /api/nkmr-albums (全件) から取って、 sortKey (YYYY-MM-DD) 降順の上位 6 件。
-//   サムネ / 写真枚数はバックグラウンド cron が事前 fetch 済なので、 batch endpoint で即返却。
-async function renderHomeNkmrAlbums() {
-  const card = document.getElementById('home-nkmr-albums-card');
-  const root = document.getElementById('home-nkmr-albums');
-  if (!card || !root) return;
-  try {
-    const d = await get('/api/nkmr-albums');
-    const all = (d.sections || []).flatMap(s => s.albums);
-    if (!all.length) { card.hidden = true; return; }
-    const keyOf = t => {
-      const m = String(t || '').match(/^(\d{4})\.(\d{2})(?:\.(\d{2}))?/);
-      return m ? `${m[1]}-${m[2]}-${m[3] || '01'}` : '0000-00-00';
-    };
-    all.sort((a, b) => keyOf(b.title).localeCompare(keyOf(a.title)));
-    const top = all.slice(0, 6);
-    // サムネ / 枚数を引く
-    let thumbs = {}, counts = {};
-    try {
-      const r = await post('/api/album-thumbs', { urls: top.map(a => a.url) });
-      thumbs = r.thumbs || {}; counts = r.counts || {};
-    } catch (_) {}
-    card.hidden = false;
-    root.innerHTML = `
-      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:8px">
-        ${top.map(a => {
-          const t = thumbs[a.url];
-          const c = counts[a.url];
-          const thumb = t
-            ? `<img src="${escapeHtml(t)}" loading="lazy" style="width:100%; aspect-ratio: 4/3; object-fit:cover; background:#f3f4f6; display:block">`
-            : `<div style="width:100%; aspect-ratio: 4/3; background:#f3f4f6; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:22px">📷</div>`;
-          const flag = a.flag ? `<span style="position:absolute; left:4px; top:4px; font-size:12px; background:rgba(0,0,0,0.4); border-radius:3px; padding:0 3px">${escapeHtml(a.flag)}</span>` : '';
-          // v970.6 fb#479: 298 以上は Google Photos の初期 HTML 上限に触れていて実 count 不明なので「300+」と表示。
-          const cnt = (typeof c === 'number' && c > 0) ? `<span style="position:absolute; right:4px; bottom:4px; background:rgba(0,0,0,0.55); color:#fff; font-size:9.5px; padding:1px 5px; border-radius:6px">📷 ${c >= 298 ? '300+' : c}</span>` : '';
-          return `
-            <a href="${escapeHtml(a.url)}" target="_blank" rel="noopener noreferrer"
-               style="display:block; text-decoration:none; color:inherit; border-radius:6px; overflow:hidden; background:#fff; border:1px solid #e5e7eb">
-              <div style="position:relative">${thumb}${flag}${cnt}</div>
-              <div style="padding:4px 6px 6px; font-size:11px; line-height:1.3; color:#374151;
-                          display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden">
-                ${escapeHtml(a.title)}
-              </div>
-            </a>`;
-        }).join('')}
-      </div>
-    `;
-  } catch (_) { card.hidden = true; }
-}
+// v1238 中村研アルバム widget (Google Photos 列挙) 撤去。 photo-random で 代替。
+//   旧 render function は削除、 /api/nkmr-albums + /api/album-thumbs endpoint は
+//   admin 側 の DB 管理 UI で 引き続き 使う 可能性 が ある ので サーバ 側 は 残す。
 
 // v1237 fb (中村さん要望「ウィジェットとして画像をランダムに表示する機能」)
 //   photo.nkmr.io の random_photos API を 直叩き で、 6 枚 タイル で 表示。

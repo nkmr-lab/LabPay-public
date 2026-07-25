@@ -567,7 +567,7 @@ route('/bokete/:id',            lazy(() => import('./views/bokete.js'), 'renderB
 route('/exp-recruits',          lazy(() => import('./views/exp_recruits.js'), 'renderExpRecruitsList'));
 route('/exp-recruits/new',      lazy(() => import('./views/exp_recruits.js'), 'renderExpRecruitNew'));
 route('/exp-recruits/:id',      lazy(() => import('./views/exp_recruits.js'), 'renderExpRecruitDetail'));
-// v961 中村研アルバム集
+// v961 中村研アルバム集 / v1238 apps.js から は 撤去 (photo で 代替)、 route は 互換 の ため 残す (旧 bookmark 対応)
 route('/albums',                lazy(() => import('./views/nkmr_albums.js'), 'renderNkmrAlbums'));
 route('/expenses',              lazy(() => import('./views/expenses.js'), 'renderExpenses'));    // v1002 個人家計簿
 route('/authors/:name',         lazy(() => import('./views/author.js'), 'renderAuthor'));         // v1004 著者ページ
