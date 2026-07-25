@@ -105,6 +105,9 @@ export async function renderPhotoAlbums() {
   try {
     const d = await photoApi('albums');
     all = Array.isArray(d.albums) ? d.albums : [];
+    // v1239 中村さん確認「新しい順 で 良い」 → 明示 sort (API 契約 は 撮影日 新しい順 だ が
+    //   同点/欠損 に 備えて to → from → 空 の 順 で 降順)
+    all.sort((a, b) => String(b.to || b.from || '').localeCompare(String(a.to || a.from || '')));
   } catch (e) {
     document.getElementById('photo-albums-status').innerHTML =
       `<span style="color:#dc2626">読み込み失敗: ${escapeHtml(e?.message || String(e))}</span>`;
