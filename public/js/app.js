@@ -631,6 +631,7 @@ route('/room-requests/new',    lazy(() => import('./views/room_requests.js'), 'r
 route('/room-requests/:id/edit', lazy(() => import('./views/room_requests.js'), 'renderRoomRequestEdit'));
 route('/photo',                lazy(() => import('./views/photo.js'), 'renderPhotoAlbums'));      // v1234 🖼 photo.nkmr.io アルバム 一覧
 route('/photo/album/:slug',    lazy(() => import('./views/photo.js'), 'renderPhotoAlbumDetail')); // v1234 🖼 アルバム 詳細 (タイル + ライトボックス)
+route('/photo/frame',          lazy(() => import('./views/photo.js'), 'renderPhotoFrame'));       // v1237 📺 フォトフレーム (フルスクリーン + WakeLock)
 route('/power',           lazy(() => import('./views/power.js'), 'renderPower'));            // v1024 📐 サンプルサイズ / 検定力
 route('/power/r/:token',  lazy(() => import('./views/power.js'), 'renderPowerShared'));     // v1026 共有 URL
 route('/users/:id',       lazy(() => import('./views/profile.js'), 'renderUserProfile'));

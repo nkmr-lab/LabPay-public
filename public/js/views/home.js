@@ -269,6 +269,7 @@ export const HOME_CARDS = [
   { id: 'quote',          title: '💬 今日の名言 (偉人 / 漫画 / アニメ + ラボメン登録)' }, // v796 #396 / v804
   { id: 'papers-recent',  title: '📑 論文要約 / 全訳 (新着、公開 + 自分)' }, // v809
   { id: 'nkmr-albums',    title: '📸 中村研アルバム (新着)' },                // v970
+  { id: 'photo-random',   title: '🎲 今日 の ラボ フォト (photo.nkmr.io)' },    // v1237
   // v580 ショートカットウィジェット (リンクのみ。全アプリをホームに置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -320,7 +321,7 @@ const NEW_DEFAULT_HIDDEN = [
   'sc-joint-events', 'sc-public-polls', 'sc-expenses', 'sc-buy-requests',
   'sc-my-games', 'sc-quotes', 'sc-news', 'sc-pomodoro', 'sc-power', 'sc-walk-mode',
 ];
-const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines', 'papers-recent', 'nkmr-albums']; // v641, v649, v651, v671 既存ユーザにも自動表示 / v809 論文新着 widget を既存ユーザにもデフォルト表示 / v970 アルバム widget も既存ユーザに自動 ON
+const NEW_DEFAULT_SHOWN  = ['recruiting', 'entertainment', 'achievements', 'conf-deadlines', 'papers-recent', 'nkmr-albums', 'photo-random']; // v641, v649, v651, v671 既存ユーザにも自動表示 / v809 論文新着 widget を既存ユーザにもデフォルト表示 / v970 アルバム widget も既存ユーザに自動 ON / v1237 photo-random も 既存ユーザに 自動 ON
 export function readHomeLayout() {
   const merge = (order, hidden) => {
     const orderSet = new Set(order);
@@ -671,6 +672,16 @@ export async function renderHome() {
       <div id="home-nkmr-albums"><div class="home-skel-bars"></div></div>
     </div>
 
+    <!-- v1237 fb (中村さん要望) photo.nkmr.io から ランダム 6 枚 (seed=YYYYMMDD で 1 日固定)。
+         タップ で ライトボックス、 右上 「📺 フォトフレーム」 で フルスクリーン スライド。 -->
+    <div class="card" id="home-photo-random-card" data-card-id="photo-random" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">🎲 今日 の ラボ フォト</h2>
+        <a href="#/photo/frame" class="hint" style="margin-left:auto">📺 フォトフレーム →</a>
+      </div>
+      <div id="home-photo-random"><div class="home-skel-bars"></div></div>
+    </div>
+
     <!-- v809 論文要約 / 全訳新着 (公開 + 自分、直近 10 件) -->
     <div class="card" id="home-papers-recent-card" data-card-id="papers-recent" hidden>
       <div class="row center" style="margin-bottom:6px">
@@ -788,6 +799,7 @@ export async function renderHome() {
     { cardId: 'quote',          fn: renderHomeQuote,           label: 'quote' },          // v796 #396 今日の 1 名言
     { cardId: 'papers-recent',  fn: renderHomePapersRecent,    label: 'papers' },         // v809 論文要約 / 全訳新着
     { cardId: 'nkmr-albums',    fn: renderHomeNkmrAlbums,      label: 'nkmr-albums' },    // v970 中村研アルバム新着
+    { cardId: 'photo-random',   fn: renderHomePhotoRandom,     label: 'photo-random' },   // v1237 今日 の ラボ フォト
     { cardId: 'my-fund',        fn: renderHomeMyFund,          label: 'my-fund' },        // v1086 自分宛研究費支払い (fund.nkmr.io)
   ];
 
@@ -970,6 +982,7 @@ async function doHomePoll() {
     skip('history')        ? null : renderRecentTx(),
     skip('papers-recent')  ? null : renderHomePapersRecent(), // v809 論文新着 widget
     skip('nkmr-albums')    ? null : renderHomeNkmrAlbums(),   // v970 アルバム新着 widget
+    skip('photo-random')   ? null : renderHomePhotoRandom(),  // v1237 今日 の ラボ フォト widget
     skip('my-fund')        ? null : renderHomeMyFund(),        // v1086 自分宛研究費支払い widget
   ].filter(Boolean);
   await Promise.allSettled(tasks);
@@ -3470,6 +3483,49 @@ async function renderHomeNkmrAlbums() {
         }).join('')}
       </div>
     `;
+  } catch (_) { card.hidden = true; }
+}
+
+// v1237 fb (中村さん要望「ウィジェットとして画像をランダムに表示する機能」)
+//   photo.nkmr.io の random_photos API を 直叩き で、 6 枚 タイル で 表示。
+//   seed=YYYYMMDD で 1 日 は 同じ 集合 (60s poll で チカチカ しない、 明日 は 別の 6 枚)。
+//   タップ で 全画面 ライトボックス、 右上 に フォトフレーム ボタン。
+async function renderHomePhotoRandom() {
+  const card = document.getElementById('home-photo-random-card');
+  const root = document.getElementById('home-photo-random');
+  if (!card || !root) return;
+  try {
+    const { fetchRandomPhotos, absolutePhotoUrl, assetMediaUrl } = await import('./photo.js');
+    const { openImageLightbox } = await import('../lightbox.js');
+    // 今日 の seed (YYYYMMDD) で 1 日 固定
+    const d0 = new Date();
+    const seed = `${d0.getFullYear()}${String(d0.getMonth()+1).padStart(2,'0')}${String(d0.getDate()).padStart(2,'0')}`;
+    const items = await fetchRandomPhotos({ count: 6, seed });
+    if (!items.length) { card.hidden = true; return; }
+    // v1210 fingerprint 差分 (60s poll で 内容 変わらない と DOM 触らない)
+    const rkey = 'photo-random|' + seed + '|' + items.map(x => x.asset_id).join(',');
+    if (root.dataset.rkey === rkey) { card.hidden = false; return; }
+    root.dataset.rkey = rkey;
+    card.hidden = false;
+    root.innerHTML = `
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap:4px">
+        ${items.map((p, i) => {
+          const src = absolutePhotoUrl(p.thumb_url) || assetMediaUrl(p.asset_id, 'thumb');
+          return `<div data-hpr-idx="${i}" style="position:relative; cursor:pointer; aspect-ratio:1/1; background:#f3f4f6; overflow:hidden; border-radius:3px">
+            <img src="${escapeHtml(src)}" loading="lazy" alt=""
+                 style="width:100%; height:100%; object-fit:cover; display:block"
+                 onerror="this.style.display='none'">
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+    root.querySelectorAll('[data-hpr-idx]').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = Number(el.dataset.hprIdx);
+        const images = items.map(x => assetMediaUrl(x.asset_id, 'full'));
+        openImageLightbox(images[idx], { images, index: idx });
+      });
+    });
   } catch (_) { card.hidden = true; }
 }
 
