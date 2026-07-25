@@ -375,13 +375,24 @@ export function assetMediaUrl(assetId, size = 'medium') {
 }
 
 // ---------------- フォトフレーム (#/photo/frame) ----------------
-// フルスクリーン スライドショー。 Wake Lock で 画面 スリープ 抑止、 8 秒 で 自動 送り、
-// タップ で コントロール トグル、 スワイプ (or ← →) で 手動 送り。
-// query: ?album=<id> で 特定 アルバム 限定、 ?sec=N で 秒数、 ?fit=cover|contain で 表示
+// フルスクリーン スライドショー。 Wake Lock で 画面 スリープ 抑止、 タップ で コントロール
+// トグル、 exit で 戻る。
+//
+// v1240 中村さん要望「フォトフレーム モード の 時、 できれば 黒い 領域 が できない ように
+//   タイル状 に 埋めて ほしい」→ 既定 を タイル モード に、 mode=single で 従来 動作。
+//   タイル: 画面 アスペクト から cols×rows を 決定 (横長=4×3、 縦長=3×4)、 各セル
+//   object-fit:cover で 黒 余白 ゼロ、 一定 秒 毎 に ランダム な 1 タイル を フェード 差替。
+//
+// query:
+//   ?album=<id>   特定 アルバム 限定
+//   ?mode=single  1 枚 大表示 モード (従来)、 既定 は tile
+//   ?sec=N        single モード の 送り 秒数 (既定 8)
+//   ?tile_sec=N   tile モード の 1 タイル 差替 間隔 (既定 4)
+//   ?fit=cover|contain  single モード の 表示方式 (既定 contain)
 //
 // アーキ:
-//   バッファ 12 枚 を fetch → 表示中 の 3 枚 前後 を キープ、 尽きたら 追加 fetch。
-//   exclude_ids で 直近 表示 と 被らない よう に。 seed は 使わない (毎回 fresh)。
+//   バッファ を fetch → 尽きたら 追加。 exclude_ids で 直近 表示 と 被らない よう に。
+//   seed は 使わない (毎回 fresh)。
 
 let _pfState = null;
 
@@ -390,8 +401,9 @@ export async function renderPhotoFrame({ query } = {}) {
   // 既存 state を 破棄
   if (_pfState) { _cleanupPhotoFrame(); }
   const opts = query || {};
-  const secDefault = 8;
-  const sec = Math.max(2, Math.min(120, Number(opts.sec) || secDefault));
+  const mode = opts.mode === 'single' ? 'single' : 'tile';
+  const sec = Math.max(2, Math.min(120, Number(opts.sec) || 8));
+  const tileSec = Math.max(1, Math.min(30, Number(opts.tile_sec) || 4));
   const albumId = opts.album ? Number(opts.album) : null;
   const fit = opts.fit === 'cover' ? 'cover' : 'contain';
 
@@ -399,8 +411,9 @@ export async function renderPhotoFrame({ query } = {}) {
     <div id="pf-root"
          style="position:fixed; inset:0; background:#000; z-index:5000; user-select:none; touch-action:pan-y">
       <div id="pf-slide"
-           style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; overflow:hidden">
-        <div id="pf-loading" style="color:#999; font-size:14px">読み込み中…</div>
+           style="position:absolute; inset:0; overflow:hidden;
+                  ${mode === 'single' ? 'display:flex; align-items:center; justify-content:center' : ''}">
+        <div id="pf-loading" style="color:#999; font-size:14px; position:absolute; inset:0; display:flex; align-items:center; justify-content:center">読み込み中…</div>
       </div>
       <div id="pf-caption"
            style="position:absolute; left:0; right:0; bottom:0; padding:12px 16px 14px; color:#fff; background:linear-gradient(to top, rgba(0,0,0,0.72), transparent); font-size:13px; line-height:1.4; pointer-events:none; opacity:0; transition:opacity 0.3s"></div>
@@ -412,26 +425,148 @@ export async function renderPhotoFrame({ query } = {}) {
                 style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.9); border:none; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.5)">‹</button>
         <button id="pf-next" aria-label="次"
                 style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.9); border:none; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.5)">›</button>
+        <button id="pf-mode" aria-label="モード" title="tile/single 切替"
+                style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.9); border:none; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.5)">${mode === 'tile' ? '🎞' : '🎨'}</button>
         <button id="pf-exit" aria-label="閉じる"
                 style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.9); border:none; font-size:20px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.5)">✕</button>
       </div>
-      <div id="pf-hint" style="position:absolute; bottom:12px; left:12px; color:rgba(255,255,255,0.55); font-size:11px; pointer-events:none">タップ で 操作</div>
+      <div id="pf-hint" style="position:absolute; bottom:12px; left:12px; color:rgba(255,255,255,0.55); font-size:11px; pointer-events:none">タップ で 操作 / ${mode === 'tile' ? 'タイル' : 'single'} モード</div>
     </div>
   `;
   _pfState = {
     queue: [], seen: new Set(), showing: null, idx: -1,
-    sec, albumId, fit, paused: false, timer: null, wakeLock: null,
+    sec, tileSec, albumId, mode, fit,
+    paused: false, timer: null, wakeLock: null,
     controlsShownUntil: 0,
+    // tile モード 用
+    tileEls: [], tileCount: 0, tilePhotos: [],
   };
   await _pfLoadMore();
   if (!_pfState.queue.length) {
-    document.getElementById('pf-loading').textContent = '写真 が 取得 できませんでした';
+    const l = document.getElementById('pf-loading');
+    if (l) l.textContent = '写真 が 取得 できませんでした';
     return;
   }
   _pfAcquireWakeLock();
-  _pfNext();
+  if (mode === 'tile') _pfStartTile();
+  else                 _pfNext();
   _pfWireEvents();
   _pfShowControls();
+}
+
+// ---------- タイル モード ----------
+// 画面 アスペクト で cols×rows を 決定、 初期 に 全 タイル を 埋め、 tileSec 毎 に
+// ランダム な 1 タイル を 次 の 写真 に フェード 差替。 バッファ が 減ったら 裏 で 追加 fetch。
+function _pfComputeGrid() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const landscape = w > h;
+  const cols = landscape ? 4 : 3;
+  const rows = landscape ? 3 : 4;
+  return { cols, rows, count: cols * rows };
+}
+
+function _pfStartTile() {
+  if (!_pfState) return;
+  const slide = document.getElementById('pf-slide');
+  if (!slide) return;
+  const { cols, rows, count } = _pfComputeGrid();
+  _pfState.tileCount = count;
+  _pfState.tilePhotos = new Array(count).fill(null);
+  // グリッド DOM
+  slide.innerHTML = `
+    <div id="pf-tiles" style="position:absolute; inset:0; display:grid;
+                              grid-template-columns:repeat(${cols}, 1fr);
+                              grid-template-rows:repeat(${rows}, 1fr);
+                              gap:2px; background:#000">
+      ${Array.from({length: count}).map(() => `
+        <div style="position:relative; overflow:hidden; background:#111">
+          <img alt="" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.7s">
+        </div>`).join('')}
+    </div>
+  `;
+  _pfState.tileEls = Array.from(document.querySelectorAll('#pf-tiles img'));
+  // 初期 埋め: 一気 に (フェード in)
+  for (let i = 0; i < count; i++) {
+    const p = _pfConsume();
+    if (p) _pfPaintTile(i, p);
+    // ジグザグ で 追加 (見た目)
+    if (i > 8) break;
+  }
+  // 残り は 少し 遅らせて (演出)
+  let delay = 300;
+  for (let i = 9; i < count; i++) {
+    setTimeout(() => {
+      if (!_pfState) return;
+      const p = _pfConsume();
+      if (p) _pfPaintTile(i, p);
+    }, delay);
+    delay += 150;
+  }
+  _pfScheduleTileRotate();
+  // 画面 リサイズ で グリッド 再計算
+  _pfState.resizeHandler = () => {
+    if (!_pfState) return;
+    const g = _pfComputeGrid();
+    if (g.count !== _pfState.tileCount) _pfStartTile(); // レイアウト 変わったら 全 rebuild
+  };
+  window.addEventListener('resize', _pfState.resizeHandler);
+  window.addEventListener('orientationchange', _pfState.resizeHandler);
+}
+
+function _pfConsume() {
+  if (!_pfState) return null;
+  if (_pfState.queue.length - (_pfState.idx + 1) < 6) _pfLoadMore(); // 補充
+  _pfState.idx += 1;
+  if (_pfState.idx >= _pfState.queue.length) _pfState.idx = 0;
+  return _pfState.queue[_pfState.idx] || null;
+}
+
+function _pfPaintTile(i, photo) {
+  if (!_pfState || !photo) return;
+  const img = _pfState.tileEls[i];
+  if (!img) return;
+  const src = assetMediaUrl(photo.asset_id, 'medium');
+  // フェード アウト → 差替 → フェード イン
+  img.style.opacity = '0';
+  const swap = () => {
+    if (!_pfState || !_pfState.tileEls[i]) return;
+    img.onload = () => { img.style.opacity = '1'; };
+    img.onerror = () => { img.style.opacity = '0'; };
+    img.src = src;
+    _pfState.tilePhotos[i] = photo;
+  };
+  // 初期 (opacity 既に 0) は 即 swap、 差替 時 は 0.4s 待って swap
+  if (img.src) setTimeout(swap, 400);
+  else         swap();
+  // キャプション を 更新 (直近 差替 の 写真)
+  _pfSetCaption(photo);
+}
+
+function _pfScheduleTileRotate() {
+  if (!_pfState) return;
+  clearTimeout(_pfState.timer);
+  if (_pfState.paused) return;
+  _pfState.timer = setTimeout(() => {
+    if (!_pfState) return;
+    const i = Math.floor(Math.random() * _pfState.tileCount);
+    const p = _pfConsume();
+    if (p) _pfPaintTile(i, p);
+    _pfScheduleTileRotate();
+  }, _pfState.tileSec * 1000);
+}
+
+function _pfSetCaption(photo) {
+  const caption = document.getElementById('pf-caption');
+  if (!caption || !photo) return;
+  const bits = [];
+  if (photo.taken_at)     bits.push(_pfFmtDate(photo.taken_at));
+  if (photo.album?.title) bits.push('🖼 ' + photo.album.title);
+  if (Array.isArray(photo.people) && photo.people.length) {
+    bits.push('👤 ' + photo.people.slice(0, 5).map(p => p.name).join(' / '));
+  }
+  if (photo.place_label)  bits.push('📍 ' + photo.place_label);
+  caption.textContent = bits.join(' · ');
 }
 
 async function _pfLoadMore() {
@@ -453,6 +588,15 @@ async function _pfLoadMore() {
 function _pfNext() {
   if (!_pfState) return;
   clearTimeout(_pfState.timer);
+  // v1240 tile モード: 全 タイル を 一気 に 差替 (「ページ めくり」的)
+  if (_pfState.mode === 'tile') {
+    for (let i = 0; i < _pfState.tileCount; i++) {
+      const p = _pfConsume();
+      if (p) _pfPaintTile(i, p);
+    }
+    _pfScheduleTileRotate();
+    return;
+  }
   _pfState.idx += 1;
   if (_pfState.idx >= _pfState.queue.length) {
     // 継続 fetch
@@ -474,6 +618,10 @@ function _pfNext() {
 function _pfPrev() {
   if (!_pfState) return;
   clearTimeout(_pfState.timer);
+  if (_pfState.mode === 'tile') {
+    // tile モード は 前 履歴 を 持って いない ので next と 同じ (別 セット に 差替)
+    return _pfNext();
+  }
   _pfState.idx = Math.max(0, _pfState.idx - 1);
   _pfShow(_pfState.queue[_pfState.idx]);
 }
@@ -535,10 +683,10 @@ function _pfTogglePause() {
   _pfState.paused = !_pfState.paused;
   const btn = document.getElementById('pf-pause');
   if (btn) btn.textContent = _pfState.paused ? '▶' : '⏸';
-  if (_pfState.paused) {
-    clearTimeout(_pfState.timer);
-  } else {
-    _pfState.timer = setTimeout(_pfNext, _pfState.sec * 1000);
+  clearTimeout(_pfState.timer);
+  if (!_pfState.paused) {
+    if (_pfState.mode === 'tile') _pfScheduleTileRotate();
+    else _pfState.timer = setTimeout(_pfNext, _pfState.sec * 1000);
   }
 }
 
@@ -586,6 +734,15 @@ function _pfWireEvents() {
   document.getElementById('pf-next')?.addEventListener('click', (e) => {
     e.stopPropagation(); _pfNext(); _pfShowControls();
   });
+  // v1240 モード 切替 (tile ↔ single) を hash で 実現、 現 URL に mode を 差替
+  document.getElementById('pf-mode')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const nextMode = _pfState.mode === 'tile' ? 'single' : 'tile';
+    const params = new URLSearchParams();
+    if (_pfState.albumId) params.set('album', String(_pfState.albumId));
+    params.set('mode', nextMode);
+    location.hash = '#/photo/frame?' + params.toString();
+  });
   root?.addEventListener('click', (e) => {
     if (e.target === root || e.target.id === 'pf-slide' || e.target.tagName === 'IMG') {
       _pfShowControls();
@@ -620,8 +777,12 @@ function _cleanupPhotoFrame() {
   if (!_pfState) return;
   clearTimeout(_pfState.timer);
   _pfReleaseWakeLock();
-  if (_pfState.keyHandler)  document.removeEventListener('keydown', _pfState.keyHandler);
-  if (_pfState.hashHandler) window.removeEventListener('hashchange', _pfState.hashHandler);
+  if (_pfState.keyHandler)    document.removeEventListener('keydown', _pfState.keyHandler);
+  if (_pfState.hashHandler)   window.removeEventListener('hashchange', _pfState.hashHandler);
+  if (_pfState.resizeHandler) {
+    window.removeEventListener('resize', _pfState.resizeHandler);
+    window.removeEventListener('orientationchange', _pfState.resizeHandler);
+  }
   _pfState = null;
 }
 
