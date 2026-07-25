@@ -455,60 +455,86 @@ export async function renderPhotoFrame({ query } = {}) {
 }
 
 // ---------- タイル モード ----------
-// 画面 アスペクト で cols×rows を 決定、 初期 に 全 タイル を 埋め、 tileSec 毎 に
-// ランダム な 1 タイル を 次 の 写真 に フェード 差替。 バッファ が 減ったら 裏 で 追加 fetch。
-function _pfComputeGrid() {
+// v1241 中村さん要望「同 サイズ 分割 は いまいち、 総 6-9 枚 で 良い、 スマホ/iPad の 縦横
+//   入れ替え に 対応 して」→ (1) hero (2×2) + サブ タイル の 混合 レイアウト に、 (2) 総 6 タイル
+//   に 削減、 (3) 横長/縦長 で 別 レイアウト、 (4) resize/orientationchange で 縦横 が
+//   変わった 時 (cols/rows が 変わった 時) は 必ず rebuild。
+//
+// レイアウト:
+//   横長 (4×3 grid、 6 タイル): hero(2×2) + 小(1×1)×2 + 横長(2×1)×3
+//   縦長 (3×4 grid、 6 タイル): hero(2×2) + 小(1×1)×2 + 縦長(1×2)×1 + 横長(2×1)×2
+
+const _PF_LAYOUT_LANDSCAPE = {
+  cols: 4, rows: 3,
+  tiles: [
+    { c: '1 / span 2', r: '1 / span 2' },  // hero 2×2 (左上)
+    { c: '3 / span 1', r: '1 / span 1' },  // 小 (右上)
+    { c: '4 / span 1', r: '1 / span 1' },  // 小
+    { c: '3 / span 2', r: '2 / span 1' },  // 横長 2×1
+    { c: '1 / span 2', r: '3 / span 1' },  // 横長 2×1 (下左)
+    { c: '3 / span 2', r: '3 / span 1' },  // 横長 2×1 (下右)
+  ],
+};
+const _PF_LAYOUT_PORTRAIT = {
+  cols: 3, rows: 4,
+  tiles: [
+    { c: '1 / span 2', r: '1 / span 2' },  // hero 2×2 (左上)
+    { c: '3 / span 1', r: '1 / span 1' },  // 小
+    { c: '3 / span 1', r: '2 / span 1' },  // 小
+    { c: '1 / span 1', r: '3 / span 2' },  // 縦長 1×2
+    { c: '2 / span 2', r: '3 / span 1' },  // 横長 2×1
+    { c: '2 / span 2', r: '4 / span 1' },  // 横長 2×1
+  ],
+};
+
+function _pfComputeLayout() {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const landscape = w > h;
-  const cols = landscape ? 4 : 3;
-  const rows = landscape ? 3 : 4;
-  return { cols, rows, count: cols * rows };
+  return (w > h) ? _PF_LAYOUT_LANDSCAPE : _PF_LAYOUT_PORTRAIT;
 }
 
 function _pfStartTile() {
   if (!_pfState) return;
   const slide = document.getElementById('pf-slide');
   if (!slide) return;
-  const { cols, rows, count } = _pfComputeGrid();
+  const layout = _pfComputeLayout();
+  const count = layout.tiles.length;
+  _pfState.layout = layout;
   _pfState.tileCount = count;
   _pfState.tilePhotos = new Array(count).fill(null);
-  // グリッド DOM
+  // グリッド DOM (各 タイル は grid-column/grid-row で span 指定)
   slide.innerHTML = `
     <div id="pf-tiles" style="position:absolute; inset:0; display:grid;
-                              grid-template-columns:repeat(${cols}, 1fr);
-                              grid-template-rows:repeat(${rows}, 1fr);
-                              gap:2px; background:#000">
-      ${Array.from({length: count}).map(() => `
-        <div style="position:relative; overflow:hidden; background:#111">
+                              grid-template-columns:repeat(${layout.cols}, 1fr);
+                              grid-template-rows:repeat(${layout.rows}, 1fr);
+                              gap:3px; background:#000">
+      ${layout.tiles.map(t => `
+        <div style="grid-column:${t.c}; grid-row:${t.r}; position:relative; overflow:hidden; background:#111">
           <img alt="" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.7s">
         </div>`).join('')}
     </div>
   `;
   _pfState.tileEls = Array.from(document.querySelectorAll('#pf-tiles img'));
-  // 初期 埋め: 一気 に (フェード in)
+  // 初期 埋め: 一気 に。 6 枚 だけ な の で ジグザグ 遅延 は 短め (演出)
   for (let i = 0; i < count; i++) {
     const p = _pfConsume();
-    if (p) _pfPaintTile(i, p);
-    // ジグザグ で 追加 (見た目)
-    if (i > 8) break;
-  }
-  // 残り は 少し 遅らせて (演出)
-  let delay = 300;
-  for (let i = 9; i < count; i++) {
-    setTimeout(() => {
-      if (!_pfState) return;
-      const p = _pfConsume();
-      if (p) _pfPaintTile(i, p);
-    }, delay);
-    delay += 150;
+    if (p) {
+      if (i === 0) _pfPaintTile(i, p);
+      else setTimeout(() => {
+        if (!_pfState || !_pfState.tileEls[i]) return;
+        _pfPaintTile(i, p);
+      }, 120 * i);
+    }
   }
   _pfScheduleTileRotate();
-  // 画面 リサイズ で グリッド 再計算
+  // 画面 リサイズ / 回転 で cols か rows が 変わったら 必ず 完全 rebuild
   _pfState.resizeHandler = () => {
     if (!_pfState) return;
-    const g = _pfComputeGrid();
-    if (g.count !== _pfState.tileCount) _pfStartTile(); // レイアウト 変わったら 全 rebuild
+    const next = _pfComputeLayout();
+    const cur = _pfState.layout;
+    if (!cur || cur.cols !== next.cols || cur.rows !== next.rows) {
+      _pfStartTile();  // レイアウト 変わったら 全 rebuild
+    }
   };
   window.addEventListener('resize', _pfState.resizeHandler);
   window.addEventListener('orientationchange', _pfState.resizeHandler);
