@@ -430,6 +430,9 @@ export async function renderPhotoFrame({ query } = {}) {
         <button id="pf-exit" aria-label="閉じる"
                 style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.9); border:none; font-size:20px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.5)">✕</button>
       </div>
+      <!-- v1242 現 テーマ バッジ (シーン 切替 時 に 5 秒 だけ 出す) -->
+      <div id="pf-theme"
+           style="position:absolute; top:12px; left:12px; padding:6px 14px; background:rgba(0,0,0,0.65); color:#fff; border-radius:16px; font-size:13px; font-weight:600; opacity:0; transition:opacity 0.5s; pointer-events:none; max-width:60vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; z-index:2"></div>
       <div id="pf-hint" style="position:absolute; bottom:12px; left:12px; color:rgba(255,255,255,0.55); font-size:11px; pointer-events:none">タップ で 操作 / ${mode === 'tile' ? 'タイル' : 'single'} モード</div>
     </div>
   `;
@@ -440,7 +443,12 @@ export async function renderPhotoFrame({ query } = {}) {
     controlsShownUntil: 0,
     // tile モード 用
     tileEls: [], tileCount: 0, tilePhotos: [],
+    // v1242 テーマ (album/year/person/mixed) + シーン カウンタ + キャッシュ
+    theme: null, currentFilter: null, rotationsUntilScene: 8,
+    albumsCache: null, peopleCache: null, themeBadgeTimer: null,
   };
+  // v1242 最初 の テーマ を 選択 して から バッファ を 埋める
+  await _pfNewTheme();
   await _pfLoadMore();
   if (!_pfState.queue.length) {
     const l = document.getElementById('pf-loading');
@@ -452,6 +460,7 @@ export async function renderPhotoFrame({ query } = {}) {
   else                 _pfNext();
   _pfWireEvents();
   _pfShowControls();
+  _pfShowThemeBadge();  // v1242 初回 テーマ を バッジ で 表示
 }
 
 // ---------- タイル モード ----------
@@ -464,33 +473,73 @@ export async function renderPhotoFrame({ query } = {}) {
 //   横長 (4×3 grid、 6 タイル): hero(2×2) + 小(1×1)×2 + 横長(2×1)×3
 //   縦長 (3×4 grid、 6 タイル): hero(2×2) + 小(1×1)×2 + 縦長(1×2)×1 + 横長(2×1)×2
 
-const _PF_LAYOUT_LANDSCAPE = {
-  cols: 4, rows: 3,
-  tiles: [
-    { c: '1 / span 2', r: '1 / span 2' },  // hero 2×2 (左上)
-    { c: '3 / span 1', r: '1 / span 1' },  // 小 (右上)
-    { c: '4 / span 1', r: '1 / span 1' },  // 小
-    { c: '3 / span 2', r: '2 / span 1' },  // 横長 2×1
-    { c: '1 / span 2', r: '3 / span 1' },  // 横長 2×1 (下左)
-    { c: '3 / span 2', r: '3 / span 1' },  // 横長 2×1 (下右)
-  ],
-};
-const _PF_LAYOUT_PORTRAIT = {
-  cols: 3, rows: 4,
-  tiles: [
-    { c: '1 / span 2', r: '1 / span 2' },  // hero 2×2 (左上)
-    { c: '3 / span 1', r: '1 / span 1' },  // 小
-    { c: '3 / span 1', r: '2 / span 1' },  // 小
-    { c: '1 / span 1', r: '3 / span 2' },  // 縦長 1×2
-    { c: '2 / span 2', r: '3 / span 1' },  // 横長 2×1
-    { c: '2 / span 2', r: '4 / span 1' },  // 横長 2×1
-  ],
-};
+// v1242 中村さん要望「レイアウト が 一定 だから ちょっと なー、 ちょくちょく 変わって 欲しい」
+//   → 横長/縦長 で 各 3 パターン、 シーン 切替 時 に ランダム で 別 レイアウト に。
+//   全 レイアウト は 6 タイル で hero (2×2) + サブ の 混合、 6 タイル 数 は 一定 の ため
+//   バッファ ロジック は 共通。
+const _PF_LAYOUTS_LANDSCAPE = [
+  // LA: hero 左上
+  { cols: 4, rows: 3, tiles: [
+    { c: '1 / span 2', r: '1 / span 2' }, { c: '3 / span 1', r: '1 / span 1' },
+    { c: '4 / span 1', r: '1 / span 1' }, { c: '3 / span 2', r: '2 / span 1' },
+    { c: '1 / span 2', r: '3 / span 1' }, { c: '3 / span 2', r: '3 / span 1' },
+  ]},
+  // LB: hero 右上 (LA の 左右 ミラー)
+  { cols: 4, rows: 3, tiles: [
+    { c: '3 / span 2', r: '1 / span 2' }, { c: '1 / span 1', r: '1 / span 1' },
+    { c: '2 / span 1', r: '1 / span 1' }, { c: '1 / span 2', r: '2 / span 1' },
+    { c: '3 / span 2', r: '3 / span 1' }, { c: '1 / span 2', r: '3 / span 1' },
+  ]},
+  // LC: 上段 に 小 4 個、 下 に hero + 横長 (逆さ 感)
+  { cols: 4, rows: 3, tiles: [
+    { c: '1 / span 1', r: '1 / span 1' }, { c: '2 / span 1', r: '1 / span 1' },
+    { c: '3 / span 1', r: '1 / span 1' }, { c: '4 / span 1', r: '1 / span 1' },
+    { c: '1 / span 2', r: '2 / span 2' }, { c: '3 / span 2', r: '2 / span 2' },
+  ]},
+];
+const _PF_LAYOUTS_PORTRAIT = [
+  // PA: hero 左上
+  { cols: 3, rows: 4, tiles: [
+    { c: '1 / span 2', r: '1 / span 2' }, { c: '3 / span 1', r: '1 / span 1' },
+    { c: '3 / span 1', r: '2 / span 1' }, { c: '1 / span 1', r: '3 / span 2' },
+    { c: '2 / span 2', r: '3 / span 1' }, { c: '2 / span 2', r: '4 / span 1' },
+  ]},
+  // PB: hero 中央 下段
+  { cols: 3, rows: 4, tiles: [
+    { c: '1 / span 1', r: '1 / span 1' }, { c: '2 / span 1', r: '1 / span 1' },
+    { c: '3 / span 1', r: '1 / span 1' }, { c: '1 / span 3', r: '2 / span 1' },
+    { c: '1 / span 2', r: '3 / span 2' }, { c: '3 / span 1', r: '3 / span 2' },
+  ]},
+  // PC: hero 右上 + 上下 に 横長
+  { cols: 3, rows: 4, tiles: [
+    { c: '1 / span 1', r: '1 / span 2' }, { c: '2 / span 2', r: '1 / span 2' },
+    { c: '1 / span 3', r: '3 / span 1' }, { c: '1 / span 1', r: '4 / span 1' },
+    { c: '2 / span 1', r: '4 / span 1' }, { c: '3 / span 1', r: '4 / span 1' },
+  ]},
+];
 
-function _pfComputeLayout() {
+function _pfPickLayout() {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  return (w > h) ? _PF_LAYOUT_LANDSCAPE : _PF_LAYOUT_PORTRAIT;
+  const pool = (w > h) ? _PF_LAYOUTS_LANDSCAPE : _PF_LAYOUTS_PORTRAIT;
+  const cur = _pfState?.layout;
+  let choice = pool[Math.floor(Math.random() * pool.length)];
+  // 直前 と 同じ を 避ける (プール が 1 個 だけ の 場合 は 諦め)
+  if (pool.length > 1 && cur) {
+    let tries = 5;
+    while (choice === cur && tries--) choice = pool[Math.floor(Math.random() * pool.length)];
+  }
+  return choice;
+}
+
+function _pfComputeLayout() {
+  // 現行 レイアウト が 現在 の 向き で 使える なら そのまま (resize 判定 用)
+  if (_pfState?.layout) {
+    const w = window.innerWidth, h = window.innerHeight;
+    const pool = (w > h) ? _PF_LAYOUTS_LANDSCAPE : _PF_LAYOUTS_PORTRAIT;
+    if (pool.includes(_pfState.layout)) return _pfState.layout;
+  }
+  return _pfPickLayout();
 }
 
 function _pfStartTile() {
@@ -573,13 +622,123 @@ function _pfScheduleTileRotate() {
   if (!_pfState) return;
   clearTimeout(_pfState.timer);
   if (_pfState.paused) return;
-  _pfState.timer = setTimeout(() => {
+  _pfState.timer = setTimeout(async () => {
     if (!_pfState) return;
-    const i = Math.floor(Math.random() * _pfState.tileCount);
-    const p = _pfConsume();
-    if (p) _pfPaintTile(i, p);
+    // v1242 シーン 切替: 一定 回数 の タイル 差替 後 に、 テーマ + レイアウト を 一気 に 更新
+    _pfState.rotationsUntilScene = (_pfState.rotationsUntilScene ?? 8) - 1;
+    if (_pfState.rotationsUntilScene <= 0) {
+      await _pfSceneChange();
+      _pfState.rotationsUntilScene = 8;   // 次 の シーン まで の 回数 (~32 秒 @ 4s tileSec)
+    } else {
+      const i = Math.floor(Math.random() * _pfState.tileCount);
+      const p = _pfConsume();
+      if (p) _pfPaintTile(i, p);
+    }
     _pfScheduleTileRotate();
   }, _pfState.tileSec * 1000);
+}
+
+// v1242 シーン 切替: テーマ を 新規 に 選び、 バッファ を リセット して 新テーマ で 埋め、
+//   レイアウト も 別 パターン に 差替 (向き は 現在 の を 保つ)。 完全 rebuild。
+async function _pfSceneChange() {
+  if (!_pfState) return;
+  await _pfNewTheme();
+  _pfState.queue = [];
+  _pfState.seen = new Set();
+  _pfState.idx = -1;
+  await _pfLoadMore();
+  if (!_pfState) return;
+  // レイアウト を 別 パターン に (向き は 現在 の まま)
+  _pfState.layout = _pfPickLayout();
+  _pfStartTile();
+  _pfShowThemeBadge();
+}
+
+// v1242 テーマ 選択 (album / year / person / mixed)。 バッファ fetch に 反映 する 用 の
+//   currentFilter も 設定。 URL に ?album=X 指定 が ある 場合 は そちら に ロック。
+async function _pfNewTheme() {
+  if (!_pfState) return;
+  if (_pfState.albumId) {
+    _pfState.theme = { type: 'album', label: '🖼 選択 アルバム' };
+    _pfState.currentFilter = { album_id: _pfState.albumId };
+    // 選択 アルバム モード な の で 名前 が 分かれば 表示 したい (albums cache から 引く)
+    await _pfEnsureAlbumsCache();
+    const a = (_pfState.albumsCache || []).find(x => Number(x.id) === Number(_pfState.albumId));
+    if (a) _pfState.theme.label = `🖼 ${a.title}`;
+    return;
+  }
+  await _pfEnsureAlbumsCache();
+  const albums = _pfState.albumsCache || [];
+  const dice = Math.random();
+  // 35% album / 25% year / 25% person / 15% mixed
+  if (dice < 0.35 && albums.length) {
+    const a = albums[Math.floor(Math.random() * albums.length)];
+    _pfState.theme = { type: 'album', label: `🖼 ${a.title}` };
+    _pfState.currentFilter = { album_id: a.id };
+    return;
+  }
+  if (dice < 0.60) {
+    const years = _pfBuildYears(albums);
+    if (years.length) {
+      const y = years[Math.floor(Math.random() * years.length)];
+      _pfState.theme = { type: 'year', label: `📅 ${y} 年 の 写真` };
+      _pfState.currentFilter = { year: y };
+      return;
+    }
+  }
+  if (dice < 0.85) {
+    await _pfEnsurePeopleCache();
+    const people = _pfState.peopleCache || [];
+    if (people.length) {
+      const p = people[Math.floor(Math.random() * people.length)];
+      _pfState.theme = { type: 'person', label: `👤 ${p.name}` };
+      _pfState.currentFilter = { person_id: p.id };
+      return;
+    }
+  }
+  _pfState.theme = { type: 'mixed', label: '🎲 みんなの ランダム' };
+  _pfState.currentFilter = {};
+}
+
+async function _pfEnsureAlbumsCache() {
+  if (_pfState.albumsCache) return _pfState.albumsCache;
+  try {
+    const d = await photoApi('albums');
+    _pfState.albumsCache = (Array.isArray(d.albums) ? d.albums : [])
+      .filter(a => (a.count || 0) >= 3);  // 3 枚 以上 の アルバム 限定
+  } catch { _pfState.albumsCache = []; }
+  return _pfState.albumsCache;
+}
+
+async function _pfEnsurePeopleCache() {
+  if (_pfState.peopleCache) return _pfState.peopleCache;
+  try {
+    const d = await photoApi('people');
+    _pfState.peopleCache = (Array.isArray(d.people) ? d.people : [])
+      .filter(p => (p.photos || 0) >= 10 && p.name && !/^\?|^未|^名前無/.test(String(p.name)));
+  } catch { _pfState.peopleCache = []; }
+  return _pfState.peopleCache;
+}
+
+function _pfBuildYears(albums) {
+  const s = new Set();
+  for (const a of (albums || [])) {
+    const m = String(a.from || '').match(/^(\d{4})/);
+    if (m) s.add(m[1]);
+  }
+  return [...s].filter(y => Number(y) >= 2000).sort();
+}
+
+function _pfShowThemeBadge() {
+  if (!_pfState || !_pfState.theme) return;
+  const el = document.getElementById('pf-theme');
+  if (!el) return;
+  el.textContent = _pfState.theme.label;
+  el.style.opacity = '1';
+  clearTimeout(_pfState.themeBadgeTimer);
+  _pfState.themeBadgeTimer = setTimeout(() => {
+    if (el) el.style.opacity = '0';
+  }, 5000);
 }
 
 function _pfSetCaption(photo) {
@@ -598,9 +757,14 @@ function _pfSetCaption(photo) {
 async function _pfLoadMore() {
   if (!_pfState) return;
   const excl = Array.from(_pfState.seen).slice(-40);
+  // v1242 currentFilter (テーマ 由来 の album/year/person) を fetch に 反映。
+  //   URL ?album=X が あれば albumId が currentFilter に 上書き 済 (単一 テーマ ロック)。
+  const f = _pfState.currentFilter || {};
   const items = await fetchRandomPhotos({
     count: 12,
-    album_id: _pfState.albumId || undefined,
+    album_id: f.album_id,
+    person_id: f.person_id,
+    year: f.year,
     exclude_ids: excl,
   }).catch(e => { console.warn('[pf] fetch failed', e); return []; });
   for (const p of items) {
@@ -609,18 +773,18 @@ async function _pfLoadMore() {
     _pfState.queue.push(p);
     _pfState.seen.add(p.asset_id);
   }
+  // テーマ に 該当 する 写真 が 尽きた 場合 は 空 で 返る の で、 次 の scene で 別 テーマ に 切替 される
 }
 
 function _pfNext() {
   if (!_pfState) return;
   clearTimeout(_pfState.timer);
-  // v1240 tile モード: 全 タイル を 一気 に 差替 (「ページ めくり」的)
+  // v1242 tile モード の 「次」 は シーン 切替 (新 テーマ + 新 レイアウト) に 変更
+  //   従来 の 全 タイル 一気 差替 だと 同 テーマ ばかり で 単調 だった。
+  //   _pfSceneChange → _pfStartTile が 内部 で _pfScheduleTileRotate まで やる ので 追加 schedule 不要。
   if (_pfState.mode === 'tile') {
-    for (let i = 0; i < _pfState.tileCount; i++) {
-      const p = _pfConsume();
-      if (p) _pfPaintTile(i, p);
-    }
-    _pfScheduleTileRotate();
+    _pfState.rotationsUntilScene = 8;
+    _pfSceneChange();
     return;
   }
   _pfState.idx += 1;
@@ -802,6 +966,7 @@ function _pfWireEvents() {
 function _cleanupPhotoFrame() {
   if (!_pfState) return;
   clearTimeout(_pfState.timer);
+  clearTimeout(_pfState.themeBadgeTimer);
   _pfReleaseWakeLock();
   if (_pfState.keyHandler)    document.removeEventListener('keydown', _pfState.keyHandler);
   if (_pfState.hashHandler)   window.removeEventListener('hashchange', _pfState.hashHandler);
