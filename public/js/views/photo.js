@@ -401,7 +401,9 @@ export async function renderPhotoFrame({ query } = {}) {
   // 既存 state を 破棄
   if (_pfState) { _cleanupPhotoFrame(); }
   const opts = query || {};
-  const mode = opts.mode === 'single' ? 'single' : 'tile';
+  // v1244 中村さん要望「LabPhoto に 顔だけ の 画像 が 山ほど ある、 face mode やって」
+  //   → 3 way: tile (既定、 全体写真 タイル) / face (顔 crop タイル) / single (1 枚)
+  const mode = (opts.mode === 'single' || opts.mode === 'face') ? opts.mode : 'tile';
   const sec = Math.max(2, Math.min(120, Number(opts.sec) || 8));
   const tileSec = Math.max(1, Math.min(30, Number(opts.tile_sec) || 4));
   const albumId = opts.album ? Number(opts.album) : null;
@@ -425,15 +427,15 @@ export async function renderPhotoFrame({ query } = {}) {
                 style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.9); border:none; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.5)">‹</button>
         <button id="pf-next" aria-label="次"
                 style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.9); border:none; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.5)">›</button>
-        <button id="pf-mode" aria-label="モード" title="tile/single 切替"
-                style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.9); border:none; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.5)">${mode === 'tile' ? '🎞' : '🎨'}</button>
+        <button id="pf-mode" aria-label="モード" title="tile / face / single 切替"
+                style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.9); border:none; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.5)">${mode === 'tile' ? '🎞' : (mode === 'face' ? '👤' : '🎨')}</button>
         <button id="pf-exit" aria-label="閉じる"
                 style="width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.9); border:none; font-size:20px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.5)">✕</button>
       </div>
       <!-- v1242 現 テーマ バッジ (シーン 切替 時 に 5 秒 だけ 出す) -->
       <div id="pf-theme"
            style="position:absolute; top:12px; left:12px; padding:6px 14px; background:rgba(0,0,0,0.65); color:#fff; border-radius:16px; font-size:13px; font-weight:600; opacity:0; transition:opacity 0.5s; pointer-events:none; max-width:60vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; z-index:2"></div>
-      <div id="pf-hint" style="position:absolute; bottom:12px; left:12px; color:rgba(255,255,255,0.55); font-size:11px; pointer-events:none">タップ で 操作 / ${mode === 'tile' ? 'タイル' : 'single'} モード</div>
+      <div id="pf-hint" style="position:absolute; bottom:12px; left:12px; color:rgba(255,255,255,0.55); font-size:11px; pointer-events:none">タップ で 操作 / ${mode === 'tile' ? 'タイル' : (mode === 'face' ? '顔タイル' : 'single')} モード</div>
     </div>
   `;
   _pfState = {
@@ -447,8 +449,14 @@ export async function renderPhotoFrame({ query } = {}) {
     theme: null, currentFilter: null, rotationsUntilScene: 8,
     albumsCache: null, peopleCache: null, themeBadgeTimer: null,
   };
-  // v1242 最初 の テーマ を 選択 して から バッファ を 埋める
-  await _pfNewTheme();
+  // v1242 最初 の テーマ を 選択 して から バッファ を 埋める。
+  // v1244 face モード は テーマ 固定 (「👤 顔 タイル」)、 通常 モード は _pfNewTheme で ランダム 選択
+  if (mode === 'face') {
+    _pfState.theme = { type: 'face', label: '👤 顔 タイル' };
+    _pfState.currentFilter = null;
+  } else {
+    await _pfNewTheme();
+  }
   await _pfLoadMore();
   if (!_pfState.queue.length) {
     const l = document.getElementById('pf-loading');
@@ -456,8 +464,9 @@ export async function renderPhotoFrame({ query } = {}) {
     return;
   }
   _pfAcquireWakeLock();
-  if (mode === 'tile') _pfStartTile();
-  else                 _pfNext();
+  // v1244 face モード も tile モード と 同じ グリッド レイアウト を 使う (中身 が 顔 crop に なる だけ)
+  if (mode === 'tile' || mode === 'face') _pfStartTile();
+  else                                    _pfNext();
   _pfWireEvents();
   _pfShowControls();
   _pfShowThemeBadge();  // v1242 初回 テーマ を バッジ で 表示
@@ -564,6 +573,7 @@ function _pfStartTile() {
         <div class="pf-tile" style="grid-column:${t.c}; grid-row:${t.r}; position:relative; overflow:hidden; background:#111">
           <img class="pf-bg" alt="" style="position:absolute; inset:-8%; width:116%; height:116%; object-fit:cover; filter:blur(22px) brightness(0.55) saturate(1.2); opacity:0; transition:opacity 0.7s">
           <img class="pf-fg" alt="" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; opacity:0; transition:opacity 0.7s; z-index:1">
+          <div class="pf-tile-label" style="position:absolute; bottom:0; left:0; right:0; padding:4px 8px; color:#fff; background:linear-gradient(to top, rgba(0,0,0,0.75), transparent); font-size:12px; font-weight:600; opacity:0; transition:opacity 0.7s; z-index:2; text-align:center; pointer-events:none; text-shadow:0 1px 2px rgba(0,0,0,0.8)"></div>
         </div>`).join('')}
     </div>
   `;
@@ -608,7 +618,21 @@ function _pfPaintTile(i, photo) {
   const fg = wrap.querySelector('.pf-fg');
   const bg = wrap.querySelector('.pf-bg');
   if (!fg || !bg) return;
-  const src = assetMediaUrl(photo.asset_id, 'medium');
+  // v1244 face モード は face.php 経由 の 顔 crop、 通常 モード は media.php の medium
+  const src = photo._face
+    ? `${PHOTO_ORIGIN}/face.php?id=${encodeURIComponent(photo.face_id)}`
+    : assetMediaUrl(photo.asset_id, 'medium');
+  // v1244 face タイル は 名前 ラベル を 表示 (常時 、 淡い グラデ)、 通常 タイル は 隠す
+  const label = wrap.querySelector('.pf-tile-label');
+  if (label) {
+    if (photo._face && photo.people && photo.people[0]?.name) {
+      label.textContent = photo.people[0].name;
+      label.style.opacity = '1';
+    } else {
+      label.textContent = '';
+      label.style.opacity = '0';
+    }
+  }
   // v1243 フェード: 前景 と 背景 (blur) の 両方 を 同時 に アニメ
   fg.style.opacity = '0';
   bg.style.opacity = '0';
@@ -650,9 +674,15 @@ function _pfScheduleTileRotate() {
 
 // v1242 シーン 切替: テーマ を 新規 に 選び、 バッファ を リセット して 新テーマ で 埋め、
 //   レイアウト も 別 パターン に 差替 (向き は 現在 の を 保つ)。 完全 rebuild。
+// v1244 face モード は テーマ 選択 不要 (常 に 「👤 顔 タイル」)、 people の シャッフル 更新 のみ
 async function _pfSceneChange() {
   if (!_pfState) return;
-  await _pfNewTheme();
+  if (_pfState.mode === 'face') {
+    _pfState.theme = { type: 'face', label: '👤 顔 タイル' };
+    _pfState.currentFilter = null;
+  } else {
+    await _pfNewTheme();
+  }
   _pfState.queue = [];
   _pfState.seen = new Set();
   _pfState.idx = -1;
@@ -766,6 +796,26 @@ function _pfSetCaption(photo) {
 
 async function _pfLoadMore() {
   if (!_pfState) return;
+  // v1244 face モード: people 一覧 の 各 cover face_id を シャッフル して queue に 入れる。
+  //   photo (アセット) の 代わり に { _face: true, face_id, people:[{id,name}] } を pseudo-photo
+  //   として 扱う。 _pfPaintTile 側 で _face フラグ で URL を 切替 (assetMediaUrl → face.php)。
+  if (_pfState.mode === 'face') {
+    await _pfEnsurePeopleCache();
+    const people = _pfState.peopleCache || [];
+    const withCover = people.filter(p => p.cover);
+    // シャッフル して 追加
+    const shuffled = withCover.slice().sort(() => Math.random() - 0.5);
+    for (const p of shuffled) {
+      const key = 'face:' + p.cover;
+      if (_pfState.seen.has(key)) continue;
+      _pfState.queue.push({
+        _face: true, face_id: p.cover,
+        people: [{ id: p.id, name: p.name }],
+      });
+      _pfState.seen.add(key);
+    }
+    return;
+  }
   const excl = Array.from(_pfState.seen).slice(-40);
   // v1242 currentFilter (テーマ 由来 の album/year/person) を fetch に 反映。
   //   URL ?album=X が あれば albumId が currentFilter に 上書き 済 (単一 テーマ ロック)。
@@ -789,10 +839,10 @@ async function _pfLoadMore() {
 function _pfNext() {
   if (!_pfState) return;
   clearTimeout(_pfState.timer);
-  // v1242 tile モード の 「次」 は シーン 切替 (新 テーマ + 新 レイアウト) に 変更
-  //   従来 の 全 タイル 一気 差替 だと 同 テーマ ばかり で 単調 だった。
+  // v1242 tile モード の 「次」 は シーン 切替 (新 テーマ + 新 レイアウト) に 変更。
+  // v1244 face モード も 同様 に シーン 切替 (新 6 人 + 新 レイアウト)。
   //   _pfSceneChange → _pfStartTile が 内部 で _pfScheduleTileRotate まで やる ので 追加 schedule 不要。
-  if (_pfState.mode === 'tile') {
+  if (_pfState.mode === 'tile' || _pfState.mode === 'face') {
     _pfState.rotationsUntilScene = 8;
     _pfSceneChange();
     return;
@@ -934,10 +984,11 @@ function _pfWireEvents() {
   document.getElementById('pf-next')?.addEventListener('click', (e) => {
     e.stopPropagation(); _pfNext(); _pfShowControls();
   });
-  // v1240 モード 切替 (tile ↔ single) を hash で 実現、 現 URL に mode を 差替
+  // v1244 モード 切替 (tile → face → single → tile) を hash で 実現、 現 URL に mode を 差替
   document.getElementById('pf-mode')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    const nextMode = _pfState.mode === 'tile' ? 'single' : 'tile';
+    const cycle = { tile: 'face', face: 'single', single: 'tile' };
+    const nextMode = cycle[_pfState.mode] || 'tile';
     const params = new URLSearchParams();
     if (_pfState.albumId) params.set('album', String(_pfState.albumId));
     params.set('mode', nextMode);
