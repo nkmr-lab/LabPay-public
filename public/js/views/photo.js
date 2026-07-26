@@ -442,7 +442,7 @@ export async function renderPhotoFrame({ query } = {}) {
     paused: false, timer: null, wakeLock: null,
     controlsShownUntil: 0,
     // tile モード 用
-    tileEls: [], tileCount: 0, tilePhotos: [],
+    tileWraps: [], tileCount: 0, tilePhotos: [],
     // v1242 テーマ (album/year/person/mixed) + シーン カウンタ + キャッシュ
     theme: null, currentFilter: null, rotationsUntilScene: 8,
     albumsCache: null, peopleCache: null, themeBadgeTimer: null,
@@ -551,26 +551,30 @@ function _pfStartTile() {
   _pfState.layout = layout;
   _pfState.tileCount = count;
   _pfState.tilePhotos = new Array(count).fill(null);
-  // グリッド DOM (各 タイル は grid-column/grid-row で span 指定)
+  // v1243 中村さん要望「できるだけ 画像 全体 が 出る ように、 顔 が 見えない と かある」
+  //   → object-fit:cover (トリミング) → contain (全体表示) に 変更、 ただし 単純 contain だ と
+  //   タイル に 黒枠 が 出る の で、 同じ 画像 を **ブラー して 引き伸ばした 背景** で 埋める。
+  //   Apple Music / Spotify カバー 風 の 見た目。 これ で 顔 が 切れず、 黒枠 も 目立たない。
   slide.innerHTML = `
     <div id="pf-tiles" style="position:absolute; inset:0; display:grid;
                               grid-template-columns:repeat(${layout.cols}, 1fr);
                               grid-template-rows:repeat(${layout.rows}, 1fr);
                               gap:3px; background:#000">
       ${layout.tiles.map(t => `
-        <div style="grid-column:${t.c}; grid-row:${t.r}; position:relative; overflow:hidden; background:#111">
-          <img alt="" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.7s">
+        <div class="pf-tile" style="grid-column:${t.c}; grid-row:${t.r}; position:relative; overflow:hidden; background:#111">
+          <img class="pf-bg" alt="" style="position:absolute; inset:-8%; width:116%; height:116%; object-fit:cover; filter:blur(22px) brightness(0.55) saturate(1.2); opacity:0; transition:opacity 0.7s">
+          <img class="pf-fg" alt="" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; opacity:0; transition:opacity 0.7s; z-index:1">
         </div>`).join('')}
     </div>
   `;
-  _pfState.tileEls = Array.from(document.querySelectorAll('#pf-tiles img'));
+  _pfState.tileWraps = Array.from(document.querySelectorAll('#pf-tiles .pf-tile'));
   // 初期 埋め: 一気 に。 6 枚 だけ な の で ジグザグ 遅延 は 短め (演出)
   for (let i = 0; i < count; i++) {
     const p = _pfConsume();
     if (p) {
       if (i === 0) _pfPaintTile(i, p);
       else setTimeout(() => {
-        if (!_pfState || !_pfState.tileEls[i]) return;
+        if (!_pfState || !_pfState.tileWraps[i]) return;
         _pfPaintTile(i, p);
       }, 120 * i);
     }
@@ -599,21 +603,27 @@ function _pfConsume() {
 
 function _pfPaintTile(i, photo) {
   if (!_pfState || !photo) return;
-  const img = _pfState.tileEls[i];
-  if (!img) return;
+  const wrap = _pfState.tileWraps[i];
+  if (!wrap) return;
+  const fg = wrap.querySelector('.pf-fg');
+  const bg = wrap.querySelector('.pf-bg');
+  if (!fg || !bg) return;
   const src = assetMediaUrl(photo.asset_id, 'medium');
-  // フェード アウト → 差替 → フェード イン
-  img.style.opacity = '0';
+  // v1243 フェード: 前景 と 背景 (blur) の 両方 を 同時 に アニメ
+  fg.style.opacity = '0';
+  bg.style.opacity = '0';
   const swap = () => {
-    if (!_pfState || !_pfState.tileEls[i]) return;
-    img.onload = () => { img.style.opacity = '1'; };
-    img.onerror = () => { img.style.opacity = '0'; };
-    img.src = src;
+    if (!_pfState || !_pfState.tileWraps[i]) return;
+    fg.onload = () => { fg.style.opacity = '1'; bg.style.opacity = '1'; };
+    fg.onerror = () => { fg.style.opacity = '0'; bg.style.opacity = '0'; };
+    // 背景 は 別 img で 同 URL (ブラウザ が キャッシュ 一致 する ので 二重 fetch に は ならない)
+    bg.src = src;
+    fg.src = src;
     _pfState.tilePhotos[i] = photo;
   };
   // 初期 (opacity 既に 0) は 即 swap、 差替 時 は 0.4s 待って swap
-  if (img.src) setTimeout(swap, 400);
-  else         swap();
+  if (fg.src) setTimeout(swap, 400);
+  else        swap();
   // キャプション を 更新 (直近 差替 の 写真)
   _pfSetCaption(photo);
 }
