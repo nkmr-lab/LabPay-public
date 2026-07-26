@@ -7,6 +7,9 @@
 // route:
 //   #/photo                    — アルバム 一覧 (albums)
 //   #/photo/album/:slug        — アルバム 詳細 (timeline&album=<id>, 古い順、 タイル 表示)
+//   #/photo/frame              — フォトフレーム (フルスクリーン、 タイル/顔/single、 Wake Lock)
+//   #/photo/people             — 人物 一覧 + 名前検索 (v1245 P3)
+//   #/photo/people/:id         — 人物 プロフィール (表情 / 共写り / 場所 / 写真 一覧) (v1245 P3)
 //
 // Auth: photo.nkmr.io は nkmr-SSO cookie (`.nkmr.io` 共有) で 認可、
 //       fetch は `credentials: 'include'` 必須。 401 の 時 は 「未ログイン」と 案内して
@@ -75,9 +78,10 @@ function fmtDateRange(from, to) {
 function shellHtml(bodyHtml) {
   return `
     <div class="card page-header">
-      <div class="row center">
+      <div class="row center" style="flex-wrap:wrap; gap:6px">
         <h2 style="margin:0">🖼 フォト アルバム</h2>
-        <a href="#/photo/frame" class="btn primary" style="margin-left:auto; font-size:12px; padding:4px 12px; text-decoration:none">📺 フォトフレーム</a>
+        <a href="#/photo/people" class="btn" style="margin-left:auto; font-size:12px; padding:4px 12px; text-decoration:none">👤 人物</a>
+        <a href="#/photo/frame" class="btn primary" style="font-size:12px; padding:4px 12px; text-decoration:none">📺 フォトフレーム</a>
       </div>
       <div class="hint-sm" style="margin-top:4px">
         <a href="${PHOTO_ORIGIN}" target="_blank" rel="noopener noreferrer">photo.nkmr.io</a> の アルバム を LabPay 内 で 閲覧。
@@ -407,6 +411,7 @@ export async function renderPhotoFrame({ query } = {}) {
   const sec = Math.max(2, Math.min(120, Number(opts.sec) || 8));
   const tileSec = Math.max(1, Math.min(30, Number(opts.tile_sec) || 4));
   const albumId = opts.album ? Number(opts.album) : null;
+  const personLockId = opts.person ? Number(opts.person) : null;   // v1245 特定 人物 の 写真 だけ
   const fit = opts.fit === 'cover' ? 'cover' : 'contain';
 
   app.innerHTML = `
@@ -440,7 +445,7 @@ export async function renderPhotoFrame({ query } = {}) {
   `;
   _pfState = {
     queue: [], seen: new Set(), showing: null, idx: -1,
-    sec, tileSec, albumId, mode, fit,
+    sec, tileSec, albumId, personLockId, mode, fit,
     paused: false, timer: null, wakeLock: null,
     controlsShownUntil: 0,
     // tile モード 用
@@ -705,6 +710,15 @@ async function _pfNewTheme() {
     await _pfEnsureAlbumsCache();
     const a = (_pfState.albumsCache || []).find(x => Number(x.id) === Number(_pfState.albumId));
     if (a) _pfState.theme.label = `🖼 ${a.title}`;
+    return;
+  }
+  // v1245 URL ?person=X で 特定 人物 に ロック (人物 プロフィール から の 「この人 で フォトフレーム」)
+  if (_pfState.personLockId) {
+    _pfState.theme = { type: 'person', label: '👤 選択 人物' };
+    _pfState.currentFilter = { person_id: _pfState.personLockId };
+    await _pfEnsurePeopleCache();
+    const p = (_pfState.peopleCache || []).find(x => Number(x.id) === Number(_pfState.personLockId));
+    if (p) _pfState.theme.label = `👤 ${p.name}`;
     return;
   }
   await _pfEnsureAlbumsCache();
@@ -984,13 +998,15 @@ function _pfWireEvents() {
   document.getElementById('pf-next')?.addEventListener('click', (e) => {
     e.stopPropagation(); _pfNext(); _pfShowControls();
   });
-  // v1244 モード 切替 (tile → face → single → tile) を hash で 実現、 現 URL に mode を 差替
+  // v1244/v1245 モード 切替 (tile → face → single → tile) を hash で 実現、 現 URL に mode を 差替。
+  //   album/person の ロック は 維持 (「この アルバム で フォトフレーム」→ mode 切替 も その アルバム 内)。
   document.getElementById('pf-mode')?.addEventListener('click', (e) => {
     e.stopPropagation();
     const cycle = { tile: 'face', face: 'single', single: 'tile' };
     const nextMode = cycle[_pfState.mode] || 'tile';
     const params = new URLSearchParams();
-    if (_pfState.albumId) params.set('album', String(_pfState.albumId));
+    if (_pfState.albumId)      params.set('album', String(_pfState.albumId));
+    if (_pfState.personLockId) params.set('person', String(_pfState.personLockId));
     params.set('mode', nextMode);
     location.hash = '#/photo/frame?' + params.toString();
   });
@@ -1056,4 +1072,340 @@ function openAlbumLightbox(albumId, startIdx) {
   const originalId = items[startIdx].id;
   const mappedIdx = Math.max(0, imageItems.findIndex(x => x.id === originalId));
   openImageLightbox(images[mappedIdx] || images[0], { images, index: mappedIdx });
+}
+
+// ================================================================================
+// v1245 P3: 人物検索 + プロフィール
+// ================================================================================
+//   LabPhoto v109 の people?q= + person_profile (expressions/places/coappearances) +
+//   person_photos が 揃った の で、 「この人 って どんな人?」 を LabPay 内 で 見られる ように。
+//
+// route:
+//   #/photo/people             — 一覧 + 検索 (people?q=)
+//   #/photo/people/:id         — プロフィール (person_profile → 表情バー / 共写り / 場所 / サンプル + 写真無限スクロール)
+
+const _FACE_URL = (faceId) => `${PHOTO_ORIGIN}/face.php?id=${encodeURIComponent(faceId)}`;
+
+// 表情 の 日本語 ラベル + 絵文字 (FER+ の kind)
+const _EXPRESSION_LABEL = {
+  happiness: { emoji: '😀', ja: '笑顔',   color: '#f59e0b' },
+  neutral:   { emoji: '😐', ja: 'ふつう', color: '#6b7280' },
+  surprise:  { emoji: '😲', ja: '驚き',   color: '#8b5cf6' },
+  sadness:   { emoji: '😢', ja: '悲しみ', color: '#3b82f6' },
+  anger:     { emoji: '😠', ja: '怒り',   color: '#dc2626' },
+  disgust:   { emoji: '🤢', ja: '嫌悪',   color: '#65a30d' },
+  fear:      { emoji: '😨', ja: '怯え',   color: '#0891b2' },
+  contempt:  { emoji: '😒', ja: '軽蔑',   color: '#a16207' },
+};
+
+// ---------------- 一覧 (#/photo/people) ----------------
+
+export async function renderPhotoPeople({ query } = {}) {
+  const app = document.getElementById('app');
+  const q0 = (query && query.q) || '';
+  app.innerHTML = `
+    <div class="card page-header">
+      <div class="row center">
+        <h2 style="margin:0">👤 人物 一覧</h2>
+        <a href="#/photo" class="hint" style="margin-left:auto; font-size:12px">← アルバム へ</a>
+      </div>
+      <div class="hint-sm" style="margin-top:4px">photo.nkmr.io の 顔識別 データ から、 ラボメン の 一覧 + プロフィール を 見る。</div>
+    </div>
+    <div class="card">
+      <input type="search" id="pp-q" placeholder="🔍 名前 で 検索 (中村 / なかむら / Nakamura)"
+             maxlength="80" value="${escapeHtml(q0)}"
+             style="width:100%; box-sizing:border-box; padding:6px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:14px">
+      <div class="hint-sm" style="margin-top:4px" id="pp-count">読み込み中…</div>
+    </div>
+    <div id="pp-grid"
+         style="display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:8px; margin-top:8px"></div>
+  `;
+  const qEl = document.getElementById('pp-q');
+  const gridEl = document.getElementById('pp-grid');
+  const countEl = document.getElementById('pp-count');
+
+  const doSearch = async (q) => {
+    countEl.textContent = '読み込み中…';
+    try {
+      const params = q ? { q } : {};
+      const d = await photoApi('people', params);
+      const people = Array.isArray(d.people) ? d.people : [];
+      countEl.textContent = `${people.length} 人${q ? ` (「${q}」で 検索)` : ''}`;
+      if (!people.length) {
+        gridEl.innerHTML = `<div class="empty" style="grid-column:1/-1">該当 なし</div>`;
+        return;
+      }
+      gridEl.innerHTML = people.map(_personCardHtml).join('');
+      gridEl.querySelectorAll('[data-person-id]').forEach(el => {
+        el.addEventListener('click', () => {
+          navigate('#/photo/people/' + encodeURIComponent(el.dataset.personId));
+        });
+      });
+    } catch (e) {
+      countEl.innerHTML = `<span style="color:#dc2626">読み込み失敗: ${escapeHtml(e?.message || String(e))}</span>`;
+      gridEl.innerHTML = '';
+    }
+  };
+
+  await doSearch(q0);
+
+  let qt = null;
+  qEl.addEventListener('input', () => {
+    clearTimeout(qt);
+    qt = setTimeout(() => doSearch(qEl.value.trim()), 250);
+  });
+}
+
+function _personCardHtml(p) {
+  const cover = p.cover
+    ? `<img src="${escapeHtml(_FACE_URL(p.cover))}" loading="lazy" alt=""
+             style="width:100%; aspect-ratio:1/1; object-fit:cover; display:block; background:#f3f4f6"
+             onerror="this.style.opacity=0.2">`
+    : `<div style="width:100%; aspect-ratio:1/1; background:linear-gradient(135deg, #ede4f3, #d4b8e8); display:flex; align-items:center; justify-content:center; font-size:34px">👤</div>`;
+  const tags = (p.tags || []).slice(0, 2).map(t =>
+    `<span style="display:inline-block; font-size:10px; padding:1px 6px; margin:2px 2px 0 0; background:#e5e7eb; color:#374151; border-radius:8px">${escapeHtml(t)}</span>`
+  ).join('');
+  return `
+    <div class="card" data-person-id="${escapeHtml(String(p.id))}"
+         style="cursor:pointer; padding:0; overflow:hidden; border:1px solid #e5e7eb">
+      ${cover}
+      <div style="padding:6px 8px">
+        <div style="font-weight:600; font-size:13px; line-height:1.3; word-break:break-word">${escapeHtml(p.name || '(名前 未設定)')}</div>
+        <div class="hint-sm" style="font-size:11px; margin-top:2px; color:#6b7280">
+          📷 ${p.photos || p.count || 0} 枚
+        </div>
+        ${tags ? `<div style="margin-top:3px">${tags}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+// ---------------- プロフィール (#/photo/people/:id) ----------------
+
+export async function renderPhotoPerson({ params, query } = {}) {
+  const app = document.getElementById('app');
+  const id = Number(params.id);
+  app.innerHTML = `
+    <div class="card page-header">
+      <div><a href="#/photo/people" class="hint" style="font-size:12px">← 人物 一覧 に 戻る</a></div>
+      <div id="pp-detail-hdr" style="margin-top:6px">読み込み中…</div>
+    </div>
+    <div id="pp-detail-body"></div>
+  `;
+  try {
+    const d = await photoApi('person_profile', { id });
+    const person = d.person;
+    if (!person) throw new Error('person 情報 が 取得 できません');
+    _renderPersonHeader(person);
+    _renderPersonBody(person);
+    // 写真 一覧 (無限 スクロール) は 別 fetch
+    _loadPersonPhotos(id, null, null, /*append=*/false);
+  } catch (e) {
+    document.getElementById('pp-detail-hdr').innerHTML =
+      `<span style="color:#dc2626">読み込み失敗: ${escapeHtml(e?.message || String(e))}</span>`;
+  }
+}
+
+function _renderPersonHeader(person) {
+  const el = document.getElementById('pp-detail-hdr');
+  if (!el) return;
+  const tags = (person.tags || []).map(t =>
+    `<span style="display:inline-block; font-size:11px; padding:1px 6px; margin:0 3px 0 0; background:#e5e7eb; color:#374151; border-radius:8px">${escapeHtml(t)}</span>`
+  ).join('');
+  const cover = person.cover_face_id
+    ? `<img src="${escapeHtml(_FACE_URL(person.cover_face_id))}" alt=""
+             style="width:80px; height:80px; border-radius:50%; object-fit:cover; background:#f3f4f6; border:3px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,0.15)">`
+    : `<div style="width:80px; height:80px; border-radius:50%; background:linear-gradient(135deg, #ede4f3, #d4b8e8); display:flex; align-items:center; justify-content:center; font-size:36px">👤</div>`;
+  const period = (person.first_seen && person.last_seen)
+    ? `${_fmtYmd(person.first_seen)} 〜 ${_fmtYmd(person.last_seen)}`
+    : (person.first_seen ? `${_fmtYmd(person.first_seen)} 〜` : '');
+  el.innerHTML = `
+    <div class="row" style="align-items:center; gap:14px">
+      ${cover}
+      <div style="flex:1; min-width:0">
+        <h2 style="margin:0; font-size:20px; word-break:break-word">${escapeHtml(person.name || '(名前 未設定)')}</h2>
+        <div class="hint-sm" style="margin-top:4px">📷 ${person.photos_count || 0} 枚${period ? ` · 📅 ${escapeHtml(period)}` : ''}</div>
+        ${tags ? `<div style="margin-top:4px">${tags}</div>` : ''}
+      </div>
+      <a href="#/photo/frame?mode=tile&person=${encodeURIComponent(person.id)}" class="btn primary" style="text-decoration:none; font-size:12px; padding:4px 12px">📺 この人 で フォトフレーム</a>
+    </div>
+  `;
+}
+
+function _renderPersonBody(person) {
+  const body = document.getElementById('pp-detail-body');
+  if (!body) return;
+
+  // サンプル 写真 (直近 12 枚)
+  const samples = Array.isArray(person.sample_photos) ? person.sample_photos : [];
+  const samplesHtml = samples.length ? `
+    <div class="card">
+      <h3 style="margin:0 0 8px; font-size:15px">📸 サンプル 写真</h3>
+      <div id="pp-samples"
+           style="display:grid; grid-template-columns:repeat(auto-fill, minmax(90px, 1fr)); gap:4px">
+        ${samples.map((s, i) => `
+          <div data-pp-sample-idx="${i}" style="position:relative; cursor:pointer; aspect-ratio:1/1; overflow:hidden; background:#f3f4f6; border-radius:2px">
+            <img src="${escapeHtml(_absUrl(s.thumb_url) || assetMediaUrl(s.asset_id, 'thumb'))}" loading="lazy" alt=""
+                 style="width:100%; height:100%; object-fit:cover; display:block"
+                 onerror="this.style.opacity=0.2">
+          </div>`).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  // 表情 分布
+  const exprs = Array.isArray(person.top_expressions) ? person.top_expressions : [];
+  const exprsHtml = exprs.length ? `
+    <div class="card">
+      <h3 style="margin:0 0 8px; font-size:15px">😀 表情 の 分布 (上位)</h3>
+      ${exprs.map(e => {
+        const meta = _EXPRESSION_LABEL[e.kind] || { emoji: '❓', ja: e.kind, color: '#9ca3af' };
+        const pct = Math.round((Number(e.score) || 0) * 100);
+        return `
+          <div style="margin:6px 0">
+            <div class="row" style="font-size:12px; align-items:center; gap:6px">
+              <span style="width:22px">${meta.emoji}</span>
+              <span style="flex:1">${escapeHtml(meta.ja)}</span>
+              <span style="font-weight:600; min-width:36px; text-align:right">${pct}%</span>
+            </div>
+            <div style="height:6px; background:#f3f4f6; border-radius:3px; overflow:hidden; margin-top:2px">
+              <div style="height:100%; width:${pct}%; background:${meta.color}; transition:width 0.5s"></div>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>
+  ` : '';
+
+  // 共写り
+  const coap = Array.isArray(person.top_coappearances) ? person.top_coappearances : [];
+  const coapHtml = coap.length ? `
+    <div class="card">
+      <h3 style="margin:0 0 8px; font-size:15px">🤝 よく 一緒 に 写る 人 (上位)</h3>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:6px">
+        ${coap.map(c => `
+          <a href="#/photo/people/${encodeURIComponent(c.person_id)}"
+             style="display:block; text-decoration:none; color:inherit; text-align:center; padding:6px; border:1px solid #e5e7eb; border-radius:6px; background:#fff">
+            ${c.cover_face_id
+              ? `<img src="${escapeHtml(_FACE_URL(c.cover_face_id))}" loading="lazy" alt=""
+                       style="width:56px; height:56px; border-radius:50%; object-fit:cover; background:#f3f4f6">`
+              : `<div style="width:56px; height:56px; border-radius:50%; margin:0 auto; background:#ede4f3; display:flex; align-items:center; justify-content:center; font-size:24px">👤</div>`}
+            <div style="font-size:12px; font-weight:600; margin-top:4px; word-break:break-word">${escapeHtml(c.name || '')}</div>
+            <div class="hint-sm" style="font-size:10px; color:#6b7280">${c.count || 0} 枚 一緒</div>
+          </a>`).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  // 場所 (GPS)
+  const places = Array.isArray(person.top_places) ? person.top_places : [];
+  const placesHtml = places.length ? `
+    <div class="card">
+      <h3 style="margin:0 0 8px; font-size:15px">📍 よく 撮影 される 場所 (上位)</h3>
+      <div class="hint-sm" style="font-size:11px; margin-bottom:6px; color:#6b7280">GPS 座標 を 約 100m で 丸めた もの。 タップ で Google Maps で 開く</div>
+      ${places.map(p => `
+        <a href="https://www.google.com/maps?q=${p.lat},${p.lng}&z=16" target="_blank" rel="noopener noreferrer"
+           style="display:block; padding:6px 10px; margin:3px 0; background:#f9fafb; border-radius:4px; text-decoration:none; color:inherit; font-size:13px">
+          📍 <b>${escapeHtml(p.label || `${Number(p.lat).toFixed(3)}, ${Number(p.lng).toFixed(3)}`)}</b>
+          <span class="hint-sm" style="color:#6b7280"> · ${p.count || 0} 枚</span>
+        </a>
+      `).join('')}
+    </div>
+  ` : '';
+
+  // 写真 一覧 (無限 スクロール、 別 fetch)
+  const photosHtml = `
+    <div class="card">
+      <h3 style="margin:0 0 8px; font-size:15px">🖼 この人 の 写真 一覧</h3>
+      <div id="pp-person-photos-status" class="hint-sm" style="text-align:center; padding:10px">読み込み中…</div>
+      <div id="pp-person-photos-grid"
+           style="display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:4px"></div>
+      <div id="pp-person-photos-more" style="text-align:center; margin-top:10px"></div>
+    </div>
+  `;
+
+  body.innerHTML = samplesHtml + exprsHtml + coapHtml + placesHtml + photosHtml;
+
+  // サンプル タップ で ライトボックス
+  if (samples.length) {
+    const grid = document.getElementById('pp-samples');
+    grid?.querySelectorAll('[data-pp-sample-idx]').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = Number(el.dataset.ppSampleIdx);
+        const images = samples.map(s => assetMediaUrl(s.asset_id, 'full'));
+        openImageLightbox(images[idx] || images[0], { images, index: idx });
+      });
+    });
+  }
+}
+
+// この 人 の 写真 一覧 (無限 スクロール) - person_photos endpoint
+const _ppPersonPhotos = new Map();  // person_id → [{asset_id, taken_at, thumb_url, ...}, ...]
+
+async function _loadPersonPhotos(personId, before, beforeId, append) {
+  const status = document.getElementById('pp-person-photos-status');
+  const grid   = document.getElementById('pp-person-photos-grid');
+  const more   = document.getElementById('pp-person-photos-more');
+  if (!status || !grid || !more) return;
+  if (!append) status.textContent = '読み込み中…';
+  else         more.innerHTML = '<span class="hint-sm">読み込み中…</span>';
+  try {
+    const params = { id: personId, limit: 100 };
+    if (before)   params.before = before;
+    if (beforeId) params.before_id = beforeId;
+    const d = await photoApi('person_photos', params);
+    const items = Array.isArray(d.photos) ? d.photos : [];
+    const prev = _ppPersonPhotos.get(personId) || [];
+    const merged = append ? prev.concat(items) : items;
+    _ppPersonPhotos.set(personId, merged);
+    if (!merged.length) {
+      status.innerHTML = `<div class="empty">写真 が ありません</div>`;
+      more.innerHTML = '';
+      return;
+    }
+    status.textContent = `${merged.length} 枚${d.next ? '+' : ''}`;
+    grid.innerHTML = merged.map((it, idx) => `
+      <div data-pp-pp-idx="${idx}" style="position:relative; cursor:pointer; aspect-ratio:1/1; overflow:hidden; background:#f3f4f6; border-radius:2px">
+        <img src="${escapeHtml(_absUrl(it.thumb_url) || assetMediaUrl(it.asset_id, 'thumb'))}"
+             loading="lazy" alt=""
+             style="width:100%; height:100%; object-fit:cover; display:block"
+             onerror="this.style.opacity=0.2">
+        ${it.type === 'video' ? '<div style="position:absolute; left:3px; top:3px; background:rgba(0,0,0,0.6); color:#fff; padding:1px 4px; border-radius:3px; font-size:10px">▶</div>' : ''}
+      </div>`).join('');
+    // ライトボックス (動画 除く)
+    grid.querySelectorAll('[data-pp-pp-idx]').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = Number(el.dataset.ppPpIdx);
+        const it = merged[idx];
+        if (it.type === 'video') {
+          window.open(`${PHOTO_ORIGIN}/media.php?id=${encodeURIComponent(it.asset_id)}&k=video720`, '_blank', 'noopener,noreferrer');
+          return;
+        }
+        const imgs = merged.filter(x => x.type !== 'video');
+        const urls = imgs.map(x => assetMediaUrl(x.asset_id, 'full'));
+        const mIdx = Math.max(0, imgs.findIndex(x => x.asset_id === it.asset_id));
+        openImageLightbox(urls[mIdx] || urls[0], { images: urls, index: mIdx });
+      });
+    });
+    if (d.next) {
+      more.innerHTML = `<button class="btn primary" id="pp-pp-more-btn" style="font-size:13px">▼ 続き を 読み込む</button>`;
+      document.getElementById('pp-pp-more-btn').addEventListener('click', () => {
+        _loadPersonPhotos(personId, d.next.before, d.next.before_id, /*append=*/true);
+      });
+    } else {
+      more.innerHTML = `<div class="hint-sm" style="color:#6b7280">— これ で 全部 —</div>`;
+    }
+  } catch (e) {
+    if (!append) status.innerHTML = `<span style="color:#dc2626">読み込み失敗: ${escapeHtml(e?.message || String(e))}</span>`;
+    else         more.innerHTML = `<span style="color:#dc2626">続き 読み込み 失敗: ${escapeHtml(e?.message || String(e))}</span>`;
+  }
+}
+
+function _absUrl(u) {
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;
+  return PHOTO_ORIGIN + (u.startsWith('/') ? u : ('/' + u));
+}
+
+function _fmtYmd(s) {
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1]}/${Number(m[2])}/${Number(m[3])}` : String(s);
 }
