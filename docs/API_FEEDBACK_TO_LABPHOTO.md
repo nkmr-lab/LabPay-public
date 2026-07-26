@@ -100,6 +100,43 @@
 
 ---
 
+## 🟢 追加要望: 顔タイル モード の 拡張 (v1244 実装後)
+
+**LabPay 側 で フォトフレーム に face モード を 実装** (v1244) — 現状 は `?action=people` の 各人 の cover face_id (1 人 1 顔) を シャッフル して 6 タイル に 表示。 「顔だけ の 画像 が 山ほど ある」中村さん談 を 活かし たい。
+
+### 5a. `?action=random_faces` エンドポイント が 欲しい (中優先)
+
+- 現状: 各人 の 「cover」 (代表 顔) は 1 人 1 個 なので、 メンバー ~30 人 だと ループ が 早い
+- 願望: **同 人物 で 別 の 顔 (別 の 写真 に 写った 別 表情) を も 出したい**、 6 タイル に 「同じ 人 の 違う 顔」も 混じって OK
+- 想定 shape:
+  ```
+  GET /api.php?action=random_faces&count=12&seed=YYYYMMDD
+    &person_id=<optional>  ← 特定 人物 の 顔 だけ を シャッフル
+    &min_score=0.6         ← det_score >= 閾値 (くっきり した 顔 のみ)
+    &min_size=128          ← min(bbox_w, bbox_h) >= 閾値 (小さすぎる 顔 除外)
+    &exclude_ids=1,2,3
+  Response:
+  { "ok": true, "faces": [
+      { "face_id": 5678, "person_id": 12, "person_name": "山田 太郎",
+        "asset_id": 9001, "taken_at": "…", "smile": 0.72 }, ... ] }
+  ```
+- 実装 メモ: `SELECT ... FROM faces f JOIN people p ORDER BY RAND(<seed>) LIMIT count`、 `p.display_name IS NOT NULL AND f.crop_path <> ''` で 絞る、 `WHERE f.det_score >= min_score AND LEAST(f.bbox_w, f.bbox_h) >= min_size`
+- LabPay 側 の 実装 変更 は 小さい (現状 の people cover 生成 ロジック を random_faces call に 置換)
+
+### 5b. `?action=people` レスポンス に `alt_covers` (第 2〜N 候補 の 顔) は?
+
+- 5a の 代替案 ・ より 軽量: 各 人物 の cover の 他 に、 上位 5 個 くらい の 候補 顔 id を 一緒 に 返す
+- ```{ "id":12, "name":"…", "cover":5678, "alt_covers":[9012, 9034, 9056] }```
+- クライアント で cover ローテ するだけ で 済む、 追加 API 不要
+- 5a より 実装 コスト 低い が、 「同 人物 で ずっと 同じ 顔 セット」に なる デメリット (毎回 fetch し直せば 変わる が)
+
+### 5c. `random_faces` の smile / expression filter
+
+- 5a が 出来た 上で の 拡張、 かな り 先 で 良い
+- `?expression=smile|neutral|surprised` で 表情 別 の 顔 タイル (「笑顔 ばかり の フォト フレーム」等) が 出せる と 楽しい
+
+---
+
 ## 追加 の 小さな 気づき
 
 ### 4a. `person_profile.sample_photos[].thumb_url` が 相対 パス
@@ -121,6 +158,7 @@
 - P1 (`#/photo` アルバム 一覧 + 詳細) v1234〜v1239 実装済
 - P2 (ホーム ウィジェット 「今日 の ラボ フォト」) v1237 実装済
 - P4 (フォトフレーム、 Wake Lock、 スライド) v1237 実装済
+  - v1240 タイル 既定、 v1241 hero+サブ 混合 レイアウト、 v1242 レイアウト ローテ + テーマ コヒージョン (album/year/person 循回)、 v1243 contain + blur 背景 (顔切れ回避)、 v1244 face モード 追加 (people cover 使用、 5a が 来れば さらに 良い)
 - P3 (人物検索 + プロフィール) 未着手 — 上記 3a/3b/3c の 回答 を 受けて 着手
 - LabPhoto v109 の CORS + fallback 401 契約 は 完璧、 追加要望なし
 
@@ -135,6 +173,7 @@
 | 🟡 中 | `random_photos?min_faces=1` | フォトフレーム が 「ラボメン フォト」に 特化可 |
 | 🟡 中 | `albums?cover_has_thumb` | 表紙 抜け の 代替 が 選べる |
 | 🟡 中 | P3 `top_expressions` / `top_places` 復活 検討 | 人物 プロフィール が リッチ に |
+| 🟡 中 | 5a `?action=random_faces` (or 5b `alt_covers`) | 顔タイル フォトフレーム が 「同人物 別 顔」も 混ざり 賑やか に |
 | 🟢 低 | `albums` サーバ側 絞り込み (year/tag/q) | 1000件超 に なった 時 |
 | 🟢 低 | `stats` の 派生 集計 | 移設 進捗 見える化 |
 
