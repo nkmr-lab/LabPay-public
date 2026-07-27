@@ -752,17 +752,17 @@ async function _pfStartMosaic() {
     }
     // それ でも 1〜2 枚 しか ない 場合 は そのまま (少ない タイル で 表示)
   }
-  // Justified rows レイアウト
+  // Justified rows レイアウト (v1249 pick-best-N、 W と H を 完全 に 埋める)
   const rows = _pfBuildRowsFromItems(initial, W, H);
-  // 描画 + tile 情報 の 保持 (差替時 の aspect マッチ に 使う)
+  // 描画: 各 タイル の 幅 は row 側 で 事前計算 済み の it.width を 使う (W フル 保証)
   slide.innerHTML = `
     <div id="pf-mosaic"
          style="position:absolute; inset:0; display:flex; flex-direction:column; background:#000; opacity:0; transition:opacity 0.7s">
       ${rows.map(row => `
-        <div style="display:flex; height:${row.height.toFixed(2)}px; gap:2px; margin-bottom:2px">
+        <div style="display:flex; height:${row.height.toFixed(2)}px; gap:0">
           ${row.items.map(it => `
             <div class="pf-mtile" data-asset="${escapeHtml(String(it.photo.asset_id))}"
-                 style="width:${(row.height * it.aspect).toFixed(2)}px; height:100%; overflow:hidden; background:#111">
+                 style="width:${it.width.toFixed(2)}px; height:100%; overflow:hidden; background:#111">
               <img src="${escapeHtml(assetMediaUrl(it.photo.asset_id, 'medium'))}"
                    alt="" loading="lazy"
                    style="width:100%; height:100%; object-fit:cover; display:block; transition:opacity 0.6s"
@@ -775,11 +775,14 @@ async function _pfStartMosaic() {
     if (el) el.style.opacity = '1';
   });
   _pfSetCaption(initial[0].photo);
-  // タイル 情報 (aspect + DOM 参照) を 順序 通り に 記録
+  // タイル 情報: **タイル 縦横比** (width/height) を 記録 → swap 時 に photo aspect が
+  // 近い もの を 選ぶ (crop を 最小化)。 photo aspect ≠ tile aspect の 場合 は cover crop。
   _pfState.mosaicTiles = [];
   const tileEls = Array.from(document.querySelectorAll('#pf-mosaic .pf-mtile'));
-  for (let i = 0; i < tileEls.length; i++) {
-    _pfState.mosaicTiles.push({ el: tileEls[i], aspect: initial[i].aspect, photo: initial[i].photo });
+  let flat = [];
+  for (const row of rows) for (const it of row.items) flat.push({ tileAspect: it.width / row.height, photo: it.photo });
+  for (let i = 0; i < tileEls.length && i < flat.length; i++) {
+    _pfState.mosaicTiles.push({ el: tileEls[i], aspect: flat[i].tileAspect, photo: flat[i].photo });
   }
   // 個別 タイル 差替 スケジューラ を 起動 (scene 60 秒 は _pfScheduleMosaicSwap 内 で 判定)
   _pfState.rotationsUntilScene = _pfMosaicScenesPerRotation();
@@ -859,72 +862,76 @@ function _pfSwapOneMosaicTile() {
   _pfSetCaption(next.photo);
 }
 
-// 事前 に aspect ロード 済 の items から justified rows を 組む。
-// v1248 中村さん報告「上4枚 / 下2枚 の 配置 で 下の右端 に 黒帯 が 出る」対応:
-//   (1) 最後 の 行 の 高さ を 無条件 に `containerW / sum(aspects)` で 計算 (キャップ 廃止) →
-//       常 に 幅 を フル に 埋める、 (2) 最後 の 行 が 前 の 行 と 比べ 極端 に 高い (少枚数
-//       orphan) 場合、 前 の 行 から 1 枚 を 借りて バランス、 (3) 全 行 高 を 画面 高 に
-//       均等 スケール。 これ で 黒帯 (右端 や 下部) 完全 に 消える。
-function _pfBuildRowsFromItems(items, containerW, containerH) {
-  const landscape = containerW > containerH;
-  const rowCount = landscape ? 3 : 4;
-  const targetRowH = containerH / rowCount;
-  const rows = [];
-  let cur = [];
-  let curSum = 0;
+// v1249 中村さん報告 3 件 (「5+5+2 で 右3分の1 黒」+「写真足りません」+「枚数少ない
+//   場合 は もっと 大きく」)。 前 版 の rescale が 「W フル」不変条件 を 壊して いた の が
+//   根本原因 なので、 レイアウト アルゴ を **pick-best-N** に 差替:
+//     (1) 幾何 的 に 最適 な 行数 N を `sqrt(H × totalAspect / W)` から 推定
+//     (2) minN..maxN で 「均等 aspect 分割」→ 「totalH が H に 近い + 行高 の ばらつき 小」を
+//         スコア で 選ぶ
+//     (3) タイル 幅 = `W × (item.aspect / row.aspectSum)` で 各 行 が **常 に W フル**
+//     (4) 行高 は H / N (均等) で 縦 も 完全 に 埋める、 タイル 縦横比 と 写真 縦横比 の 微差
+//         は object-fit:cover の 軽い crop で 吸収
+//     (5) items 数 が 少ない (< 3 枚) → 自動 で N=1 に、 タイル が 大きく なる (「少ない
+//         なら 大きく」)。 12 枚 なら N=3 (typical)。
+function _packInNRows(items, N) {
+  if (N <= 0) N = 1;
+  const total = items.reduce((s, i) => s + i.aspect, 0);
+  const target = total / N;
+  const rows = [{ items: [], aspectSum: 0 }];
   for (const it of items) {
-    cur.push(it);
-    curSum += it.aspect;
-    if (curSum * targetRowH >= containerW) {
-      rows.push({ items: cur });
-      cur = []; curSum = 0;
+    const cur = rows[rows.length - 1];
+    const canNew = rows.length < N && cur.items.length > 0;
+    if (canNew && cur.aspectSum + it.aspect > target) {
+      rows.push({ items: [it], aspectSum: it.aspect });
+    } else {
+      cur.items.push(it);
+      cur.aspectSum += it.aspect;
     }
-  }
-  if (cur.length) rows.push({ items: cur });
-  if (!rows.length) return [];
-
-  // 行 高 計算: どの 行 も containerW / sum(aspects)、 幅 は 常 に 完全 に 埋まる。
-  const sumOf = (items) => items.reduce((a, i) => a + i.aspect, 0);
-  const heightOf = (items) => containerW / Math.max(sumOf(items), 0.5);
-  for (const row of rows) row.height = heightOf(row.items);
-
-  // v1248 中村さん報告「上5 中5 下1 で 下の1枚 の 右端 に 黒 スペース」対応:
-  //   隣接 行 の 高さ 比 が 1.4 倍 超 なら 高い方 から 低い方 へ 1 枚 借りる (or 逆)。
-  //   全 ペア で 収束 する まで 繰り返す。 これ で 「5+5+1」 → 「4+4+3」 の ように 均される。
-  //   move の 方向 は 「タイル 全体 の 順序」を 保つ 向き (前 の 行 の 末尾 → 次 の 行 の 先頭、
-  //   or 逆) で 統一。
-  let safety = 20;
-  let changed = true;
-  while (changed && safety-- > 0) {
-    changed = false;
-    for (let i = 0; i < rows.length - 1; i++) {
-      const a = rows[i], b = rows[i + 1];
-      if (a.items.length >= 2 && b.height > a.height * 1.4) {
-        // 下 が 高い (少数) → 上 の 末尾 を 下 へ 移す
-        b.items.unshift(a.items.pop());
-        a.height = heightOf(a.items);
-        b.height = heightOf(b.items);
-        changed = true;
-        break;
-      }
-      if (b.items.length >= 2 && a.height > b.height * 1.4) {
-        // 上 が 高い (少数) → 下 の 先頭 を 上 へ 移す
-        a.items.push(b.items.shift());
-        a.height = heightOf(a.items);
-        b.height = heightOf(b.items);
-        changed = true;
-        break;
-      }
-    }
-  }
-
-  // 全体 行高 合計 を 画面 高 に 合わせ 均等 スケール (下部 黒帯 抑制)。 縦横比 は 保たれる。
-  const totalH = rows.reduce((a, r) => a + r.height, 0);
-  if (totalH > 0 && Math.abs(totalH - containerH) / containerH > 0.005) {
-    const k = containerH / totalH;
-    rows.forEach(r => r.height *= k);
   }
   return rows;
+}
+
+function _pfBuildRowsFromItems(items, containerW, containerH) {
+  if (!items.length) return [];
+  const totalAspect = items.reduce((s, i) => s + i.aspect, 0);
+  // 幾何 的 に 最適 な 行数 (等 aspect 分割 + 各 行 W フル で totalH ≈ H に なる N)
+  const idealNRaw = Math.sqrt(Math.max(1, containerH * totalAspect / Math.max(containerW, 1)));
+  const idealN = Math.max(1, Math.round(idealNRaw));
+  // 少ない 枚数 は 少ない 行 に (「大きく 表示」)
+  const cap = Math.min(items.length, 6);
+  const minN = Math.max(1, idealN - 1);
+  const maxN = Math.min(cap, idealN + 2);
+
+  let best = null;
+  for (let N = minN; N <= maxN; N++) {
+    if (N > items.length) break;
+    const rows = _packInNRows(items, N);
+    if (rows.length < 1 || rows.some(r => r.items.length === 0)) continue;
+    // 各 行 が W を フル に する 場合 の 自然 行高 = W / sum(aspect)
+    const heights = rows.map(r => containerW / Math.max(r.aspectSum, 0.5));
+    const totalH = heights.reduce((a, b) => a + b, 0);
+    const mean = totalH / rows.length;
+    const range = Math.max(...heights) - Math.min(...heights);
+    const evenness = range / (mean || 1);              // 行高 の ばらつき (小さい ほど 良い)
+    const fitDelta = Math.abs(totalH - containerH) / containerH;   // 縦 の フィット 誤差
+    const score = fitDelta * 3 + evenness;             // fit を 重視、 evenness も 少し
+    if (!best || score < best.score) best = { rows, heights, totalH, score };
+  }
+  if (!best) return [];
+
+  // 行高 を 「均等 (containerH / rows.length)」に 揃える → 縦 完全 に H を 埋める
+  const eqH = containerH / best.rows.length;
+  const finalRows = best.rows.map((r) => ({
+    height: eqH,
+    aspectSum: r.aspectSum,
+    // タイル 幅 は aspect 按分 で W を 完全 に 埋める (widths.sum = W)
+    items: r.items.map((it) => ({
+      photo: it.photo,
+      aspect: it.aspect,
+      width: containerW * (it.aspect / Math.max(r.aspectSum, 0.001)),
+    })),
+  }));
+  return finalRows;
 }
 
 function _pfConsume() {
