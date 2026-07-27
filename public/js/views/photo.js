@@ -689,9 +689,11 @@ async function _pfBuildMosaicRows(photos, containerW, containerH) {
 async function _pfEnsureMosaicPool(minSize) {
   if (!_pfState) return;
   if (!_pfState.mosaicPool) _pfState.mosaicPool = [];
-  let safety = 4;   // 最大 4 バッチ = 48 枚 fetch で 打ち止め (テーマ が 尽きた 場合)
+  const alreadyInPool = new Set(_pfState.mosaicPool.map(x => x.photo.asset_id));
+  let safety = 8;
+  let themeRetries = 2;   // v1248 テーマ 尽きたら 別 テーマ に 切替 (URL ロック 除く)
   while (_pfState.mosaicPool.length < minSize && safety-- > 0) {
-    const excl = Array.from(_pfState.seen || []).slice(-60);
+    const excl = Array.from(_pfState.seen || []).slice(-80);
     const f = _pfState.currentFilter || {};
     const items = await fetchRandomPhotos({
       count: 12,
@@ -700,14 +702,23 @@ async function _pfEnsureMosaicPool(minSize) {
       year: f.year,
       exclude_ids: excl,
     }).catch(e => { console.warn('[pf] pool fetch failed', e); return []; });
-    if (!items.length) break;
-    const fresh = items.filter(p => p && p.asset_id && !_pfState.seen.has(p.asset_id));
-    if (!fresh.length) break;
+    const fresh = items.filter(p =>
+      p && p.asset_id && !_pfState.seen.has(p.asset_id) && !alreadyInPool.has(p.asset_id)
+    );
+    if (!fresh.length) {
+      // v1248 テーマ が 尽きた (or API から 空 が 返って きた) → 別テーマ を 試す。
+      //   ただし URL ?album=X / ?person=X で ロック されて いる 場合 は 諦める。
+      if (_pfState.albumId || _pfState.personLockId || themeRetries-- <= 0) break;
+      await _pfNewTheme();
+      _pfState.seen = new Set();   // 別 テーマ は 別 プール として seen リセット
+      continue;
+    }
     // 縦横比 を 並列 取得
     const dims = await Promise.all(fresh.map(p => _loadImgDims(assetMediaUrl(p.asset_id, 'medium'))));
     if (!_pfState) return;
     for (let i = 0; i < fresh.length; i++) {
       _pfState.seen.add(fresh[i].asset_id);
+      alreadyInPool.add(fresh[i].asset_id);
       let a = dims[i].w / dims[i].h;
       if (!isFinite(a) || a <= 0) a = 1.5;
       a = Math.max(0.5, Math.min(3.0, a));
@@ -727,12 +738,20 @@ async function _pfStartMosaic() {
   slide.innerHTML = `<div id="pf-mosaic-loading" style="color:#666; font-size:12px; position:absolute; inset:0; display:flex; align-items:center; justify-content:center">組み立て中…</div>`;
   await _pfEnsureMosaicPool(24);
   if (!_pfState) return;
-  if (!_pfState.mosaicPool || _pfState.mosaicPool.length < 3) {
-    slide.innerHTML = `<div style="color:#999; font-size:14px; position:absolute; inset:0; display:flex; align-items:center; justify-content:center">写真 が 足りません</div>`;
+  if (!_pfState.mosaicPool || _pfState.mosaicPool.length < 1) {
+    slide.innerHTML = `<div style="color:#999; font-size:14px; position:absolute; inset:0; display:flex; align-items:center; justify-content:center">写真 が 見つかりません<br>(全 テーマ を 試しました)</div>`;
     return;
   }
-  // 初期 表示 用 に 12 枚 pop (aspect 込み)
-  const initial = _pfState.mosaicPool.splice(0, 12);
+  // 初期 表示 用 に 12 枚 pop (無ければ ある だけ)、 スワップ 用 に 少なくとも 6 は 残す
+  const takeInitial = Math.min(12, Math.max(1, _pfState.mosaicPool.length - 6));
+  const initial = _pfState.mosaicPool.splice(0, takeInitial);
+  // 初期 が 極少 (< 3) なら 見た目 を 補強 する ため に pool を 借りて 埋める
+  if (initial.length < 3) {
+    while (initial.length < 3 && _pfState.mosaicPool.length > 0) {
+      initial.push(_pfState.mosaicPool.shift());
+    }
+    // それ でも 1〜2 枚 しか ない 場合 は そのまま (少ない タイル で 表示)
+  }
   // Justified rows レイアウト
   const rows = _pfBuildRowsFromItems(initial, W, H);
   // 描画 + tile 情報 の 保持 (差替時 の aspect マッチ に 使う)
@@ -840,7 +859,12 @@ function _pfSwapOneMosaicTile() {
   _pfSetCaption(next.photo);
 }
 
-// 事前 に aspect ロード 済 の items から justified rows を 組む (旧 _pfBuildMosaicRows の 差替)
+// 事前 に aspect ロード 済 の items から justified rows を 組む。
+// v1248 中村さん報告「上4枚 / 下2枚 の 配置 で 下の右端 に 黒帯 が 出る」対応:
+//   (1) 最後 の 行 の 高さ を 無条件 に `containerW / sum(aspects)` で 計算 (キャップ 廃止) →
+//       常 に 幅 を フル に 埋める、 (2) 最後 の 行 が 前 の 行 と 比べ 極端 に 高い (少枚数
+//       orphan) 場合、 前 の 行 から 1 枚 を 借りて バランス、 (3) 全 行 高 を 画面 高 に
+//       均等 スケール。 これ で 黒帯 (右端 や 下部) 完全 に 消える。
 function _pfBuildRowsFromItems(items, containerW, containerH) {
   const landscape = containerW > containerH;
   const rowCount = landscape ? 3 : 4;
@@ -852,16 +876,51 @@ function _pfBuildRowsFromItems(items, containerW, containerH) {
     cur.push(it);
     curSum += it.aspect;
     if (curSum * targetRowH >= containerW) {
-      rows.push({ height: containerW / curSum, items: cur });
+      rows.push({ items: cur });
       cur = []; curSum = 0;
     }
   }
-  if (cur.length) {
-    const h = Math.min(targetRowH * 1.3, containerW / Math.max(curSum, 0.5));
-    rows.push({ height: h, items: cur });
+  if (cur.length) rows.push({ items: cur });
+  if (!rows.length) return [];
+
+  // 行 高 計算: どの 行 も containerW / sum(aspects)、 幅 は 常 に 完全 に 埋まる。
+  const sumOf = (items) => items.reduce((a, i) => a + i.aspect, 0);
+  const heightOf = (items) => containerW / Math.max(sumOf(items), 0.5);
+  for (const row of rows) row.height = heightOf(row.items);
+
+  // v1248 中村さん報告「上5 中5 下1 で 下の1枚 の 右端 に 黒 スペース」対応:
+  //   隣接 行 の 高さ 比 が 1.4 倍 超 なら 高い方 から 低い方 へ 1 枚 借りる (or 逆)。
+  //   全 ペア で 収束 する まで 繰り返す。 これ で 「5+5+1」 → 「4+4+3」 の ように 均される。
+  //   move の 方向 は 「タイル 全体 の 順序」を 保つ 向き (前 の 行 の 末尾 → 次 の 行 の 先頭、
+  //   or 逆) で 統一。
+  let safety = 20;
+  let changed = true;
+  while (changed && safety-- > 0) {
+    changed = false;
+    for (let i = 0; i < rows.length - 1; i++) {
+      const a = rows[i], b = rows[i + 1];
+      if (a.items.length >= 2 && b.height > a.height * 1.4) {
+        // 下 が 高い (少数) → 上 の 末尾 を 下 へ 移す
+        b.items.unshift(a.items.pop());
+        a.height = heightOf(a.items);
+        b.height = heightOf(b.items);
+        changed = true;
+        break;
+      }
+      if (b.items.length >= 2 && a.height > b.height * 1.4) {
+        // 上 が 高い (少数) → 下 の 先頭 を 上 へ 移す
+        a.items.push(b.items.shift());
+        a.height = heightOf(a.items);
+        b.height = heightOf(b.items);
+        changed = true;
+        break;
+      }
+    }
   }
+
+  // 全体 行高 合計 を 画面 高 に 合わせ 均等 スケール (下部 黒帯 抑制)。 縦横比 は 保たれる。
   const totalH = rows.reduce((a, r) => a + r.height, 0);
-  if (totalH > 0 && Math.abs(totalH - containerH) / containerH > 0.02) {
+  if (totalH > 0 && Math.abs(totalH - containerH) / containerH > 0.005) {
     const k = containerH / totalH;
     rows.forEach(r => r.height *= k);
   }
