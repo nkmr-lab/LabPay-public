@@ -32,6 +32,8 @@ class Ledger {
         'deep_research',         // Deep Research 料
         // v1023 実験計画書チェック
         'exp_plan_check',
+        // v1251 AI サブスク (1 週間 500pt、 chai.nkmr.io / file.nkmr.io 等 で 参照)
+        'ai_sub',
     ];
 
     // Resolve account id by user id. Caller must have started a transaction if locking.

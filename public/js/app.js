@@ -634,6 +634,7 @@ route('/photo/album/:slug',    lazy(() => import('./views/photo.js'), 'renderPho
 route('/photo/frame',          lazy(() => import('./views/photo.js'), 'renderPhotoFrame'));       // v1237 📺 フォトフレーム (フルスクリーン + WakeLock)
 route('/photo/people',         lazy(() => import('./views/photo.js'), 'renderPhotoPeople'));      // v1245 P3 👤 人物 一覧 + 検索
 route('/photo/people/:id',     lazy(() => import('./views/photo.js'), 'renderPhotoPerson'));      // v1245 P3 👤 人物 プロフィール
+route('/ai-sub',               lazy(() => import('./views/ai_sub.js'), 'renderAiSub'));           // v1251 🤖 AI サブスク (1週間 500pt、 chai.nkmr.io / file.nkmr.io 用)
 route('/power',           lazy(() => import('./views/power.js'), 'renderPower'));            // v1024 📐 サンプルサイズ / 検定力
 route('/power/r/:token',  lazy(() => import('./views/power.js'), 'renderPowerShared'));     // v1026 共有 URL
 route('/users/:id',       lazy(() => import('./views/profile.js'), 'renderUserProfile'));
