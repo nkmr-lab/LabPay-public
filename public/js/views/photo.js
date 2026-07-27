@@ -558,6 +558,10 @@ function _pfComputeLayout() {
 
 function _pfStartTile() {
   if (!_pfState) return;
+  // v1246 fb#505 photo モード (mode='tile') は フォトモザイク (justified rows) で 縦横 考慮
+  //   して 敷き詰める。 空き 領域 ゼロ。 face モード は 従来 の hero+サブ グリッド 継続
+  //   (顔 crop は 均一 サイズ な の で グリッド で 綺麗)。
+  if (_pfState.mode === 'tile') return _pfStartMosaic();
   const slide = document.getElementById('pf-slide');
   if (!slide) return;
   const layout = _pfComputeLayout();
@@ -606,6 +610,156 @@ function _pfStartTile() {
   };
   window.addEventListener('resize', _pfState.resizeHandler);
   window.addEventListener('orientationchange', _pfState.resizeHandler);
+}
+
+// ---------- v1246 フォトモザイク (photo モード = mode='tile') ----------
+// 中村さん要望「フォトフレーム が 写真を全部入れる ように したので、 何もない領域が多くて
+//   カッコ悪い。 フォトモザイクの タイルの ように 縦横考慮しつつ、 しっかり敷き詰めるように」
+//
+// 実装: justified rows (Flickr / Google Photos 風)。 各 写真 の 自然 縦横比 を Image.decode()
+//   で 取得 → 目標 行高 (画面 高 / 目標行数) を 基準 に、 累積 aspect が 幅 を 超えた ところ
+//   で 行 を 折る → 各 行 の 実 行高 = 幅 / 累積aspect、 各 タイル 幅 = 行高 × aspect。
+//   これ で タイル と 画像 の 縦横比 が 完全 一致 → object-fit は cover/contain どちら でも
+//   同じ (画像全体 表示 かつ 空き ゼロ)。
+//   ローテ: 完全 reflow (新しい 写真 + 新しい 縦横比 で 自動 的 に レイアウト 変わる)。
+
+function _loadImgDims(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth || 1200, h: img.naturalHeight || 800 });
+    img.onerror = () => resolve({ w: 1200, h: 800 });   // 失敗 は landscape default で スキップ せず 続行
+    img.src = src;
+  });
+}
+
+async function _pfBuildMosaicRows(photos, containerW, containerH) {
+  // 各 写真 の 自然 サイズ を 並列 取得 (medium = view2048、 fetch はブラウザキャッシュに乗る)
+  const withDims = await Promise.all(photos.map(async (p) => {
+    const src = assetMediaUrl(p.asset_id, 'medium');
+    const d = await _loadImgDims(src);
+    // 極端 な aspect は 抑制 (2 パノラマ が 1 行 占領 する の を 避け、 縦長 too 縦 も 制限)
+    let aspect = d.w / d.h;
+    if (!isFinite(aspect) || aspect <= 0) aspect = 1.5;
+    aspect = Math.max(0.5, Math.min(3.0, aspect));
+    return { photo: p, aspect };
+  }));
+
+  // 目標 行数: landscape=3、 portrait=4 (画面 高 と の 比 で 決定)
+  const landscape = containerW > containerH;
+  const rowCount = landscape ? 3 : 4;
+  const targetRowH = containerH / rowCount;
+  // Justified pack: 累積 aspect × targetRowH が 幅 を 超えたら 行 を 閉じる
+  const rows = [];
+  let cur = [];
+  let curSum = 0;
+  for (const it of withDims) {
+    cur.push(it);
+    curSum += it.aspect;
+    if (curSum * targetRowH >= containerW) {
+      rows.push({ height: containerW / curSum, items: cur });
+      cur = []; curSum = 0;
+    }
+  }
+  // 余った 分 は 最後 の 行 に (最大 targetRowH * 1.3 で 抑える)
+  if (cur.length) {
+    const h = Math.min(targetRowH * 1.3, containerW / Math.max(curSum, 0.5));
+    rows.push({ height: h, items: cur });
+  }
+  // 全体 行高 合計 が 画面 高 と 大きく ズレる 場合 は 均等 スケール (下 に 隙間 が 出ない ように)
+  const totalH = rows.reduce((a, r) => a + r.height, 0);
+  if (totalH > 0 && totalH < containerH * 0.98) {
+    const k = containerH / totalH;
+    rows.forEach(r => r.height *= k);
+  } else if (totalH > containerH * 1.02) {
+    const k = containerH / totalH;
+    rows.forEach(r => r.height *= k);
+  }
+  return rows;
+}
+
+async function _pfStartMosaic() {
+  if (!_pfState) return;
+  const slide = document.getElementById('pf-slide');
+  if (!slide) return;
+  // 画面 情報 (retryable, iOS Safari の アドレスバー 変動 に 備え)
+  const W = slide.clientWidth || window.innerWidth;
+  const H = slide.clientHeight || window.innerHeight;
+  // モザイク は grid layout を 使わない ので layout 情報 を リセット (resize 判定 用)
+  _pfState.layout = { cols: W > H ? 'ML' : 'MP', rows: '' };
+  // 表示 用 写真 を queue から 取り出し (最大 12 = random_photos 1 回 分)。 queue が 少ない
+  // なら 事前 に await して 補充 (次回 reflow で 同 セット を 使う の を 避ける)。
+  if (_pfState.queue.length - (_pfState.idx + 1) < 12) await _pfLoadMore();
+  const photos = [];
+  const wanted = 12;
+  for (let i = 0; i < wanted; i++) {
+    const p = _pfConsume();
+    if (!p) break;
+    if (p._face) continue;  // face mode の 残骸 は 除外
+    photos.push(p);
+  }
+  if (photos.length < 3) {
+    slide.innerHTML = `<div style="color:#999; font-size:14px; position:absolute; inset:0; display:flex; align-items:center; justify-content:center">写真 が 足りません</div>`;
+    return;
+  }
+  // レイアウト を 計算 (自然 サイズ 取得 の 間 は spinner)
+  slide.innerHTML = `<div id="pf-mosaic-loading" style="color:#666; font-size:12px; position:absolute; inset:0; display:flex; align-items:center; justify-content:center">組み立て中…</div>`;
+  const rows = await _pfBuildMosaicRows(photos, W, H);
+  if (!_pfState) return;
+  // 描画 (フェード in)
+  slide.innerHTML = `
+    <div id="pf-mosaic"
+         style="position:absolute; inset:0; display:flex; flex-direction:column; background:#000; opacity:0; transition:opacity 0.7s">
+      ${rows.map(row => `
+        <div style="display:flex; height:${row.height.toFixed(2)}px; gap:2px; margin-bottom:2px">
+          ${row.items.map(it => `
+            <div style="width:${(row.height * it.aspect).toFixed(2)}px; height:100%; overflow:hidden; background:#111">
+              <img src="${escapeHtml(assetMediaUrl(it.photo.asset_id, 'medium'))}"
+                   alt="" loading="lazy"
+                   style="width:100%; height:100%; object-fit:cover; display:block"
+                   onerror="this.style.opacity=0.15">
+            </div>`).join('')}
+        </div>`).join('')}
+    </div>`;
+  requestAnimationFrame(() => {
+    const el = document.getElementById('pf-mosaic');
+    if (el) el.style.opacity = '1';
+  });
+  // キャプション は 先頭 写真 を 代表 として 出す (シーン 全体 の 印象)
+  _pfSetCaption(photos[0]);
+  _pfState.mosaicPhotos = photos;
+  // 次 reflow を スケジュール (モザイク は 完全 reflow で 変化 が 大きい ので 少し 長め)
+  clearTimeout(_pfState.timer);
+  if (!_pfState.paused) {
+    _pfState.timer = setTimeout(() => {
+      if (!_pfState) return;
+      // 数 reflow ごとに テーマ 変更、 それ 以外 は 同 テーマ で 新 写真 と new mosaic
+      _pfState.rotationsUntilScene = (_pfState.rotationsUntilScene ?? 4) - 1;
+      if (_pfState.rotationsUntilScene <= 0) {
+        _pfState.rotationsUntilScene = 4;
+        _pfSceneChange();   // 新 theme + 新 layout + 新 mosaic
+      } else {
+        // 同 theme で バッファ 補充 して 別 mosaic
+        (async () => {
+          if (_pfState.queue.length - (_pfState.idx + 1) < 6) await _pfLoadMore();
+          _pfStartMosaic();
+        })();
+      }
+    }, Math.max(6, _pfState.tileSec * 2) * 1000);   // モザイク は 8-10 秒 サイクル 推奨
+  }
+  // resize / rotate で 再構築
+  if (!_pfState.resizeHandler) {
+    _pfState.resizeHandler = () => {
+      if (!_pfState) return;
+      if (_pfState.mode === 'tile') _pfStartMosaic();
+      else {
+        const next = _pfComputeLayout();
+        const cur = _pfState.layout;
+        if (!cur || cur.cols !== next.cols || cur.rows !== next.rows) _pfStartTile();
+      }
+    };
+    window.addEventListener('resize', _pfState.resizeHandler);
+    window.addEventListener('orientationchange', _pfState.resizeHandler);
+  }
 }
 
 function _pfConsume() {

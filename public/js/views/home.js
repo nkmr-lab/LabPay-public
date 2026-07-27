@@ -269,7 +269,7 @@ export const HOME_CARDS = [
   { id: 'quote',          title: '💬 今日の名言 (偉人 / 漫画 / アニメ + ラボメン登録)' }, // v796 #396 / v804
   { id: 'papers-recent',  title: '📑 論文要約 / 全訳 (新着、公開 + 自分)' }, // v809
   // v1238 nkmr-albums (Google Photos 列挙) widget 撤去。 photo-random で 代替。
-  { id: 'photo-random',   title: '🎲 今日 の ラボ フォト (photo.nkmr.io)' },    // v1237
+  { id: 'photo-random',   title: '🎲 今日のラボフォト (photo.nkmr.io)' },    // v1237 / v1246 スペース削除 (fb#505)
   // v580 ショートカットウィジェット (リンクのみ。全アプリをホームに置けるように)。
   ...SHORTCUT_CARDS_DEFS.map(c => ({ id: c.id, title: c.title })),
 ];
@@ -670,7 +670,7 @@ export async function renderHome() {
          タップ で ライトボックス、 右上 「📺 フォトフレーム」 で フルスクリーン スライド。 -->
     <div class="card" id="home-photo-random-card" data-card-id="photo-random" hidden>
       <div class="row center" style="margin-bottom:6px">
-        <h2 class="row-title">🎲 今日 の ラボ フォト</h2>
+        <h2 class="row-title">🎲 今日のラボフォト</h2>
         <a href="#/photo/frame" class="hint" style="margin-left:auto">📺 フォトフレーム →</a>
       </div>
       <div id="home-photo-random"><div class="home-skel-bars"></div></div>
@@ -3436,7 +3436,8 @@ async function renderHomeQuote() {
 
 // v1237 fb (中村さん要望「ウィジェットとして画像をランダムに表示する機能」)
 //   photo.nkmr.io の random_photos API を 直叩き で、 6 枚 タイル で 表示。
-//   seed=YYYYMMDD で 1 日 は 同じ 集合 (60s poll で チカチカ しない、 明日 は 別の 6 枚)。
+//   v1246 fb#505 「ラボフォト は 1 時間 に 1 回 変えて 欲しい」 → seed を YYYYMMDDHH に、
+//   1 時間 単位 で 別 の 6 枚 に 差替 (以前 は YYYYMMDD で 1 日 固定 だった)。
 //   タップ で 全画面 ライトボックス、 右上 に フォトフレーム ボタン。
 async function renderHomePhotoRandom() {
   const card = document.getElementById('home-photo-random-card');
@@ -3445,9 +3446,9 @@ async function renderHomePhotoRandom() {
   try {
     const { fetchRandomPhotos, absolutePhotoUrl, assetMediaUrl } = await import('./photo.js');
     const { openImageLightbox } = await import('../lightbox.js');
-    // 今日 の seed (YYYYMMDD) で 1 日 固定
+    // v1246 1 時間 に 1 回 変わる seed (YYYYMMDDHH)
     const d0 = new Date();
-    const seed = `${d0.getFullYear()}${String(d0.getMonth()+1).padStart(2,'0')}${String(d0.getDate()).padStart(2,'0')}`;
+    const seed = `${d0.getFullYear()}${String(d0.getMonth()+1).padStart(2,'0')}${String(d0.getDate()).padStart(2,'0')}${String(d0.getHours()).padStart(2,'0')}`;
     const items = await fetchRandomPhotos({ count: 6, seed });
     if (!items.length) { card.hidden = true; return; }
     // v1210 fingerprint 差分 (60s poll で 内容 変わらない と DOM 触らない)
