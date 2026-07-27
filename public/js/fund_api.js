@@ -11,6 +11,18 @@
 const FUND_ORIGIN = 'https://fund.nkmr.io';
 const FUND_API = FUND_ORIGIN + '/api.php';
 
+// v1250 未認証 時 の 挙動: fund.nkmr.io は 302 で auth.nkmr.io へ redirect → fetch が
+//   それを 追跡 して HTML を 返す (photo.nkmr.io v109 は 401 JSON に 変えた が fund は 未)。
+//   Content-Type が JSON で なければ 「未ログイン」と 判定、 分かりやすい error を throw。
+//   UI 側 (bait.js / my_fund.js) は e.message の "FUND_UNAUTH" prefix を 検出 して
+//   「fund.nkmr.io を 開いて ログイン」導線 を 出す。
+export const FUND_UNAUTH_PREFIX = 'FUND_UNAUTH: ';
+function _checkUnauth(r, ct) {
+  if (!ct || !ct.toLowerCase().includes('json')) {
+    throw new Error(FUND_UNAUTH_PREFIX + 'fund.nkmr.io へ の 認証 が 必要 です (未ログイン or セッション 切れ)');
+  }
+}
+
 export async function fundGet(action, params = {}) {
   const url = new URL(FUND_API);
   url.searchParams.set('action', action);
@@ -22,6 +34,7 @@ export async function fundGet(action, params = {}) {
     const t = await r.text().catch(() => '');
     throw new Error(`HTTP ${r.status}${t ? ': ' + t.slice(0, 200) : ''}`);
   }
+  _checkUnauth(r, r.headers.get('content-type') || '');
   const j = await r.json();
   if (j && j.ok === false) throw new Error(j?.error || '応答エラー');
   return j;
@@ -43,9 +56,15 @@ export async function fundPostForm(action, params) {
     const t = await r.text().catch(() => '');
     throw new Error(`HTTP ${r.status}${t ? ': ' + t.slice(0, 200) : ''}`);
   }
+  _checkUnauth(r, r.headers.get('content-type') || '');
   const j = await r.json();
   if (!j || j.ok === false) throw new Error(j?.error || '応答エラー');
   return j;
+}
+
+// エラー が 未認証 か 判定 する ヘルパ
+export function isFundUnauthError(e) {
+  return e && typeof e.message === 'string' && e.message.startsWith(FUND_UNAUTH_PREFIX);
 }
 
 // 予算一覧を取得 (プルダウン用)。応答形式が {items:[...]} でも [...] でも吸収。

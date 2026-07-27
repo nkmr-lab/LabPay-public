@@ -18,7 +18,7 @@
 
 import { escapeHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
-import { fundBudgets, fundItemAdd } from '../fund_api.js';   // v1089 支払い項目 (ドクター)
+import { fundBudgets, fundItemAdd, isFundUnauthError, FUND_HOME_URL } from '../fund_api.js';   // v1089 支払い項目 (ドクター) / v1250 未認証 判定
 
 const FUND_API = 'https://fund.nkmr.io/api.php';
 
@@ -252,7 +252,22 @@ function renderDoctorAddSection() {
       return `<option value="${escapeHtml(b.fund || '')}">${escapeHtml(label)}</option>`;
     }).join('');
   }).catch(e => {
-    fundSel.innerHTML = `<option value="">${escapeHtml('取得失敗: ' + (e?.message || e))}</option>`;
+    if (isFundUnauthError(e)) {
+      fundSel.innerHTML = '<option value="">(fund.nkmr.io 未 ログイン)</option>';
+      // 隣 に 開く ボタン を 差し込む (fundSel の 親 field の 直後)
+      const field = fundSel.closest('.field') || fundSel.parentElement;
+      if (field && !document.getElementById('mfa-fund-unauth')) {
+        const hint = document.createElement('div');
+        hint.id = 'mfa-fund-unauth';
+        hint.className = 'hint-sm';
+        hint.style.cssText = 'color:#dc2626; margin-top:4px';
+        hint.innerHTML = `⚠ fund.nkmr.io に ログイン して ください
+          <a href="${FUND_HOME_URL}" target="_blank" rel="noopener" class="btn primary" style="margin-left:6px; padding:2px 10px; font-size:11px; text-decoration:none">🔓 開く</a>`;
+        field.appendChild(hint);
+      }
+    } else {
+      fundSel.innerHTML = `<option value="">${escapeHtml('取得失敗: ' + (e?.message || e))}</option>`;
+    }
   });
   document.getElementById('mfa-submit').addEventListener('click', async () => {
     const fund   = document.getElementById('mfa-fund').value.trim();

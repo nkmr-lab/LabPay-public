@@ -6,7 +6,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { createMemberPicker } from '../member_picker.js';
-import { fundBudgets, fundBaitoAdd } from '../fund_api.js';   // v1089 fund.nkmr.io 書込
+import { fundBudgets, fundBaitoAdd, isFundUnauthError, FUND_HOME_URL } from '../fund_api.js';   // v1089 fund.nkmr.io 書込 / v1250 未認証 判定
 
 const GRADE_ORDER = ['B3','B4','M1','M2','D',''];
 
@@ -501,7 +501,17 @@ async function openBaitFundModal({ assignmentId, title, hours, period }) {
       });
     }
   } catch (e) {
-    fundSel.innerHTML = `<option value="">${escapeHtml('予算取得失敗: ' + (e?.message || e))}</option>`;
+    // v1250 未認証 (fund.nkmr.io セッション 切れ) を 分かりやすく 表示
+    if (isFundUnauthError(e)) {
+      fundSel.innerHTML = '<option value="">(fund.nkmr.io 未 ログイン)</option>';
+      if (noteEl) {
+        noteEl.innerHTML = `<span style="color:#dc2626">⚠ fund.nkmr.io に ログイン して ください。</span>
+          <a href="${FUND_HOME_URL}" target="_blank" rel="noopener" class="btn primary" style="margin-left:6px; padding:2px 10px; font-size:11px; text-decoration:none">🔓 fund を 別 タブ で 開く</a>
+          <div style="font-size:11px; margin-top:2px">ログイン 後、 一度 この モーダル を 閉じて 再度 開いて ください。</div>`;
+      }
+    } else {
+      fundSel.innerHTML = `<option value="">${escapeHtml('予算取得失敗: ' + (e?.message || e))}</option>`;
+    }
   }
   // submit
   document.getElementById('bf-submit').addEventListener('click', async () => {
