@@ -533,7 +533,8 @@ function ai_rewriter_run(PDO $pdo, array $cfg): void {
                 REWRITER_COST,
             ]);
         $taskId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, REWRITER_COST, 'rewriter', 'rewriter', $taskId, 'リライター依頼料');
+        // v1252 AI サブスク 有効 中 は 無料 (ai_charge_or_cover で ラップ)
+        ai_charge_or_cover($pdo, $uid, REWRITER_COST, 'rewriter', 'rewriter', $taskId, 'リライター依頼料');
     });
 
     // 同期で OpenAI を呼ぶ (最大 REWRITER_MAX_ITER 回リトライ)
@@ -597,8 +598,8 @@ function ai_rewriter_run(PDO $pdo, array $cfg): void {
         try {
             $pdo->prepare("UPDATE rewriter_tasks SET status='error', error_msg=?, finished_at=NOW() WHERE id=?")
                 ->execute([mb_substr($e->getMessage(), 0, 500), $taskId]);
-            // 失敗なら返金
-            Ledger::transfer($pdo, 1, $uid, REWRITER_COST, 'refund', 'rewriter', $taskId, 'リライター失敗返金');
+            // 失敗なら返金 (v1252 AI サブスク で 元々 無料 だった 場合 は 返金 スキップ)
+            ai_refund_if_charged($pdo, $uid, 'rewriter', $taskId, 'リライター失敗返金');
         } catch (Throwable $_) {}
         throw new ApiException('server_error', 'リライト失敗: ' . $e->getMessage(), 500);
     }
@@ -803,7 +804,8 @@ function ai_resume_check(PDO $pdo, array $cfg): void {
         $pdo->prepare("INSERT INTO resume_checks (user_id, title, input_text, cost_points, status) VALUES (?,?,?,?,'pending')")
             ->execute([$uid, $title, $inputForDb, $checkCost]);
         $checkId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $checkCost, 'resume_check', 'resume_check', $checkId, '原稿チェック依頼料');
+        // v1252 AI サブスク 有効 中 は 無料
+        ai_charge_or_cover($pdo, $uid, $checkCost, 'resume_check', 'resume_check', $checkId, '原稿チェック依頼料');
     });
 
     json_response_no_exit([
@@ -945,7 +947,8 @@ PROMPT;
             $stU->execute([$checkId]);
             $uid = (int)$stU->fetchColumn();
             if ($uid > 0) {
-                Ledger::transfer($pdo, 1, $uid, RESUME_CHECK_COST, 'refund', 'resume_check', $checkId, '原稿チェック失敗返金');
+                // v1252 AI サブスク で 元々 無料 だった 場合 は 返金 スキップ
+                ai_refund_if_charged($pdo, $uid, 'resume_check', $checkId, '原稿チェック失敗返金');
             }
         } catch (Throwable $_) {}
     }
@@ -1492,7 +1495,8 @@ function ai_exp_plan_check(PDO $pdo, array $cfg): void {
                        VALUES (?,?,?,?,?,'pending',?)")
             ->execute([$uid, $title, $text, $cost, EXP_PLAN_CHECK_MODEL, $mode]);
         $checkId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'exp_plan_check', 'experiment_plan_check', $checkId,
+        // v1252 AI サブスク 有効 中 は 無料
+        ai_charge_or_cover($pdo, $uid, $cost, 'exp_plan_check', 'experiment_plan_check', $checkId,
             '実験計画書チェック依頼料 (' . $mode . ')');
     });
 
@@ -2022,7 +2026,8 @@ function ai_paper_review(PDO $pdo, array $cfg): void {
                 '[]', 'null', $reviewCost,
             ]);
         $reviewId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $reviewCost, 'paper_review', 'paper_review', $reviewId, '論文査読依頼料');
+        // v1252 AI サブスク 有効 中 は 無料
+        ai_charge_or_cover($pdo, $uid, $reviewCost, 'paper_review', 'paper_review', $reviewId, '論文査読依頼料');
     });
 
     // 早期レスポンス
@@ -2752,8 +2757,12 @@ function _ai_apply_share_toggle_delta(PDO $pdo, string $table, string $refType, 
         return;
     }
     $sharePriced = (int)($row['share_priced'] ?? 0) === 1;
-    $paidCost = (int)($row['cost_points'] ?? 0);
-    // 旧 row (v913 以前で share_priced=0) や未課金 (paidCost=0、過去の中村 PI 免除分等) は表示切替のみ
+    // v1252 「実際 に 引かれた 額」を ledger から 取得 (AI サブスク で 覆われた 場合 は 0)。
+    //   cost_points は 「本来 いくら の 依頼 だった か」の 表示用 なので、 返金/追加 判定 は
+    //   ledger の 真 値 を 使う (contract で 「無料 だった 依頼 に 返金 を 与える」バグ 防止)。
+    $paidCost = ai_actual_charged($pdo, $refType, $rowId, $uid);
+    // 旧 row (v913 以前で share_priced=0) や未課金 (paidCost=0、AI サブスク で 覆われた ケース、
+    //   過去の中村 PI 免除分 等) は表示切替のみ
     if (!$sharePriced || $paidCost <= 0) {
         $pdo->prepare("UPDATE {$table}
                           SET is_shared=?, shared_at=" . ($on ? "NOW()" : "NULL") . "
@@ -3043,7 +3052,8 @@ function ai_paper_translate(PDO $pdo, array $cfg): void {
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
                        $pdfRel, $reqModel, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約依頼料');
+        // v1252 AI サブスク 有効 中 は 無料
+        ai_charge_or_cover($pdo, $uid, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約依頼料');
     });
 
     json_response_no_exit([
@@ -3715,7 +3725,8 @@ function ai_deep_research(PDO $pdo, array $cfg): void {
             VALUES (?,?,?,?,?,?,1,?,'pending')")
             ->execute([$uid, $token, $query, $tier['model'], $depth, $cost, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'deep_research', 'deep_research', $rowId, 'Deep Research 依頼料 (' . $depth . ')');
+        // v1252 AI サブスク 有効 中 は 無料
+        ai_charge_or_cover($pdo, $uid, $cost, 'deep_research', 'deep_research', $rowId, 'Deep Research 依頼料 (' . $depth . ')');
     });
 
     json_response_no_exit([
@@ -4407,7 +4418,8 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
             VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に依頼中…',?)")
             ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
+        // v1252 AI サブスク 有効 中 は 無料
+        ai_charge_or_cover($pdo, $uid, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
             '論文全訳 (' . $direction . ') 依頼料');
     });
 
@@ -4590,7 +4602,8 @@ function ai_paper_full_translate_from_summary(PDO $pdo, array $cfg, int $summary
             VALUES (?,?,?,?,?,?,?,?,'pending','OpenAI に依頼中…',?)")
             ->execute([$uid, $token, $pdfRel, mb_substr($pdfName, 0, 255), $pdfSha, $direction, $reqModel, $cost, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
+        // v1252 AI サブスク 有効 中 は 無料
+        ai_charge_or_cover($pdo, $uid, $cost, 'paper_full_translate', 'paper_full_translation', $rowId,
             '論文全訳 (' . $direction . ') 依頼料 (要約から)');
     });
 
@@ -4691,7 +4704,8 @@ function ai_paper_translate_from_full(PDO $pdo, array $cfg, int $fullId): void {
                        $pagesCount > 0 ? $pagesCount : null, $pagesCount > 0 ? $pagesRel : null,
                        $pdfRel, $reqModel, $autoShare]);
         $rowId = (int)$pdo->lastInsertId();
-        Ledger::transfer($pdo, $uid, 1, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約依頼料 (全訳から)');
+        // v1252 AI サブスク 有効 中 は 無料
+        ai_charge_or_cover($pdo, $uid, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約依頼料 (全訳から)');
     });
 
     json_response_no_exit([

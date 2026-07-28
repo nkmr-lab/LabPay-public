@@ -28,18 +28,26 @@ export async function renderAiSub() {
     <div class="card page-header">
       <h2 style="margin:0">🤖 AI サブスク</h2>
       <div class="hint-sm" style="margin-top:4px">
-        1 週間 500pt の 自動更新 サブスク。 契約 中 は <b>chai.nkmr.io</b> (ChatGPT / Claude 風)、
-        <b>file.nkmr.io</b> (ファイル ブラウザ の AI 機能) 等 の <b>*.nkmr.io</b> 系 サービス で
-        「フル 機能」が 使えます。 残高 が 500pt を 切ると 自動 解約 されます。
+        1 週間 500pt の 自動更新 サブスク。 契約 中 は 下記 が 全部 使い放題 に なります:<br>
+        ・ LabPay 内 の AI 機能 (📑 論文要約 / 📑 全訳 / 📄 査読 / 🔎 Deep Research /
+        🧪 実験計画書 チェック / 📝 原稿 チェック / ✂️ リライター) が <b>全部 無料</b><br>
+        ・ <b>chai.nkmr.io</b> (ChatGPT / Claude 風) / <b>file.nkmr.io</b> (ファイル ブラウザ AI) 等 の
+        <b>*.nkmr.io</b> 系 サービス で フル 機能<br>
+        残高 が 500pt を 切ると 自動 解約 されます。
       </div>
     </div>
     <div id="as-body"><div class="card"><div class="hint-sm">読み込み中…</div></div></div>
     <div class="card" style="margin-top:8px">
       <h3 style="margin:0 0 6px; font-size:14px">🔗 対応 サービス</h3>
       <div class="hint-sm" style="line-height:1.6">
-        📁 <a href="https://file.nkmr.io" target="_blank" rel="noopener">file.nkmr.io</a> — ファイル ブラウザ (契約 中 は AI 機能 全 開放)<br>
-        💬 <a href="https://chai.nkmr.io" target="_blank" rel="noopener">chai.nkmr.io</a> — ChatGPT / Claude 風 チャット (契約 中 は 無制限 使用、 バックエンド OpenAI API)<br>
-        <span style="color:#9ca3af">(サービス は 順次 追加 予定)</span>
+        <b>LabPay 内 (契約中 は 全部 無料)</b>:<br>
+        📑 論文要約 (#/paper-summary) / 📑 全訳 (#/paper-translate-full) / 📄 論文査読 (#/paper-review)<br>
+        🔎 Deep Research (#/deep-research) / 🧪 実験計画書 チェック (#/exp-plan) / 📝 原稿 チェック (#/resume-check)<br>
+        ✂️ 文字数 リライター (#/rewriter)<br>
+        <b>外部 サービス (契約中 は フル 機能)</b>:<br>
+        📁 <a href="https://file.nkmr.io" target="_blank" rel="noopener">file.nkmr.io</a> — ファイル ブラウザ<br>
+        💬 <a href="https://chai.nkmr.io" target="_blank" rel="noopener">chai.nkmr.io</a> — ChatGPT / Claude 風 チャット<br>
+        <span style="color:#9ca3af">(順次 追加 予定)</span>
       </div>
     </div>
     <div class="card" style="margin-top:8px">

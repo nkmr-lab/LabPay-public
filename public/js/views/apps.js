@@ -134,7 +134,7 @@ export const APPS = [
     desc: 'photo.nkmr.io の アルバム を LabPay 内 で 閲覧。 アルバム一覧 → タイル → タップ で 全画面 ライトボックス (前後 スワイプ 可)。 タグ / タイトル で 絞り込み。 📺 フォトフレーム で フルスクリーン スライド も。 nkmr-SSO で 保護。', defaultVisible: true },
   // v1251 AI サブスク (共通、 chai.nkmr.io / file.nkmr.io で 使う 1 週間 500pt サブスク)
   { id: 'ai-sub',         cat: 'shared', url: '#/ai-sub', title: '🤖 AI サブスク (共通)',
-    desc: '1 週間 500pt の 自動更新 サブスク。 契約 中 は chai.nkmr.io (ChatGPT/Claude 風) や file.nkmr.io (ファイル ブラウザ AI) 等 の *.nkmr.io 系 サービス で フル 機能。 残高 500pt を 切ると 自動 解約。 nkmr-SSO で 契約状況 を 各 サービス から 参照。', defaultVisible: true },
+    desc: '1 週間 500pt の 自動更新 サブスク。 契約 中 は 論文要約 / 全訳 / DeepResearch / 実験計画書 / 原稿 / 査読 / リライター が 全部 無料 に。 加えて chai.nkmr.io (ChatGPT/Claude 風) や file.nkmr.io (ファイル ブラウザ AI) 等 の 外部 サービス でも フル 機能。 残高 500pt を 切ると 自動 解約。', defaultVisible: true },
   { id: 'photo-portal',   cat: 'shared', url: 'https://photo.nkmr.io', title: '📷 photo.nkmr.io を 開く',
     desc: '中村研の 写真・動画 を 全部 貯める 自前 フォト基盤 (Google Photos の 代替)。 学会 / 合宿 / 飲み会 / ゼミの 写真 と 動画 を まとめて 保存 + 検索 + 顔識別 + 地図 + 同席グラフ 等 の 全機能 は 外部 サイト で。 nkmr-SSO で保護。 アルバム 一覧 を LabPay 内 で 見たい 時 は 🖼 フォト アルバム を どうぞ。', defaultVisible: true },
   { id: 'poster-maker',   cat: 'shared', url: 'https://member.nkmr.io', title: '📇 メンバー紹介ポスター作成',

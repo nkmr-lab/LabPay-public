@@ -48,6 +48,61 @@ function _ai_sub_status(array $row): string {
     return 'active';
 }
 
+// v1252 公開 helper: 契約中 か どうか (active or graceful=期限まで 使える) を bool で 返す。
+//   他 の AI 課金 ハンドラ (paper_translate / full_translate / deep_research / paper_review /
+//   resume_check / exp_plan_check / rewriter 等) が 契約 の 有無 を 判定 する ため に 使う。
+function ai_sub_is_active(PDO $pdo, int $uid): bool {
+    $row = _ai_sub_row($pdo, $uid);
+    if (!$row) return false;
+    return in_array(_ai_sub_status($row), ['active', 'graceful'], true);
+}
+
+// v1252 「AI サブスク 契約中 なら 無料化 (Ledger 課金 スキップ)、 契約外 なら 通常 の 引き落し」
+//   を 一箇所 で 判定 する 便利 helper。 実質 は Ledger::transfer の ラッパー。
+//   契約中 の 場合 は ai_subs.covered_count / covered_pt を +1 して 統計 に 残す
+//   (「本来 いくら 引かれる はず だった か」の 累計)。
+// 呼び出し例:
+//   $r = ai_charge_or_cover($pdo, $uid, $cost, 'paper_translate', 'paper_translate', $rowId, '論文要約依頼料');
+//   $r['charged'] = 実際 に 引かれた 額 (0 なら 無料化)、 $r['covered_by_sub'] = bool
+// 呼び出し側 は Ledger::transfer と 同じ く transaction 中 に 呼ぶ こと。
+function ai_charge_or_cover(PDO $pdo, int $uid, int $cost, string $type, ?string $refType, ?int $refId, string $memo): array {
+    if (ai_sub_is_active($pdo, $uid)) {
+        // 課金 スキップ + 統計 更新
+        $pdo->prepare("UPDATE ai_subs SET covered_count = covered_count + 1, covered_pt = covered_pt + ? WHERE user_id = ?")
+            ->execute([$cost, $uid]);
+        return ['charged' => 0, 'covered_by_sub' => true];
+    }
+    // 通常 課金: 既存 の pattern (accounts.id == users.id、 SYSTEM = 1) を そのまま 使う
+    Ledger::transfer($pdo, $uid, 1, $cost, $type, $refType, $refId, $memo);
+    return ['charged' => $cost, 'covered_by_sub' => false];
+}
+
+// v1252 実 課金 額 を ledger から 取得 (AI サブスク で 覆われた 場合 は 0)。
+//   cost_points 列 は 「本来 いくら の 依頼 だった か」を 表示 用 に 保持 する ので、 実際 に
+//   引かれた 額 を 知りたい 時 は こちら を 使う。
+function ai_actual_charged(PDO $pdo, string $refType, int $refId, int $uid): int {
+    $aiTypes = "'rewriter','resume_check','paper_review','paper_translate','paper_full_translate','deep_research','exp_plan_check'";
+    $st = $pdo->prepare(
+        "SELECT COALESCE(SUM(amount), 0) FROM ledger
+          WHERE ref_type = ? AND ref_id = ?
+            AND from_account_id = ?
+            AND type IN ($aiTypes)"
+    );
+    $st->execute([$refType, $refId, $uid]);
+    return (int)$st->fetchColumn();
+}
+
+// v1252 返金 helper: 元 課金 が 実際 に 走った か を ledger で 確認 して、 走って いれば 返金、
+//   AI サブスク で カバー されて いた (=課金 なし) の 場合 は 何 も しない。
+//   これ で 「契約中 に 覆われた 依頼 が 失敗 して cron で 誤って 返金 される」バグ を 防ぐ。
+// 戻り値: 実際 に 返金 した 額 (0 なら 元 が 無料 だった か 返金対象 なし)
+function ai_refund_if_charged(PDO $pdo, int $uid, string $refType, int $refId, string $memo): int {
+    $charged = ai_actual_charged($pdo, $refType, $refId, $uid);
+    if ($charged <= 0) return 0;
+    Ledger::transfer($pdo, 1, $uid, $charged, 'refund', $refType, $refId, $memo);
+    return $charged;
+}
+
 // レスポンス 用 に 整形 (詳細 版、 UI で 使う)
 function _ai_sub_shape(?array $row): array {
     if (!$row) {
