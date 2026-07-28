@@ -118,7 +118,15 @@ function paintSidebar() {
 }
 
 function subMiniHtml(sub) {
-  if (!sub) return '<span style="color:#fecaca">⚠ サブスク未加入 (下で購入)</span>';
+  // v1254 新 AI サブスク (ai_subs) が 有効 なら 研究特化 サブスク の 有無 に かかわらず 使い放題
+  if (STATE?.ai_sub_active) {
+    if (sub) {
+      // 両方 契約中 (レア ケース): 研究特化 サブスク の 残高 も 減らない
+      return '<span style="color:#a7f3d0">🤖 AI サブスク で 使い放題 (研究特化 は 温存)</span>';
+    }
+    return '<span style="color:#a7f3d0">🤖 AI サブスク で 使い放題</span>';
+  }
+  if (!sub) return '<span style="color:#fecaca">⚠ サブスク未加入 (下で購入 or <a href="#/ai-sub" style="color:#fecaca; text-decoration:underline">AI サブスク</a>)</span>';
   const plan = sub.plan;
   if (plan === 'unlimited_weekly') {
     const left = Math.max(0, (sub.weekly_limit || 0) - (sub.weekly_used || 0));
@@ -235,7 +243,9 @@ function paintThread() {
     <button class="btn" data-rai-buy="${p.key}" style="font-size:11px; padding:4px 10px">${escapeHtml(p.label)}</button>
   `).join('');
   const sub = STATE?.subscription;
-  const subOk = !!sub;
+  // v1254 新 AI サブスク が 有効 なら 研究特化 サブスク が 無くて も 投稿 可能
+  const aiSubActive = !!STATE?.ai_sub_active;
+  const subOk = !!sub || aiSubActive;
 
   body.innerHTML = `
     <div style="max-width:900px; margin:0 auto; display:flex; flex-direction:column; min-height:100%">
@@ -260,10 +270,18 @@ function paintThread() {
 
       ${!subOk ? `
         <div class="card" style="background:#fef3c7; border-left:4px solid #f59e0b">
-          <div class="bold" style="color:#92400e">⚠ サブスク未加入 — 投稿するには購入が必要</div>
+          <div class="bold" style="color:#92400e">⚠ サブスク未加入 — 投稿するには 下記 いずれか の 契約 が 必要</div>
+          <div style="margin-top:6px; font-size:13px">
+            <a href="#/ai-sub" class="btn primary" style="font-size:12px; padding:4px 10px; text-decoration:none">🤖 AI サブスク (共通、 1 週間 500pt)</a>
+            <span style="margin:0 6px; color:#92400e">or 研究特化 サブスク:</span>
+          </div>
           <div class="row" style="gap:6px; margin-top:6px; flex-wrap:wrap">${plansHtml}</div>
         </div>
-      ` : ''}
+      ` : (aiSubActive ? `
+        <div class="card" style="background:#d1fae5; border-left:4px solid #059669">
+          <div class="bold" style="color:#065f46">🤖 AI サブスク 契約中 — 研究特化 AI も 使い放題 (トークン カウンタ は 減りません)</div>
+        </div>
+      ` : '')}
 
       <div id="rai-messages" style="flex:1; display:flex; flex-direction:column; gap:12px">
         ${msgs.length ? msgs.map(m => renderMsg(m, th.owner_user_id, meId)).join('') :
@@ -349,7 +367,7 @@ function paintThread() {
   const inputEl = document.getElementById('rai-msg');
   const sendEl  = document.getElementById('rai-send');
   const send = async () => {
-    if (!subOk) { toast('サブスク未加入'); return; }
+    if (!subOk) { toast('サブスク未加入 (AI サブスク or 研究特化 サブスク が 必要)'); return; }
     const msg = inputEl.value.trim();
     if (!msg) { toast('メッセージを入力'); return; }
     sendEl.disabled = true; sendEl.textContent = '⌛';

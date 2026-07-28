@@ -73,10 +73,14 @@ function rai_status(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $sub = _rai_active_sub($pdo, $uid);
+    // v1254 新 AI サブスク の 状態 も 返す (UI で 「契約中 は 使い放題」表示 用)
+    $aiSubActive = ai_sub_is_active($pdo, $uid);
     json_response([
-        'subscription' => $sub ? rai_shape_sub($sub) : null,
-        'templates'    => rai_templates(),
-        'plans'        => rai_plans_public(),
+        'subscription'    => $sub ? rai_shape_sub($sub) : null,
+        'ai_sub_active'   => $aiSubActive,
+        'ai_sub_grants_unlimited' => $aiSubActive,   // UI 判定 用: 契約中 は 研究特化 も 使い放題
+        'templates'       => rai_templates(),
+        'plans'           => rai_plans_public(),
     ]);
 }
 
@@ -544,11 +548,20 @@ function rai_thread_post_message(PDO $pdo, array $cfg, int $tid): void {
     if (!is_array($attachIds)) $attachIds = [];
     $attachIds = array_values(array_filter(array_map('intval', $attachIds), fn($v) => $v > 0));
 
-    // トークン消費は「投稿者本人のサブスク」から引く (共有先が投稿すれば その人のトークン)
-    $sub = _rai_active_sub($pdo, $uid);
-    if (!$sub) throw new ApiException('forbidden', 'サブスク未加入。まず購入してください', 403);
-    _rai_assert_sub_available($sub);
-    $plan = (string)$sub['plan'];
+    // v1254 中村さん要望「研究特化 AI サブスク も 新 AI サブスク に 統合」
+    //   新 AI サブスク (ai_subs、 1 週間 500pt) 契約中 なら 研究特化 サブスク の 有無 に
+    //   関わらず 使い放題。 トークン カウンタ は 減らさず、 統計用 に ai_subs.covered_count を +1。
+    //   契約中 で なければ 従来 の 研究特化 サブスク の 有無 を チェック する 二段構え。
+    $aiSubActive = ai_sub_is_active($pdo, $uid);
+    $sub = null;
+    $plan = null;
+    if (!$aiSubActive) {
+        // トークン消費は「投稿者本人のサブスク」から引く (共有先が投稿すれば その人のトークン)
+        $sub = _rai_active_sub($pdo, $uid);
+        if (!$sub) throw new ApiException('forbidden', 'サブスク未加入。 まず AI サブスク (1 週間 500pt) を 契約 する か、 研究特化 サブスク を 購入 して ください', 403);
+        _rai_assert_sub_available($sub);
+        $plan = (string)$sub['plan'];
+    }
 
     $messages = _rai_build_messages($pdo, $th, $uid, $msg, $attachIds);
     $model = (string)($cfg['openai']['model'] ?? 'gpt-5-mini');
@@ -571,7 +584,14 @@ function rai_thread_post_message(PDO $pdo, array $cfg, int $tid): void {
         // スレッドの last_message_at 更新
         $pdo->prepare("UPDATE research_ai_threads SET last_message_at = NOW() WHERE id = ?")->execute([$tid]);
         // v1148 リファクタ: サブスク減算は _rai_decrement_sub ヘルパに集約
-        _rai_decrement_sub($pdo, $uid, $plan, $tokTotal);
+        // v1254 新 AI サブスク で 覆われた 場合 は 研究特化 サブスク の トークン は 減らさず、
+        //   統計用 に ai_subs.covered_count を +1 (covered_pt は per-request 料金 が ない ので 0 の まま)
+        if ($aiSubActive) {
+            $pdo->prepare("UPDATE ai_subs SET covered_count = covered_count + 1 WHERE user_id = ?")
+                ->execute([$uid]);
+        } else {
+            _rai_decrement_sub($pdo, $uid, $plan, $tokTotal);
+        }
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
