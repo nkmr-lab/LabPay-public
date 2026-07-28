@@ -1588,14 +1588,13 @@ function ai_exp_plan_check_run_background(PDO $pdo, array $cfg, int $checkId, st
         $msg = mb_substr($e->getMessage(), 0, 500);
         $pdo->prepare("UPDATE experiment_plan_checks SET status='error', error_msg = ? WHERE id = ?")
             ->execute([$msg, $checkId]);
-        // 失敗時は返金
+        // 失敗時は返金 (v1252 AI サブスク で 元々 無料 だった 場合 は 返金 スキップ、 ai_refund_if_charged 経由)
         try {
-            $stR = $pdo->prepare("SELECT user_id, cost_points FROM experiment_plan_checks WHERE id = ?");
+            $stR = $pdo->prepare("SELECT user_id FROM experiment_plan_checks WHERE id = ?");
             $stR->execute([$checkId]);
             $row = $stR->fetch(PDO::FETCH_ASSOC);
-            if ($row && (int)$row['cost_points'] > 0) {
-                Ledger::transfer($pdo, 1, (int)$row['user_id'], (int)$row['cost_points'],
-                    'refund', 'experiment_plan_check', $checkId, '実験計画書チェック失敗返金');
+            if ($row) {
+                ai_refund_if_charged($pdo, (int)$row['user_id'], 'experiment_plan_check', $checkId, '実験計画書チェック失敗返金');
             }
         } catch (Throwable $_) {}
     }
