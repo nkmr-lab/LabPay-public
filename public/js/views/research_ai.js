@@ -118,22 +118,22 @@ function paintSidebar() {
 }
 
 function subMiniHtml(sub) {
-  // v1254 新 AI サブスク (ai_subs) が 有効 なら 研究特化 サブスク の 有無 に かかわらず 使い放題
+  // v1254 新 AI サブスク (ai_subs) が 有効 なら 使い放題。
+  // v1255 研究特化 サブスク は 新規購入 廃止、 既存契約者 は 残 トークン を 使い切れる (grandfather)。
   if (STATE?.ai_sub_active) {
-    if (sub) {
-      // 両方 契約中 (レア ケース): 研究特化 サブスク の 残高 も 減らない
-      return '<span style="color:#a7f3d0">🤖 AI サブスク で 使い放題 (研究特化 は 温存)</span>';
-    }
     return '<span style="color:#a7f3d0">🤖 AI サブスク で 使い放題</span>';
   }
-  if (!sub) return '<span style="color:#fecaca">⚠ サブスク未加入 (下で購入 or <a href="#/ai-sub" style="color:#fecaca; text-decoration:underline">AI サブスク</a>)</span>';
+  if (!sub) {
+    return '<span style="color:#fecaca">⚠ AI サブスク が 必要 → <a href="#/ai-sub" style="color:#fecaca; text-decoration:underline">契約 する</a></span>';
+  }
+  // grandfather: 旧 研究特化 サブスク の 残 トークン 表示
   const plan = sub.plan;
   if (plan === 'unlimited_weekly') {
     const left = Math.max(0, (sub.weekly_limit || 0) - (sub.weekly_used || 0));
-    return `<span>♾ 週次 ${(left/1000).toFixed(0)}k / ${(sub.weekly_limit/1000).toFixed(0)}k 残</span>`;
+    return `<span>♾ 週次 ${(left/1000).toFixed(0)}k / ${(sub.weekly_limit/1000).toFixed(0)}k 残 (旧 サブスク、 grandfather)</span>`;
   }
   if (plan === 'tokens_ticket') {
-    return `<span>🎟 ${((sub.tokens_left || 0)/1000).toFixed(1)}k tokens 残</span>`;
+    return `<span>🎟 ${((sub.tokens_left || 0)/1000).toFixed(1)}k tokens 残 (旧 サブスク、 grandfather)</span>`;
   }
   if (plan === 'quota60') {
     return `<span>📊 旧 quota60: 残 ${sub.quota_left || 0} 件</span>`;
@@ -175,25 +175,24 @@ async function openThread(tid, silent = false) {
 function paintEmptyBody() {
   const body = document.getElementById('rai-body');
   const sub = STATE?.subscription;
-  const plansHtml = (STATE?.plans || []).map(p => `
-    <button class="btn primary" data-rai-buy="${p.key}" style="padding:10px 14px; margin:4px 6px 4px 0; text-align:left; display:inline-block">
-      <div style="font-weight:700">${escapeHtml(p.label)}</div>
-      <div class="hint-sm" style="font-size:11px; opacity:0.85">${escapeHtml(p.hint || '')}</div>
-    </button>`).join('');
+  const aiSubActive = !!STATE?.ai_sub_active;
+  // v1255 研究特化 独自 サブスク の 新規購入 は 廃止 → AI サブスク への 導線 のみ
+  const subscribeBanner = (aiSubActive || sub) ? '' : `
+    <div class="card" style="background:#fef3c7">
+      <div class="bold" style="color:#92400e; margin-bottom:6px">🤖 AI サブスク を 契約 して 始める</div>
+      <div class="hint-sm" style="margin-bottom:8px">1 週間 500pt。 契約中 は 研究特化 AI 含む LabPay 内 全 AI 機能 が 使い放題。</div>
+      <a href="#/ai-sub" class="btn primary" style="text-decoration:none; padding:8px 14px">🤖 AI サブスク の 詳細 / 契約 へ →</a>
+    </div>
+  `;
   body.innerHTML = `
     <div style="max-width:720px; margin:0 auto">
-      <h2 style="margin:0 0 10px">🔬 研究特化 AI サブスク</h2>
+      <h2 style="margin:0 0 10px">🔬 研究特化 AI チャット</h2>
       <p class="hint" style="font-size:13px; line-height:1.7">
         研究に特化したプロンプトテンプレート付きチャット (📝 研究テーマ相談 / 🧪 実験デザインチェック /
         ✒️ アブスト磨き / 📚 関連研究整理 / 📮 リバッタル起草 / 💴 科研費文章 / 💬 汎用)。<br>
         ChatGPT / Claude 風の UI (左に履歴サイドバー、 PDF / 画像 添付、 スレッド共有 = 他者と共同利用)。
       </p>
-      ${sub ? '' : `
-        <div class="card" style="background:#fef3c7">
-          <div class="bold" style="color:#92400e; margin-bottom:6px">💴 サブスクを購入して始める</div>
-          <div style="display:flex; flex-wrap:wrap; gap:4px">${plansHtml}</div>
-        </div>
-      `}
+      ${subscribeBanner}
       ${THREADS.length ? '' : `
         <div class="card">
           <div class="hint-sm">まだチャットがありません。 左の「＋ 新しいチャット」で始めましょう。</div>
@@ -201,14 +200,6 @@ function paintEmptyBody() {
       `}
     </div>
   `;
-  body.querySelectorAll('[data-rai-buy]').forEach(el => el.addEventListener('click', async () => {
-    const plan = el.dataset.raiBuy;
-    const p = (STATE?.plans || []).find(x => x.key === plan);
-    if (!p || !confirm(`${p.label} を購入 (${p.cost}pt)。よい?`)) return;
-    el.disabled = true;
-    try { await post('/api/research-ai/subscribe', { plan }); toast('購入完了'); await refresh(); }
-    catch (e) { toast('失敗: ' + e.message); el.disabled = false; }
-  }));
 }
 
 function paintThread() {
@@ -239,11 +230,8 @@ function paintThread() {
   const seedPill = th.seed_source_type && th.seed_source_id
     ? `<a href="${seedUrlByType[th.seed_source_type] || '/#/'}${th.seed_source_id}" style="background:#f5f3ff; color:#4a106d; padding:1px 8px; border-radius:8px; font-size:11px; text-decoration:none">← ${escapeHtml(seedTypeLabel)} #${th.seed_source_id}</a>`
     : '';
-  const plansHtml = (STATE?.plans || []).map(p => `
-    <button class="btn" data-rai-buy="${p.key}" style="font-size:11px; padding:4px 10px">${escapeHtml(p.label)}</button>
-  `).join('');
   const sub = STATE?.subscription;
-  // v1254 新 AI サブスク が 有効 なら 研究特化 サブスク が 無くて も 投稿 可能
+  // v1254 新 AI サブスク が 有効 なら 投稿 可能。 v1255 独自 プラン は 廃止、 grandfather 用 の 旧 sub 判定 のみ 残す
   const aiSubActive = !!STATE?.ai_sub_active;
   const subOk = !!sub || aiSubActive;
 
@@ -270,16 +258,13 @@ function paintThread() {
 
       ${!subOk ? `
         <div class="card" style="background:#fef3c7; border-left:4px solid #f59e0b">
-          <div class="bold" style="color:#92400e">⚠ サブスク未加入 — 投稿するには 下記 いずれか の 契約 が 必要</div>
-          <div style="margin-top:6px; font-size:13px">
-            <a href="#/ai-sub" class="btn primary" style="font-size:12px; padding:4px 10px; text-decoration:none">🤖 AI サブスク (共通、 1 週間 500pt)</a>
-            <span style="margin:0 6px; color:#92400e">or 研究特化 サブスク:</span>
-          </div>
-          <div class="row" style="gap:6px; margin-top:6px; flex-wrap:wrap">${plansHtml}</div>
+          <div class="bold" style="color:#92400e; margin-bottom:6px">⚠ AI サブスク が 必要 — 投稿 する に は 契約 して ください</div>
+          <div class="hint-sm" style="margin-bottom:8px">1 週間 500pt。 契約中 は 研究特化 AI 含む LabPay 内 全 AI 機能 が 使い放題。</div>
+          <a href="#/ai-sub" class="btn primary" style="font-size:12px; padding:6px 12px; text-decoration:none">🤖 AI サブスク の 詳細 / 契約 へ →</a>
         </div>
       ` : (aiSubActive ? `
         <div class="card" style="background:#d1fae5; border-left:4px solid #059669">
-          <div class="bold" style="color:#065f46">🤖 AI サブスク 契約中 — 研究特化 AI も 使い放題 (トークン カウンタ は 減りません)</div>
+          <div class="bold" style="color:#065f46">🤖 AI サブスク 契約中 — 研究特化 AI も 使い放題</div>
         </div>
       ` : '')}
 
@@ -385,15 +370,8 @@ function paintThread() {
   sendEl.addEventListener('click', send);
   inputEl.addEventListener('keydown', e => { if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); send(); } });
 
-  // 未加入時のプラン購入
-  body.querySelectorAll('[data-rai-buy]').forEach(el => el.addEventListener('click', async () => {
-    const plan = el.dataset.raiBuy;
-    const p = (STATE?.plans || []).find(x => x.key === plan);
-    if (!p || !confirm(`${p.label} を購入 (${p.cost}pt)。よい?`)) return;
-    el.disabled = true;
-    try { await post('/api/research-ai/subscribe', { plan }); toast('購入完了'); await refresh(); }
-    catch (e) { toast('失敗: ' + e.message); el.disabled = false; }
-  }));
+  // v1255 研究特化 独自 サブスク の 新規購入 UI は 撤去 (バックエンド も 410 gone を 返す)。
+  // 未加入時 は 「AI サブスク の 詳細 / 契約 へ」 リンク で #/ai-sub へ 誘導 のみ。
 
   // スクロールを末尾へ
   requestAnimationFrame(() => {

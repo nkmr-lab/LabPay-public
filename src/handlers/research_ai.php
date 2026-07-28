@@ -72,15 +72,18 @@ function _rai_active_sub(PDO $pdo, int $uid): ?array {
 function rai_status(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
+    // v1255 中村さん指示「研究特化 AI サブスク は なくして、 シンプル に AI サブスク 一本 に」
+    //   → 研究特化 独自 サブスク の 新規購入 は 廃止 (rai_subscribe が 410 gone)、
+    //     既存契約者 の 残 トークン だけ は grandfather で 使い切れる (subscription 情報 は 返す)、
+    //     プラン 一覧 は 空配列 で 返し UI が 購入 ボタン を 出さない ように。
     $sub = _rai_active_sub($pdo, $uid);
-    // v1254 新 AI サブスク の 状態 も 返す (UI で 「契約中 は 使い放題」表示 用)
     $aiSubActive = ai_sub_is_active($pdo, $uid);
     json_response([
-        'subscription'    => $sub ? rai_shape_sub($sub) : null,
+        'subscription'    => $sub ? rai_shape_sub($sub) : null,   // grandfather 表示 用
         'ai_sub_active'   => $aiSubActive,
-        'ai_sub_grants_unlimited' => $aiSubActive,   // UI 判定 用: 契約中 は 研究特化 も 使い放題
+        'ai_sub_grants_unlimited' => $aiSubActive,
         'templates'       => rai_templates(),
-        'plans'           => rai_plans_public(),
+        'plans'           => [],   // v1255 新規購入 経路 は 廃止、 空配列 返す
     ]);
 }
 
@@ -117,63 +120,12 @@ function rai_plans_public(): array {
 }
 
 function rai_subscribe(PDO $pdo, array $cfg): void {
-    $u = Auth::requireUser($pdo, $cfg);
-    $uid = (int)$u['id'];
-    $body = read_json_body();
-    $plan = (string)($body['plan'] ?? '');
-    $planDef = null;
-    foreach (rai_plans_public() as $p) if ($p['key'] === $plan) { $planDef = $p; break; }
-    if (!$planDef) throw new ApiException('bad_request', 'unknown plan', 400);
-    $cost = (int)$planDef['cost'];
-    $bal = Ledger::balanceOfUser($pdo, $uid);
-    if ($bal < $cost) throw new ApiException('insufficient_balance', "残高不足 (要 {$cost}pt、現在 {$bal}pt)", 400);
-    $pdo->beginTransaction();
-    try {
-        Ledger::transfer($pdo, $uid, 1, $cost, 'ai_subscribe', 'research_ai_sub', $uid, "研究特化 AI サブスク ({$plan})");
-        $expires = date('Y-m-d H:i:s', strtotime('+' . RAI_SUB_DURATION_DAYS . ' days'));
-        $existing = _rai_active_sub($pdo, $uid);
-        if ($existing) {
-            // 同 plan なら加算、異 plan なら plan 昇格 (unlimited_weekly が最強)。
-            $newExpires = max($existing['expires_at'], $expires);
-            $newTokensLeft   = $existing['tokens_left'];
-            $newWeeklyLimit  = $existing['weekly_limit'];
-            $newPlan = $existing['plan'];
-            $newWeekReset = $existing['week_reset_at'];
-            if ($plan === 'unlimited_weekly') {
-                $newPlan = 'unlimited_weekly';
-                $newTokensLeft = null;
-                $newWeeklyLimit = RAI_UNLIMITED_WEEKLY_LIMIT;
-                $newWeekReset = $newWeekReset ?: date('Y-m-d H:i:s', strtotime('+7 days'));
-            } else {
-                // tickets: tokens_left に加算 (unlimited でなければ)
-                if (($existing['plan'] ?? '') !== 'unlimited_weekly' && ($existing['plan'] ?? '') !== 'unlimited') {
-                    $newPlan = 'tokens_ticket';
-                    $newTokensLeft = (int)($existing['tokens_left'] ?? 0) + (int)$planDef['tokens'];
-                } else {
-                    // unlimited 加入者に ticket は無意味 (期間だけ延長)
-                    $newTokensLeft = $existing['tokens_left'];
-                }
-            }
-            $pdo->prepare("UPDATE research_ai_subscriptions
-                              SET plan = ?, tokens_left = ?, weekly_limit = ?, week_reset_at = ?, expires_at = ?, cost_paid = cost_paid + ?
-                            WHERE user_id = ?")
-                ->execute([$newPlan, $newTokensLeft, $newWeeklyLimit, $newWeekReset, $newExpires, $cost, $uid]);
-        } else {
-            $isUnlimited = $plan === 'unlimited_weekly';
-            $tokensLeft = $isUnlimited ? null : (int)$planDef['tokens'];
-            $weeklyLimit = $isUnlimited ? RAI_UNLIMITED_WEEKLY_LIMIT : null;
-            $weekReset  = $isUnlimited ? date('Y-m-d H:i:s', strtotime('+7 days')) : null;
-            $storePlan = $isUnlimited ? 'unlimited_weekly' : 'tokens_ticket';
-            $pdo->prepare("INSERT INTO research_ai_subscriptions (user_id, plan, quota_left, tokens_left, weekly_limit, week_reset_at, expires_at, cost_paid)
-                            VALUES (?, ?, NULL, ?, ?, ?, ?, ?)")
-                ->execute([$uid, $storePlan, $tokensLeft, $weeklyLimit, $weekReset, $expires, $cost]);
-        }
-        $pdo->commit();
-    } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        throw $e;
-    }
-    rai_status($pdo, $cfg);
+    // v1255 中村さん指示「研究特化 AI サブスク は なくす」→ 新規購入 を 停止。
+    //   誤って 叩かれて も ポイント を 引かない よう 410 gone 相当 で 拒否。
+    //   ユーザ は #/ai-sub の 新 AI サブスク (1 週間 500pt) を 契約 する 導線 に。
+    throw new ApiException('gone',
+        '研究特化 AI サブスク の 新規購入 は 廃止 されました。 AI サブスク (#/ai-sub、 1 週間 500pt) を 契約 する と 研究特化 AI も 含めて 全 AI 機能 が 使い放題 に なります。',
+        410);
 }
 
 // ── スレッド操作 ────────────────────────────────────────────────
