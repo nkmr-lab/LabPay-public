@@ -131,7 +131,7 @@ export const APPS = [
   // v1238 中村研 写真基盤 (Google Photos 脱出後の自前アルバム)
   //   v1238 で 旧 nkmr-albums (Google Photos 列挙) を 撤去、 photo (LabPay 内) を 主役 に。
   { id: 'photo',          cat: 'shared', url: '#/photo', title: '🖼 フォト アルバム (LabPay 内)',
-    desc: 'photo.nkmr.io の アルバム を LabPay 内 で 閲覧。 アルバム一覧 → タイル → タップ で 全画面 ライトボックス (前後 スワイプ 可)。 タグ / タイトル で 絞り込み。 📺 フォトフレーム で フルスクリーン スライド も。 nkmr-SSO で 保護。', defaultVisible: true },
+    desc: 'photo.nkmr.io の アルバム を LabPay 内 で 閲覧。 アルバム一覧 → タイル → タップ で 全画面 ライトボックス (前後 スワイプ 可)。 タグ / タイトル で 絞り込み。 nkmr-SSO で 保護。', defaultVisible: true },
   // v1251 AI サブスク (共通、 chai.nkmr.io / file.nkmr.io で 使う 1 週間 500pt サブスク)
   { id: 'ai-sub',         cat: 'shared', url: '#/ai-sub', title: '🤖 AI サブスク (共通)',
     desc: '1 週間 500pt の 自動更新 サブスク。 契約 中 は 論文要約 / 全訳 / DeepResearch / 実験計画書 / 原稿 / 査読 / リライター / 研究特化 AI チャット が 全部 無料 に。 加えて chai.nkmr.io (ChatGPT/Claude 風) や file.nkmr.io (ファイル ブラウザ AI) 等 の 外部 サービス でも フル 機能。 残高 500pt を 切ると 自動 解約。', defaultVisible: true },

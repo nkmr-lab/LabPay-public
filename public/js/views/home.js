@@ -671,7 +671,7 @@ export async function renderHome() {
     <div class="card" id="home-photo-random-card" data-card-id="photo-random" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">🎲 今日のラボフォト</h2>
-        <a href="#/photo/frame" class="hint" style="margin-left:auto">📺 フォトフレーム →</a>
+        <!-- v1258 フォトフレーム リンク 撤去 (完成度 低い、 中村さん判断) -->
       </div>
       <div id="home-photo-random"><div class="home-skel-bars"></div></div>
     </div>

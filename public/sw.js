@@ -8,7 +8,7 @@
 //   * NEVER cache /api/* (api content cache 対象を除く) — ledger consistency。
 //   * Offline fallback for the shell so the app at least loads when the network blips.
 
-const CACHE_NAME = 'labpay-shell-v1257';
+const CACHE_NAME = 'labpay-shell-v1258';
 // アップロード画像 (固定 URL = ファイル名ハッシュ) は cache-first に
 // 別キャッシュで永続化。シェルを更新しても画像は落ちない。
 const IMG_CACHE_NAME = 'labpay-images-v1';
@@ -131,6 +131,20 @@ async function invalidateContentByPrefix(prefix) {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
+
+  // v1258 中村さん報告「食べある記 に 写真 アップ できない」 root cause: iOS Safari で
+  //   multipart/form-data の POST を Service Worker が 中継 (fetch(req)) する と body が
+  //   消失 (cl=0) する 事象 が 確認 された (v1257 の 診断 ログ で 「cl=0 FILES_keys=[]」を
+  //   多数観測)。 これ は iOS の Service Worker が multipart 本体 を 保持 しない 既知 の
+  //   バグ に 相当。 uploads/rai_upload/labo_eats の 画像 POST は SW を **素通し** に する。
+  if (req.method !== 'GET' && url.pathname.startsWith('/api/') &&
+      (url.pathname.startsWith('/api/uploads/') ||
+       url.pathname === '/api/research-ai/uploads' ||
+       url.pathname.startsWith('/api/screen-shares') ||
+       url.pathname.startsWith('/api/file-transfers'))) {
+    // SW 経由 しない (browser 直 fetch)。 return 何 も せず で 素通し に なる。
+    return;
+  }
 
   // v517 mutation API 成功後にキャッシュ破棄。 GET 以外の /api/* リクエストを
   //   ハイジャックして、サーバ応答が 2xx なら同じトップセグメントの SWR キャッシュ

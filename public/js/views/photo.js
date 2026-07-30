@@ -81,7 +81,7 @@ function shellHtml(bodyHtml) {
       <div class="row center" style="flex-wrap:wrap; gap:6px">
         <h2 style="margin:0">🖼 フォト アルバム</h2>
         <a href="#/photo/people" class="btn" style="margin-left:auto; font-size:12px; padding:4px 12px; text-decoration:none">👤 人物</a>
-        <a href="#/photo/frame" class="btn primary" style="font-size:12px; padding:4px 12px; text-decoration:none">📺 フォトフレーム</a>
+        <!-- v1258 中村さん判断: フォトフレーム UI は 完成度 低い の で ボタン 撤去。 route は 残す。 -->
       </div>
       <div class="hint-sm" style="margin-top:4px">
         <a href="${PHOTO_ORIGIN}" target="_blank" rel="noopener noreferrer">photo.nkmr.io</a> の アルバム を LabPay 内 で 閲覧。
@@ -220,8 +220,7 @@ function renderHeader(album) {
   el.innerHTML = `
     <div class="row center">
       <h2 style="margin:0; font-size:18px">${escapeHtml(album.title || '(無題)')}</h2>
-      <a href="#/photo/frame?album=${encodeURIComponent(album.id)}" class="btn primary"
-         style="margin-left:auto; font-size:12px; padding:4px 12px; text-decoration:none">📺 このアルバム で フォトフレーム</a>
+      <!-- v1258 フォトフレーム ボタン 撤去 (完成度 低い) -->
     </div>
     <div class="hint-sm" style="margin-top:4px">
       ${album.count ? `📷 ${album.count} 枚` : ''}
@@ -1555,7 +1554,7 @@ function _renderPersonHeader(person) {
         <div class="hint-sm" style="margin-top:4px">📷 ${person.photos_count || 0} 枚${period ? ` · 📅 ${escapeHtml(period)}` : ''}</div>
         ${tags ? `<div style="margin-top:4px">${tags}</div>` : ''}
       </div>
-      <a href="#/photo/frame?mode=tile&person=${encodeURIComponent(person.id)}" class="btn primary" style="text-decoration:none; font-size:12px; padding:4px 12px">📺 この人 で フォトフレーム</a>
+      <!-- v1258 フォトフレーム ボタン 撤去 (完成度 低い) -->
     </div>
   `;
 }
