@@ -55,13 +55,13 @@ function uploads_image(PDO $pdo, array $cfg): void {
         $pmsBytes = _uploads_parse_ini_bytes($pms);
         if ($cl > 0 && $pmsBytes > 0 && $cl >= $pmsBytes * 0.95) {
             throw new ApiException('too_large',
-                sprintf('画像 が 大きすぎて 受け付け られませんでした (アップロード %sMB / サーバ上限 %s)。 小さい 画像 を お選び ください。',
+                sprintf('画像が大きすぎて受け付けられませんでした (アップロード%sMB / サーバ上限%s)。小さい画像をお選びください。',
                     number_format($cl / 1048576, 1), $pms),
                 413);
         }
-        // それ 以外 (FormData 空 / ネットワーク 切断 / iOS Safari FormData 挙動 等)
+        // それ以外 (FormData 空 / ネットワーク切断 / iOS Safari FormData 挙動 等)
         throw new ApiException('no_file',
-            "画像 の 送信 が 途中 で 途切れました。 もう 一度 お試し ください (Content-Length={$cl})",
+            "画像の送信が途中で途切れました。もう一度お試しください (Content-Length={$cl})",
             400);
     }
     $saved = save_uploaded_file($_FILES['file'], 'uploads/products',

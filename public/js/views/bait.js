@@ -503,11 +503,11 @@ async function openBaitFundModal({ assignmentId, title, hours, period }) {
   } catch (e) {
     // v1250 未認証 (fund.nkmr.io セッション 切れ) を 分かりやすく 表示
     if (isFundUnauthError(e)) {
-      fundSel.innerHTML = '<option value="">(fund.nkmr.io 未 ログイン)</option>';
+      fundSel.innerHTML = '<option value="">(fund.nkmr.io未ログイン)</option>';
       if (noteEl) {
-        noteEl.innerHTML = `<span style="color:#dc2626">⚠ fund.nkmr.io に ログイン して ください。</span>
-          <a href="${FUND_HOME_URL}" target="_blank" rel="noopener" class="btn primary" style="margin-left:6px; padding:2px 10px; font-size:11px; text-decoration:none">🔓 fund を 別 タブ で 開く</a>
-          <div style="font-size:11px; margin-top:2px">ログイン 後、 一度 この モーダル を 閉じて 再度 開いて ください。</div>`;
+        noteEl.innerHTML = `<span style="color:#dc2626">⚠ fund.nkmr.ioにログインしてください。</span>
+          <a href="${FUND_HOME_URL}" target="_blank" rel="noopener" class="btn primary" style="margin-left:6px; padding:2px 10px; font-size:11px; text-decoration:none">🔓 fundを別タブで開く</a>
+          <div style="font-size:11px; margin-top:2px">ログイン後、一度このモーダルを閉じて再度開いてください。</div>`;
       }
     } else {
       fundSel.innerHTML = `<option value="">${escapeHtml('予算取得失敗: ' + (e?.message || e))}</option>`;

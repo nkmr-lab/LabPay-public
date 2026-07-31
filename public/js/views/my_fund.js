@@ -253,15 +253,15 @@ function renderDoctorAddSection() {
     }).join('');
   }).catch(e => {
     if (isFundUnauthError(e)) {
-      fundSel.innerHTML = '<option value="">(fund.nkmr.io 未 ログイン)</option>';
-      // 隣 に 開く ボタン を 差し込む (fundSel の 親 field の 直後)
+      fundSel.innerHTML = '<option value="">(fund.nkmr.io未ログイン)</option>';
+      // 隣に開くボタンを差し込む (fundSelの親fieldの直後)
       const field = fundSel.closest('.field') || fundSel.parentElement;
       if (field && !document.getElementById('mfa-fund-unauth')) {
         const hint = document.createElement('div');
         hint.id = 'mfa-fund-unauth';
         hint.className = 'hint-sm';
         hint.style.cssText = 'color:#dc2626; margin-top:4px';
-        hint.innerHTML = `⚠ fund.nkmr.io に ログイン して ください
+        hint.innerHTML = `⚠ fund.nkmr.ioにログインしてください
           <a href="${FUND_HOME_URL}" target="_blank" rel="noopener" class="btn primary" style="margin-left:6px; padding:2px 10px; font-size:11px; text-decoration:none">🔓 開く</a>`;
         field.appendChild(hint);
       }

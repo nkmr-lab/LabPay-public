@@ -19,7 +19,7 @@ const FUND_API = FUND_ORIGIN + '/api.php';
 export const FUND_UNAUTH_PREFIX = 'FUND_UNAUTH: ';
 function _checkUnauth(r, ct) {
   if (!ct || !ct.toLowerCase().includes('json')) {
-    throw new Error(FUND_UNAUTH_PREFIX + 'fund.nkmr.io へ の 認証 が 必要 です (未ログイン or セッション 切れ)');
+    throw new Error(FUND_UNAUTH_PREFIX + 'fund.nkmr.ioへの認証が必要です (未ログインorセッション切れ)');
   }
 }
 

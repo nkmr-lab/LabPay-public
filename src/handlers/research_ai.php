@@ -124,7 +124,7 @@ function rai_subscribe(PDO $pdo, array $cfg): void {
     //   誤って 叩かれて も ポイント を 引かない よう 410 gone 相当 で 拒否。
     //   ユーザ は #/ai-sub の 新 AI サブスク (1 週間 500pt) を 契約 する 導線 に。
     throw new ApiException('gone',
-        '研究特化 AI サブスク の 新規購入 は 廃止 されました。 AI サブスク (#/ai-sub、 1 週間 500pt) を 契約 する と 研究特化 AI も 含めて 全 AI 機能 が 使い放題 に なります。',
+        '研究特化AIサブスクの新規購入は廃止されました。AIサブスク (#/ai-sub、1週間500pt) を契約すると研究特化AIも含めて全AI機能が使い放題になります。',
         410);
 }
 
@@ -510,7 +510,7 @@ function rai_thread_post_message(PDO $pdo, array $cfg, int $tid): void {
     if (!$aiSubActive) {
         // トークン消費は「投稿者本人のサブスク」から引く (共有先が投稿すれば その人のトークン)
         $sub = _rai_active_sub($pdo, $uid);
-        if (!$sub) throw new ApiException('forbidden', 'サブスク未加入。 まず AI サブスク (1 週間 500pt) を 契約 する か、 研究特化 サブスク を 購入 して ください', 403);
+        if (!$sub) throw new ApiException('forbidden', 'サブスク未加入。まずAIサブスク (1週間500pt) を契約してください', 403);
         _rai_assert_sub_available($sub);
         $plan = (string)$sub['plan'];
     }

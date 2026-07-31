@@ -202,7 +202,7 @@ function ai_sub_subscribe(PDO $pdo, array $cfg): void {
         $userAcc = Ledger::accountIdForUser($pdo, $uid);
         $sysAcc  = Ledger::accountIdByCode($pdo, 'SYSTEM');
         Ledger::transfer($pdo, $userAcc, $sysAcc, AI_SUB_COST, 'ai_sub', 'ai_sub_period', $uid,
-                         'AI サブスク (1 週間、 初回 契約)');
+                         'AIサブスク (1週間、初回契約)');
         $now = date('Y-m-d H:i:s');
         $end = date('Y-m-d H:i:s', strtotime('+' . AI_SUB_DAYS . ' days'));
         if ($row) {
@@ -229,7 +229,7 @@ function ai_sub_subscribe(PDO $pdo, array $cfg): void {
     }
     $row2 = _ai_sub_row($pdo, $uid);
     notify_safely($pdo, $cfg, $uid, 'admin_notice',
-        '🤖 AI サブスク を 開始 しました (500pt / 週、 自動更新 ON)。 chai.nkmr.io / file.nkmr.io で 有効。',
+        '🤖 AIサブスクを開始しました (500pt / 週、自動更新ON)。chai.nkmr.io / file.nkmr.ioで有効。',
         'ai_sub', (int)$row2['id']);
     json_response([
         'ok' => true, 'subscribed' => true,
@@ -243,7 +243,7 @@ function ai_sub_cancel(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $row = _ai_sub_row($pdo, $uid);
-    if (!$row) throw new ApiException('not_found', 'サブスク が ありません', 404);
+    if (!$row) throw new ApiException('not_found', 'サブスクがありません', 404);
     $pdo->prepare("UPDATE ai_subs SET auto_renew=0, canceled_at=IFNULL(canceled_at, NOW()) WHERE user_id=?")
         ->execute([$uid]);
     $row2 = _ai_sub_row($pdo, $uid);
@@ -259,10 +259,10 @@ function ai_sub_resume(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $uid = (int)$u['id'];
     $row = _ai_sub_row($pdo, $uid);
-    if (!$row) throw new ApiException('not_found', 'サブスク が ありません', 404);
+    if (!$row) throw new ApiException('not_found', 'サブスクがありません', 404);
     $status = _ai_sub_status($row);
     if ($status === 'expired') {
-        throw new ApiException('bad_request', '期限 切れ の ため resume できません。 subscribe を どうぞ', 400);
+        throw new ApiException('bad_request', '期限切れのためresumeできません。subscribeをどうぞ', 400);
     }
     $pdo->prepare("UPDATE ai_subs SET auto_renew=1, canceled_at=NULL WHERE user_id=?")
         ->execute([$uid]);
@@ -296,7 +296,7 @@ function ai_sub_run_renewals(PDO $pdo, array $cfg): array {
                   WHERE user_id=? AND auto_renew=1"
             )->execute([$uid]);
             notify_safely($pdo, $cfg, $uid, 'admin_notice',
-                '🤖 AI サブスク の 自動更新 に 失敗 しました (残高 不足: ' . $bal . 'pt / 要 ' . AI_SUB_COST . 'pt)。 手動 で 再契約 して ください。',
+                '🤖 AIサブスクの自動更新に失敗しました (残高不足: ' . $bal . 'pt / 要' . AI_SUB_COST . 'pt)。手動で再契約してください。',
                 'ai_sub', (int)$row['id']);
             $failed++;
             continue;
@@ -307,7 +307,7 @@ function ai_sub_run_renewals(PDO $pdo, array $cfg): array {
             $userAcc = Ledger::accountIdForUser($pdo, $uid);
             $sysAcc  = Ledger::accountIdByCode($pdo, 'SYSTEM');
             Ledger::transfer($pdo, $userAcc, $sysAcc, AI_SUB_COST, 'ai_sub', 'ai_sub_period', $uid,
-                             'AI サブスク (1 週間、 自動更新 #' . ((int)$row['cycle_count'] + 1) . ')');
+                             'AIサブスク (1週間、自動更新 #' . ((int)$row['cycle_count'] + 1) . ')');
             $now = date('Y-m-d H:i:s');
             // 期限 は 「元 の 期限 + 7 日」 か 「今 + 7 日」の 遅い 方 (遅延 更新 で も 継続 感 を 保つ)
             $baseEnd = max(strtotime((string)$row['current_period_end']) ?: time(), time());

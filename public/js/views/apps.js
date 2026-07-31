@@ -130,13 +130,13 @@ export const APPS = [
     desc: '中村研の 予算執行 DB。 科研費 / 校費 / 各種 fund の 予定 と 実績、 アルバイト代の 登録、 支払明細、 予算残高 まで。 nkmr-SSO で保護。 自分宛の 支払いだけ を LabPay 内で 見たい 時 は 💴 自分宛の研究費支払い を どうぞ。', defaultVisible: true },
   // v1238 中村研 写真基盤 (Google Photos 脱出後の自前アルバム)
   //   v1238 で 旧 nkmr-albums (Google Photos 列挙) を 撤去、 photo (LabPay 内) を 主役 に。
-  { id: 'photo',          cat: 'shared', url: '#/photo', title: '🖼 フォト アルバム (LabPay 内)',
-    desc: 'photo.nkmr.io の アルバム を LabPay 内 で 閲覧。 アルバム一覧 → タイル → タップ で 全画面 ライトボックス (前後 スワイプ 可)。 タグ / タイトル で 絞り込み。 📺 フォトフレーム で フルスクリーン スライド も。 nkmr-SSO で 保護。', defaultVisible: true },
+  { id: 'photo',          cat: 'shared', url: '#/photo', title: '🖼 フォトアルバム (LabPay内)',
+    desc: 'photo.nkmr.ioのアルバムをLabPay内で閲覧。アルバム一覧→タイル→タップで全画面ライトボックス (前後スワイプ可)。タグ / タイトルで絞り込み。📺 フォトフレームでフルスクリーンスライドも。nkmr-SSOで保護。', defaultVisible: true },
   // v1251 AI サブスク (共通、 chai.nkmr.io / file.nkmr.io で 使う 1 週間 500pt サブスク)
-  { id: 'ai-sub',         cat: 'shared', url: '#/ai-sub', title: '🤖 AI サブスク (共通)',
-    desc: '1 週間 500pt の 自動更新 サブスク。 契約 中 は 論文要約 / 全訳 / DeepResearch / 実験計画書 / 原稿 / 査読 / リライター / 研究特化 AI チャット が 全部 無料 に。 加えて chai.nkmr.io (ChatGPT/Claude 風) や file.nkmr.io (ファイル ブラウザ AI) 等 の 外部 サービス でも フル 機能。 残高 500pt を 切ると 自動 解約。', defaultVisible: true },
-  { id: 'photo-portal',   cat: 'shared', url: 'https://photo.nkmr.io', title: '📷 photo.nkmr.io を 開く',
-    desc: '中村研の 写真・動画 を 全部 貯める 自前 フォト基盤 (Google Photos の 代替)。 学会 / 合宿 / 飲み会 / ゼミの 写真 と 動画 を まとめて 保存 + 検索 + 顔識別 + 地図 + 同席グラフ 等 の 全機能 は 外部 サイト で。 nkmr-SSO で保護。 アルバム 一覧 を LabPay 内 で 見たい 時 は 🖼 フォト アルバム を どうぞ。', defaultVisible: true },
+  { id: 'ai-sub',         cat: 'shared', url: '#/ai-sub', title: '🤖 AIサブスク (共通)',
+    desc: '1週間500ptの自動更新サブスク。契約中は論文要約 / 全訳 / DeepResearch / 実験計画書 / 原稿 / 査読 / リライター / 研究特化AIチャットが全部無料に。加えてchai.nkmr.io (ChatGPT/Claude風) やfile.nkmr.io (ファイルブラウザAI) 等の外部サービスでもフル機能。残高500ptを切ると自動解約。', defaultVisible: true },
+  { id: 'photo-portal',   cat: 'shared', url: 'https://photo.nkmr.io', title: '📷 photo.nkmr.ioを開く',
+    desc: '中村研の写真・動画を全部貯める自前フォト基盤 (Google Photosの代替)。学会 / 合宿 / 飲み会 / ゼミの写真と動画をまとめて保存+検索+顔識別+地図+同席グラフ等の全機能は外部サイトで。nkmr-SSOで保護。アルバム一覧をLabPay内で見たい時は🖼 フォトアルバムをどうぞ。', defaultVisible: true },
   { id: 'poster-maker',   cat: 'shared', url: 'https://member.nkmr.io', title: '📇 メンバー紹介ポスター作成',
     desc: '研究室メンバー紹介ポスターを Web で入力 → pptx 自動生成。顔写真 / 名前 / 学年 / 研究テーマ / 趣味などを打ち込むと綺麗な A3 ポスターの pptx が落ちてくる。新歓 / 学会準備 / 研究室訪問対応に。 nkmr-SSO で保護。', defaultVisible: true },
   { id: 'file-browser',   cat: 'tools',    url: 'https://file.nkmr.io', title: '🗄 ファイルブラウザ',
