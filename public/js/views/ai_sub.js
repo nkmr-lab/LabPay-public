@@ -53,7 +53,7 @@ export async function renderAiSub() {
     <div class="card" style="margin-top:8px">
       <details>
         <summary style="cursor:pointer; font-weight:600; font-size:13px">💡 開発者向け: サービス側で契約状況を参照する方法</summary>
-        <pre style="margin-top:8px; font-size:11px; background:#f9fafb; padding:8px; border-radius:4px; overflow-x:auto">// nkmr-SSO cookie 共有 な の で credentials で 通る
+        <pre style="margin-top:8px; font-size:11px; background:#f9fafb; padding:8px; border-radius:4px; overflow-x:auto">// nkmr-SSO cookie 共有なので credentials で通る
 const r = await fetch('https://pay.nkmr.io/api/ai-sub/check',
                       { credentials: 'include' });
 const j = await r.json();
