@@ -30,7 +30,7 @@ export async function renderAiSub() {
       <div class="hint-sm" style="margin-top:4px">
         1週間500ptの自動更新サブスク。契約中は下記が全部使い放題になります:<br>
         ・ LabPay内のAI機能 (📑論文要約 / 📑全訳 / 📄査読 / 🔎Deep Research /
-        🧪実験計画書チェック / 📝原稿チェック / ✂️リライター / 🔬研究特化AI) が <b>全部無料</b><br>
+        🧪実験計画書チェック / 📝原稿チェック / ✂️リライター) が <b>全部無料</b><br>
         ・ <b>chai.nkmr.io</b> (ChatGPT / Claude風) / <b>file.nkmr.io</b> (ファイルブラウザAI) 等の
         <b>*.nkmr.io</b>系サービスでフル機能<br>
         残高が500ptを切ると自動解約されます。
@@ -43,7 +43,7 @@ export async function renderAiSub() {
         <b>LabPay内 (契約中は全部無料)</b>:<br>
         📑 論文要約 (#/paper-summary) / 📑 全訳 (#/paper-translate-full) / 📄 論文査読 (#/paper-review)<br>
         🔎 Deep Research (#/deep-research) / 🧪 実験計画書チェック (#/exp-plan) / 📝 原稿チェック (#/resume-check)<br>
-        ✂️ 文字数リライター (#/rewriter) / 🔬 研究特化AIチャット (#/research-ai)<br>
+        ✂️ 文字数リライター (#/rewriter)<br>
         <b>外部サービス (契約中はフル機能)</b>:<br>
         📁 <a href="https://file.nkmr.io" target="_blank" rel="noopener">file.nkmr.io</a> — ファイルブラウザ<br>
         💬 <a href="https://chai.nkmr.io" target="_blank" rel="noopener">chai.nkmr.io</a> — ChatGPT / Claude風チャット<br>

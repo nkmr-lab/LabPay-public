@@ -828,11 +828,10 @@ function isPublicGatewayHash(hash) {
     }
     start();
   }
-  // v1219 中村さん要望「AI エージェント と の 対話 の 吹き出し アイコン を 画面 に 配置、
-  //   任意 の 場所 で AI と チャット できる ように」→ 全 ページ に フローティング 💬 バブル。
-  //   ページ側 で window.__labpay_ai_context = {sourceType,sourceId,title} を セット している 場合、
-  //   その context を seed に 新 スレッド を 作成 → research-ai へ 遷移。 未セット時 は 単に research-ai へ。
-  if (state.me) installAiFab();
+  // v1263 研究特化AIチャットの UI を一旦停止したのに伴い、
+  //   FAB (💬 バブル = 「この結果 について AI と 話す」導線) も止める。
+  //   setAiContext / clearAiContext は各 view から呼ばれ続けるが、FAB DOM が
+  //   存在しないので実質 no-op になる (関数側で getElementById → null で早期 return)。
   // Periodic unread refresh — 1 分間隔。タブが裏 (visibility hidden) の時は
   // スキップして、表に戻った瞬間に即 1 回叩く。これでスマホをロックしてた
   // 間にバッテリーを使わず、戻ってきた直後にバッジが正しく出る。
