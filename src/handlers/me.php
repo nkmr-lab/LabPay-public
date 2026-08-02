@@ -14,14 +14,36 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             FROM streaks WHERE user_id=?');
         $st->execute([$u['id']]);
         $streak = $st->fetch() ?: ['current_streak' => 0, 'longest_streak' => 0, 'last_checkin_date' => null];
-        // v600 #228 streak が切れているなら表示用に 0 にする。
-        //   last_checkin_date が今日 or 昨日ならそのまま。それより前なら 0。
-        //   (DB の current_streak はそのまま保存しておく — 次回 checkin の計算に使う)
+        // v600 #228 streak が切れているなら表示用に減らす。
+        //   last_checkin が今日 or 昨日ならそのまま。それより前は:
+        //   weekday_only=1 なら「last_checkin 翌日〜昨日」に稼働日 workday が
+        //   何日あったかを数え、その日数 × decay を引いた値を表示 (次回 checkin で
+        //   決まる値に事前に揃える)。稼働日 0 (=土日祝しか跨いでない) なら DB 値そのまま。
+        //   weekday_only=0 は従来通り 0。 (v1261 fix: 金曜 checkin→土曜開くと 0 化する
+        //   バグの修正。柴田 fb#520)
         if ($streak['last_checkin_date']) {
-            $today = (new DateTimeImmutable('now', new DateTimeZone(date_default_timezone_get())))->format('Y-m-d');
-            $yest  = (new DateTimeImmutable('yesterday', new DateTimeZone(date_default_timezone_get())))->format('Y-m-d');
+            $tz = new DateTimeZone(date_default_timezone_get());
+            $today = (new DateTimeImmutable('now', $tz))->format('Y-m-d');
+            $yest  = (new DateTimeImmutable('yesterday', $tz))->format('Y-m-d');
             if ($streak['last_checkin_date'] !== $today && $streak['last_checkin_date'] !== $yest) {
-                $streak['current_streak'] = 0;
+                $weekdayOnly = (string)cfg_get($pdo, 'streak_weekday_only', '1') !== '0';
+                if ($weekdayOnly) {
+                    $missed = 0;
+                    $d = new DateTimeImmutable($streak['last_checkin_date'], $tz);
+                    $limit = new DateTimeImmutable($yest, $tz);
+                    $safety = 400;
+                    while ($safety-- > 0) {
+                        $d = $d->modify('+1 day');
+                        if ($d > $limit) break;
+                        if (Calendar::isWorkday($pdo, $d->format('Y-m-d'))) $missed++;
+                    }
+                    if ($missed > 0) {
+                        $decay = max(1, (int)cfg_get($pdo, 'streak_decay_per_missed_workday', '5'));
+                        $streak['current_streak'] = max(0, (int)$streak['current_streak'] - $missed * $decay);
+                    }
+                } else {
+                    $streak['current_streak'] = 0;
+                }
             }
         }
         $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id, hobbies, favorites, paypay_id, bank_info, birthday_md, birthday_year, birth_place FROM users WHERE id=?');
