@@ -764,9 +764,9 @@ async function loadDetail(id) {
     if (isRequester && t.status === 'open') {
       actions += `
         <div class="row" style="margin-top:6px; gap:6px; flex-wrap:wrap">
-          <button id="edit-task">編集</button>
-          <button id="close-task" class="btn">✅ 終了する</button>
-          <button id="cancel-task" class="danger">取り消す</button>
+          <button id="edit-task" style="white-space:nowrap">編集</button>
+          <button id="close-task" class="btn" style="white-space:nowrap">✅ 終了する</button>
+          <button id="cancel-task" class="danger" style="white-space:nowrap">取り消す</button>
         </div>`;
     }
     // v1184 中村さん要望「指名タスクからも離脱したい」/ v1185 中村さん指示「引き受けない

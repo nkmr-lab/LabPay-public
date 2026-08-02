@@ -192,7 +192,7 @@ function row(f) {
   if (cs === 'none') {
     claudeBtn = `<button data-claude-fb="${f.id}" data-next="approved" class="btn" style="padding:2px 8px; font-size:11px; color:#9a6700; border:1px solid #d4a017">🤖 Claude に任せる</button>`;
   } else if (cs === 'approved') {
-    claudeBtn = `<button data-claude-fb="${f.id}" data-next="none" class="btn" style="padding:2px 8px; font-size:11px">取り消す</button>`;
+    claudeBtn = `<button data-claude-fb="${f.id}" data-next="none" class="btn" style="padding:2px 8px; font-size:11px; white-space:nowrap">取り消す</button>`;
   } else if (cs === 'blocked') {
     claudeBtn = `<button data-claude-fb="${f.id}" data-next="none" class="btn" style="padding:2px 8px; font-size:11px">再投入準備 (none に戻す)</button>`;
   }

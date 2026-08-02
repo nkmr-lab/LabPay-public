@@ -206,7 +206,7 @@ export const APPS = [
   { id: 'walk-mode',     cat: 'health',   url: '#/walk-mode',      title: '🚶 散歩モード',       desc: '全画面マップ + Wake Lock + GPS 5 秒 polling で軌跡 polyline 記録 → SNS 投稿可能。 過去軌跡重ね合わせ表示。', defaultVisible: true },
   { id: 'quotes',        cat: 'ai',       url: '#/quotes',         title: '💬 名言集',           desc: '偉人 / 漫画 / アニメの名言を日単位で 1 件。 ラボメンによる名言登録も可能。 ホームウィジェットとしても表示可 (デフォルト OFF)。', defaultVisible: true },
   { id: 'papers-recent', cat: 'research', url: '#/papers-recent',  title: '📚 最近の論文まとめ', desc: 'ラボ内で 公開された 論文要約 / 全訳 / 査読 / Deep Research の 最近一覧。 ⭐ ブックマーク済 / いいね順 / 検索。', defaultVisible: true },
-  { id: 'news',          cat: 'shared',   url: '#/news',           title: '📰 LabPay ニュース',  desc: 'LabPay の更新情報 (新機能 / 修正)。 版履歴のダイジェスト。', defaultVisible: true },
+  { id: 'news',          cat: 'shared',   url: '#/news',           title: '📰 ITニュース',  desc: '過去30日分のIT記事を初出日ごとに一覧。各記事にGPT要約 (日本語) が付いて中身を開かなくても概要が分かる。 (LabPay自体の更新履歴は右上の v番号 をタップで見られます)', defaultVisible: true },
   { id: 'activity',      cat: 'archive',  url: '#/activity',       title: '📊 活動ログ',         desc: 'ラボ内の最近の取引 / 投稿 / 参加 / 実績更新を時系列で一覧。', defaultVisible: true },
   { id: 'history',       cat: 'archive',  url: '#/history',        title: '💴 個人取引履歴',     desc: '自分の 送金 / 購入 / 販売 / 実績報酬 / タスク報酬 の 履歴を時系列で。', defaultVisible: true },
 ];

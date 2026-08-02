@@ -25,7 +25,7 @@ export async function renderResearchNotes() {
     <div id="rn-fullscreen" style="box-sizing:border-box">
       <div class="row center" style="margin-bottom:8px; gap:8px">
         <h2 style="margin:0; font-size:18px; flex:1">📝 研究ノート</h2>
-        <div class="row" style="gap:4px">
+        <div class="row" id="rn-cal-mode-wrap" style="gap:4px" hidden>
           <button class="btn" id="rn-cal-mode-month" data-on="1" style="font-size:11px; padding:2px 8px">月</button>
           <button class="btn" id="rn-cal-mode-week"  data-on="0" style="font-size:11px; padding:2px 8px">週</button>
         </div>
@@ -114,6 +114,9 @@ async function loadInitial() {
     stateLocal.visibleYm = d.today.slice(0, 7); // 'YYYY.MM'
     statusEl.hidden = true;
     document.getElementById('rn-body').hidden = false;
+    // v1265 setup 突破後は 月/週 トグルを表示 (未登録時は 非表示のまま)
+    const modeWrap = document.getElementById('rn-cal-mode-wrap');
+    if (modeWrap) modeWrap.hidden = false;
 
     await renderCalendar(stateLocal.visibleYm);
     await loadSection(stateLocal.selectedDate);
@@ -146,7 +149,7 @@ function renderInlineSetup(opts) {
         <div class="bold" style="color:#92400e; margin-bottom:4px">📖 鍵の作り方 (3 ステップ)</div>
         <ol style="margin:4px 0 0 18px; padding:0">
           <li>scrapbox.io に Google ログイン (nkmr-lab に入っている自分のアカウントで)</li>
-          <li><a href="https://scrapbox.io/settings/personal-access-tokens" target="_blank" rel="noopener" style="color:#0284c7"><b>scrapbox.io/settings/personal-access-tokens</b></a> を開く → 「Generate Token」</li>
+          <li><a href="https://scrapbox.io/settings/personal-access-tokens" target="_blank" rel="noopener" style="color:#0284c7"><b>scrapbox.io/settings/personal-access-tokens</b></a> を開く → 「New Personal Access Token」を押す</li>
           <li>説明 (例: "LabPay") を入れて生成 → <b>表示された文字列をコピー</b> (1 回だけ表示)</li>
         </ol>
       </div>
@@ -451,8 +454,12 @@ function paintCalendar(ym, data) {
   root.querySelectorAll('[data-rn-day]').forEach(btn => {
     btn.addEventListener('click', () => switchDate(btn.getAttribute('data-rn-day')));
   });
-  document.getElementById('rn-cal-prev').addEventListener('click', () => switchMonth(-1));
-  document.getElementById('rn-cal-next').addEventListener('click', () => switchMonth(+1));
+  // v1265 週モードでは 7 日送り、月モードは 1 ヶ月送り (中村さん報告「週表示で
+  //   ←→ を押すと 次月同日 に飛ぶ (8/2 → 9/2)。次の週に飛ぶように」)
+  document.getElementById('rn-cal-prev').addEventListener('click',
+    () => (stateLocal.calMode === 'week' ? switchDays(-7) : switchMonth(-1)));
+  document.getElementById('rn-cal-next').addEventListener('click',
+    () => (stateLocal.calMode === 'week' ? switchDays(+7) : switchMonth(+1)));
   document.getElementById('rn-cal-today').addEventListener('click', () => switchDate(todayJstKey()));
   document.getElementById('rn-create-monthly')?.addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
@@ -485,6 +492,16 @@ function updateCalendarSelection() {
     const isSel = dk === stateLocal.selectedDate;
     btn.style.border = isSel ? '2px solid #0284c7' : '1px solid #e5e7eb';
   });
+}
+
+// v1265 週モード の 前/次ボタン用: selectedDate を ±N 日 ずらす。
+//   visibleYm は switchDate 内で 移動先 の 月に 自動追随 する。
+async function switchDays(delta) {
+  const [yy, mm, dd] = stateLocal.selectedDate.split('.').map(Number);
+  const t = new Date(yy, mm - 1, dd);
+  t.setDate(t.getDate() + delta);
+  const newDateKey = `${t.getFullYear()}.${String(t.getMonth() + 1).padStart(2, '0')}.${String(t.getDate()).padStart(2, '0')}`;
+  await switchDate(newDateKey);
 }
 
 async function switchMonth(delta) {
