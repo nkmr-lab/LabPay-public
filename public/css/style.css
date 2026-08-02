@@ -414,7 +414,10 @@ body.group-map-fullscreen #tabs { display: none !important; }
 body.group-map-fullscreen #app { padding-top: 4px; }
 
 /* Avatars */
-.avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; flex-shrink:0; }
+/* v1264 flex-grow:0 も明示 (parent が .row の 時、 .row > * { flex:1 1 auto } で
+   avatar が引き伸ばされて 横長 img になる バグの対策、 中村さん報告 一時画像共有 の
+   投稿者アイコン) */
+.avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; flex-shrink:0; flex-grow:0; }
 /* v397 presence band (個人 1 週 10 分 在室帯) ─ activity.js
    v699 #287 横 スクロール 必須 だった の を 解除。 grid を 1fr で 等分 して
    viewport 幅 に 合わせて 自動 縮小。 */
@@ -433,7 +436,7 @@ body.group-map-fullscreen #app { padding-top: 4px; }
 .avatar-fallback {
   display:inline-flex; align-items:center; justify-content:center;
   border-radius:50%; background:var(--primary-soft); color:var(--primary);
-  font-weight:700; vertical-align:middle; flex-shrink:0;
+  font-weight:700; vertical-align:middle; flex-shrink:0; flex-grow:0;
 }
 
 /* Product detail hero — large image on top so the photo the seller uploaded is

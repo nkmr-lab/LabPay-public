@@ -86,6 +86,9 @@ const NON_FULLSCREEN_TOP_PARTS = new Set([
   'widgets',         // ウィジェットセンター
   'my-games',
   'public-timer',
+  // v1264 中村さん指摘「一時画像共有 は 横いっぱいの幅で なんかカッコ悪い」
+  //   → fullscreen 撤退、 ホームと同じ 720px 幅で表示。
+  'screen-shares',
 ]);
 
 // v842 ✕ で閉じる時の戻り先。 history.back() を使うと、アプリ内部の hash遷移 (例:
