@@ -30,8 +30,9 @@ export async function renderResearchAI() {
           <button id="rai-new" class="btn primary" style="width:100%; font-size:13px; padding:6px 10px">＋ 新しいチャット</button>
         </div>
         <div id="rai-threads" style="flex:1; overflow-y:auto"></div>
-        <div style="padding:8px 10px; border-top:1px solid var(--line); background:#f3f4f6; font-size:11px; color:#6b7280">
-          <a href="#/" style="color:#4a106d; text-decoration:none">← ホームに戻る</a>
+        <div style="padding:8px 10px; border-top:1px solid var(--line); background:#f3f4f6; font-size:11px; color:#6b7280; display:flex; justify-content:space-between; align-items:center; gap:8px">
+          <a href="#/" style="color:#4a106d; text-decoration:none">← ホーム</a>
+          <a href="#/ai-sub" style="color:#4a106d; text-decoration:none; font-weight:600" title="AIサブスクの契約・管理">🤖 AIサブスク</a>
         </div>
       </aside>
       <main id="rai-main" style="flex:1; min-width:0; display:flex; flex-direction:column">
@@ -120,26 +121,29 @@ function paintSidebar() {
 function subMiniHtml(sub) {
   // v1254 新 AI サブスク (ai_subs) が 有効 なら 使い放題。
   // v1255 研究特化 サブスク は 新規購入 廃止、 既存契約者 は 残 トークン を 使い切れる (grandfather)。
+  // v1262 導線 強化: 未加入 は 目立つ ボタン、 grandfather は 乗り換え リンク 併記。
   if (STATE?.ai_sub_active) {
-    return '<span style="color:#a7f3d0">🤖 AIサブスクで使い放題</span>';
+    return `<span style="color:#a7f3d0">🤖 AIサブスクで使い放題</span>
+      <a href="#/ai-sub" style="color:#e9d5ff; text-decoration:underline; font-size:10px; margin-left:6px">管理 →</a>`;
   }
   if (!sub) {
-    return '<span style="color:#fecaca">⚠ AIサブスクが必要 → <a href="#/ai-sub" style="color:#fecaca; text-decoration:underline">契約する</a></span>';
+    return `<a href="#/ai-sub" style="display:block; margin-top:4px; background:#fef3c7; color:#92400e; padding:6px 10px; border-radius:6px; text-decoration:none; font-weight:700; text-align:center; font-size:12px; box-shadow:0 1px 2px rgba(0,0,0,0.1)">🤖 AIサブスクを契約する<br><span style="font-weight:400; font-size:10.5px">週500ptで研究AI含む全AI使い放題</span></a>`;
   }
-  // grandfather: 旧 研究特化 サブスク の 残 トークン 表示
+  // grandfather: 旧 研究特化 サブスク の 残 トークン 表示 + AI サブスク への 乗り換え 導線
   const plan = sub.plan;
+  const switchLink = `<a href="#/ai-sub" style="color:#fef3c7; text-decoration:underline; font-size:10.5px; display:inline-block; margin-top:2px">→ 新AIサブスク (週500pt / 全AI使い放題) に乗り換え</a>`;
   if (plan === 'unlimited_weekly') {
     const left = Math.max(0, (sub.weekly_limit || 0) - (sub.weekly_used || 0));
-    return `<span>♾ 週次 ${(left/1000).toFixed(0)}k / ${(sub.weekly_limit/1000).toFixed(0)}k残 (旧サブスク、grandfather)</span>`;
+    return `<span>♾ 週次 ${(left/1000).toFixed(0)}k / ${(sub.weekly_limit/1000).toFixed(0)}k残 (旧サブスク)</span><br>${switchLink}`;
   }
   if (plan === 'tokens_ticket') {
-    return `<span>🎟 ${((sub.tokens_left || 0)/1000).toFixed(1)}k tokens残 (旧サブスク、grandfather)</span>`;
+    return `<span>🎟 ${((sub.tokens_left || 0)/1000).toFixed(1)}k tokens残 (旧サブスク)</span><br>${switchLink}`;
   }
   if (plan === 'quota60') {
-    return `<span>📊 旧 quota60: 残 ${sub.quota_left || 0} 件</span>`;
+    return `<span>📊 旧 quota60: 残 ${sub.quota_left || 0} 件</span><br>${switchLink}`;
   }
-  if (plan === 'unlimited') return '<span>♾ 旧 unlimited</span>';
-  return '<span>サブスク中</span>';
+  if (plan === 'unlimited') return `<span>♾ 旧 unlimited</span><br>${switchLink}`;
+  return `<span>サブスク中</span><br>${switchLink}`;
 }
 
 async function onNewThread() {
@@ -263,8 +267,9 @@ function paintThread() {
           <a href="#/ai-sub" class="btn primary" style="font-size:12px; padding:6px 12px; text-decoration:none">🤖 AIサブスクの詳細 / 契約へ →</a>
         </div>
       ` : (aiSubActive ? `
-        <div class="card" style="background:#d1fae5; border-left:4px solid #059669">
+        <div class="card" style="background:#d1fae5; border-left:4px solid #059669; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap">
           <div class="bold" style="color:#065f46">🤖 AIサブスク契約中 — 研究特化AIも使い放題</div>
+          <a href="#/ai-sub" style="font-size:11px; color:#065f46; text-decoration:underline">管理 →</a>
         </div>
       ` : '')}
 
