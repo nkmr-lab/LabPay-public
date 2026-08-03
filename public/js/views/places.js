@@ -114,6 +114,11 @@ export async function renderPlaces() {
         <label id="pl-f-bounds-lbl" style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-bounds" checked> 🗺 地図内のみ</label>
         <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-liked"> ❤️</label>
         <label style="display:inline-flex; gap:4px; align-items:center"><input type="checkbox" id="pl-f-visited"> 👣</label>
+        <!-- v1271 中村さん要望: 店名 + カテゴリ 絞込 -->
+        <input type="search" id="pl-f-title" placeholder="🔍 店名" style="padding:3px 8px; font-size:12px; border:1px solid #d1d5db; border-radius:4px; max-width:140px">
+        <select id="pl-f-cat" style="padding:3px 6px; font-size:12px; border:1px solid #d1d5db; border-radius:4px">
+          ${CATEGORIES.map(c => `<option value="${c.id}">${c.id === '' ? '🍴 カテゴリ' : c.label}</option>`).join('')}
+        </select>
         <span id="pl-count" class="hint-sm" style="margin-left:auto; font-size:11px"></span>
       </div>
     </div>
@@ -225,6 +230,9 @@ export async function renderPlaces() {
   const refresh = () => {
     const fLiked   = document.getElementById('pl-f-liked')  .checked;
     const fVisited = document.getElementById('pl-f-visited').checked;
+    // v1271 中村さん要望: 店名 (部分一致、大小無視) と カテゴリ で絞る。
+    const fTitle = (document.getElementById('pl-f-title')?.value || '').trim().toLowerCase();
+    const fCat   = document.getElementById('pl-f-cat')?.value || '';
     // v885 新着モードでは地図内フィルタは適用しない (地図が表示されていないので)
     const fBounds  = (typeof viewMode !== 'undefined' && viewMode === 'recent')
                      ? false
@@ -233,6 +241,8 @@ export async function renderPlaces() {
     const items = allItems.filter(p => {
       if (fLiked   && !p.liked_by_me)   return false;
       if (fVisited && !p.visited_by_me) return false;
+      if (fCat     && p.category !== fCat) return false;
+      if (fTitle   && !(String(p.title || '').toLowerCase().includes(fTitle))) return false;
       // v734 #343 地図内のみフィルタが ON のとき、緯度経度未設定の店は除外 (含めると無条件で残ってしまうので)。
       if (bounds) {
         if (p.lat == null || p.lng == null) return false;
@@ -247,6 +257,8 @@ export async function renderPlaces() {
       const mItems = allItems.filter(p => {
         if (fLiked   && !p.liked_by_me)   return false;
         if (fVisited && !p.visited_by_me) return false;
+        if (fCat     && p.category !== fCat) return false;
+        if (fTitle   && !(String(p.title || '').toLowerCase().includes(fTitle))) return false;
         return true;
       });
       for (const p of mItems) {
@@ -355,6 +367,9 @@ export async function renderPlaces() {
   document.getElementById('pl-f-liked')  .addEventListener('change', refresh);
   document.getElementById('pl-f-visited').addEventListener('change', refresh);
   document.getElementById('pl-f-bounds') .addEventListener('change', refresh);
+  // v1271 店名/カテゴリ 絞り込み
+  document.getElementById('pl-f-cat')    ?.addEventListener('change', refresh);
+  document.getElementById('pl-f-title')  ?.addEventListener('input',  refresh);
   // v730 #338 地図移動でリスト再フィルタ (デフォルト「地図内のみ」 ON)
   if (map) map.on('moveend', refresh);
 
