@@ -4122,7 +4122,18 @@ async function renderFreshTasks() {
     const d = await get('/api/tasks');
     const items = d.items || [];
     const myActive = items.filter(t => t.my_status === 'claimed' || t.my_status === 'reported');
-    const available = items.filter(t => t.can_claim).slice(0, 5);
+    // v1273 中村さん指摘「指名タスクでないと 募集が トップページで 見ることができず、
+    //   参加率が上がらない → 募集系は全体に見える方がいい」
+    //   従来: can_claim=true (対象学年 + 未指名) だけ表示 → 対象学年外は見えなかった
+    //   変更: open な 未指名タスク は 対象学年外 でも 表示 (対象学年 badge付き)、
+    //         指名タスクで自分が指名されてる分は 従来通り表示 (通知経路もある)。
+    //         自分の依頼したものと 既に引き受け中のもの は 除外。
+    const available = items.filter(t =>
+      t.status === 'open' && !t.is_mine && !t.my_status &&
+      // 未指名: 全員に表示 / 指名: 自分が指名されてれば表示 (元の tasks.php filter で
+      //   指名タスクは 対象者以外には rows に来ないので、これで実質は 従来通り)
+      (!t.assigned_user_ids || t.assigned_user_ids.length === 0 || t.is_assigned_to_me)
+    ).slice(0, 5);
 
     if (myActive.length) {
       myCard.hidden = false;
@@ -4159,18 +4170,30 @@ async function renderFreshTasks() {
       root.innerHTML = addLink;
       return;
     }
-    root.innerHTML = available.map(t => `
-      <a class="list-item" href="#/tasks/${t.id}">
+    root.innerHTML = available.map(t => {
+      // v1273 対象外の学年でも 表示するが、その旨 を badge で明示。 詳細画面 (tap で 遷移)
+      //   でも 「引き受けボタン」 が 出ない ので 状態 は 一貫。
+      const outOfAudience = !t.can_claim && (!t.assigned_user_ids || t.assigned_user_ids.length === 0);
+      // audience_grades は tasks.php では CSV 文字列 (例: "M2,B4")
+      const audLabel = t.audience_grades
+        ? String(t.audience_grades).split(',').map(s => s.trim()).filter(Boolean).join(' / ')
+        : '';
+      const audBadge = (outOfAudience && audLabel)
+        ? `<span class="tag" style="background:#e5e7eb; color:#6b7280; font-size:10px; margin-left:4px">対象: ${escapeHtml(audLabel)}</span>`
+        : '';
+      const dimStyle = outOfAudience ? 'opacity:0.75' : '';
+      return `
+      <a class="list-item" href="#/tasks/${t.id}" style="${dimStyle}">
         <div style="display:flex; align-items:center; gap:8px; flex:1">
           ${avatarHtml(t.requester_name, t.requester_avatar_url, 'sm')}
           <div>
-            <div class="bold">${escapeHtml(t.title)}</div>
+            <div class="bold">${escapeHtml(t.title)}${audBadge}</div>
             <div class="meta">${escapeHtml(t.requester_name)} · 残 ${t.remaining ?? '-'}人${t.deadline ? ' · 締切 ' + escapeHtml(t.deadline) : ''}</div>
           </div>
         </div>
         <div class=" bold text-primary">${t.reward}pt</div>
-      </a>
-    `).join('') + addLink;
+      </a>`;
+    }).join('') + addLink;
   } catch (e) {
     root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
