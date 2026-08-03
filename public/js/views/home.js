@@ -665,11 +665,11 @@ export async function renderHome() {
     <!-- v1238 nkmr-albums (Google Photos 列挙) widget 撤去。 下 の photo-random で 代替。 -->
 
     <!-- v1237 fb (中村さん要望) photo.nkmr.io から ランダム 6 枚 (seed=YYYYMMDD で 1 日固定)。
-         タップ で ライトボックス、 右上 「📺 フォトフレーム」 で フルスクリーン スライド。 -->
+         v1268 で photo.js の アルバム UI を撤去、右上リンクを photo.nkmr.io 直リンクに差替え。 -->
     <div class="card" id="home-photo-random-card" data-card-id="photo-random" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">🎲 今日のラボフォト</h2>
-        <a href="#/photo/frame" class="hint" style="margin-left:auto">📺 フォトフレーム →</a>
+        <a href="https://photo.nkmr.io" target="_blank" rel="noopener" class="hint" style="margin-left:auto">📷 全アルバム (photo.nkmr.io) →</a>
       </div>
       <div id="home-photo-random"><div class="home-skel-bars"></div></div>
     </div>

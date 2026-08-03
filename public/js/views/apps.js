@@ -129,9 +129,8 @@ export const APPS = [
   { id: 'fund-portal',    cat: 'lab-mgmt', url: 'https://fund.nkmr.io', title: '💴 研究費ポータル (fund.nkmr.io)',
     desc: '中村研の 予算執行 DB。 科研費 / 校費 / 各種 fund の 予定 と 実績、 アルバイト代の 登録、 支払明細、 予算残高 まで。 nkmr-SSO で保護。 自分宛の 支払いだけ を LabPay 内で 見たい 時 は 💴 自分宛の研究費支払い を どうぞ。', defaultVisible: true },
   // v1238 中村研 写真基盤 (Google Photos 脱出後の自前アルバム)
-  //   v1238 で 旧 nkmr-albums (Google Photos 列挙) を 撤去、 photo (LabPay 内) を 主役 に。
-  { id: 'photo',          cat: 'shared', url: '#/photo', title: '🖼 フォトアルバム (LabPay内)',
-    desc: 'photo.nkmr.ioのアルバムをLabPay内で閲覧。アルバム一覧→タイル→タップで全画面ライトボックス (前後スワイプ可)。タグ / タイトルで絞り込み。📺 フォトフレームでフルスクリーンスライドも。nkmr-SSOで保護。', defaultVisible: true },
+  //   v1268 中村さん指示「もう直接 photo.nkmr.io に飛ばしたほうが良い」→
+  //     LabPay 内 photo エントリは撤去 し photo-portal (外部リンク) 一本化。
   // v1251 AI サブスク (共通、 chai.nkmr.io / file.nkmr.io で 使う 1 週間 500pt サブスク)
   { id: 'ai-sub',         cat: 'shared', url: '#/ai-sub', title: '🤖 AIサブスク (共通)',
     desc: '1週間500ptの自動更新サブスク。契約中は論文要約 / 全訳 / DeepResearch / 実験計画書 / 原稿 / 査読 / リライター / 研究特化AIチャットが全部無料に。加えてchai.nkmr.io (ChatGPT/Claude風) やfile.nkmr.io (ファイルブラウザAI) 等の外部サービスでもフル機能。残高500ptを切ると自動解約。', defaultVisible: true },
@@ -269,8 +268,7 @@ const CATEGORY_ORDER = {
   ],
   // v1001 共有タブ (中村さん指定順) / v1238 nkmr-albums 撤去 → photo + photo-portal を 最上位 に
   'shared': [
-    'photo',                        // 🖼 フォト アルバム (LabPay 内) v1234
-    'photo-portal',                 // 📷 photo.nkmr.io を 開く (外部) v1229
+    'photo-portal',                 // 📷 photo.nkmr.io を 開く (外部) v1229 (v1268 で 唯一)
     'ai-sub',                       // 🤖 AI サブスク v1251
     'zemi-videos',                  // 🎥 ゼミ動画
     'chat-rooms',                   // 💬 チャット
