@@ -2930,11 +2930,15 @@ async function renderScreenSharesWidget() {
             <span style="opacity:0.7">${target}</span>
           </div>
           ${s.body ? `<div style="font-size:13px; margin-bottom:4px; white-space:pre-wrap">${escapeHtml(s.body)}</div>` : ''}
-          <a href="${escapeHtml(s.image_url)}" target="_blank" rel="noopener">
-            <img src="${escapeHtml(s.image_url)}" style="max-width:100%; max-height:400px; border-radius:8px; display:block">
-          </a>
+          <img data-ss-full="${escapeHtml(s.image_url)}" src="${escapeHtml(s.image_url)}" style="max-width:100%; max-height:400px; border-radius:8px; display:block; cursor:zoom-in">
         </div>`;
     }).join('');
+    // v1269 新タブ open ではなく 同タブ lightbox に (中村さん fb: PC はタブ閉じるしか
+    //   戻る術がなくわかりづらい / スマホは戻れない)。
+    const { openImageLightbox } = await import('../lightbox.js');
+    root.querySelectorAll('[data-ss-full]').forEach(img => {
+      img.addEventListener('click', () => openImageLightbox(img.dataset.ssFull));
+    });
   } catch (e) {
     card.hidden = true;
   }

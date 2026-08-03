@@ -4,6 +4,7 @@
 import { get, post, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { openImageLightbox } from '../lightbox.js';
 
 export async function renderScreenShares() {
   const app = document.getElementById('app');
@@ -198,11 +199,17 @@ async function loadActive() {
             ${s.is_mine ? `<button class="btn danger" data-rm="${s.id}" style="margin-left:auto; font-size:11px; padding:2px 8px">削除</button>` : ''}
           </div>
           ${s.body ? `<div style="white-space:pre-wrap; margin-bottom:6px">${escapeHtml(s.body)}</div>` : ''}
-          <a href="${escapeHtml(s.image_url)}" target="_blank" rel="noopener">
-            <img src="${escapeHtml(s.image_url)}" style="max-width:100%; max-height:600px; border-radius:8px; display:block">
-          </a>
+          <img data-ss-full="${escapeHtml(s.image_url)}" src="${escapeHtml(s.image_url)}" style="max-width:100%; max-height:600px; border-radius:8px; display:block; cursor:zoom-in">
         </div>`;
     }).join('');
+    // v1269 中村さん指摘「PC は新タブで開かれてタブ閉じるしか戻る術がない、スマホは
+    //   アプリ閉じる以外なし」→ 新タブ (target=_blank) を止めて、 タップで lightbox
+    //   (同タブ内オーバーレイ) を開く。 lightbox の ✕ で 一覧に戻れる。
+    root.querySelectorAll('[data-ss-full]').forEach(img => {
+      img.addEventListener('click', () => {
+        openImageLightbox(img.dataset.ssFull);
+      });
+    });
     root.querySelectorAll('[data-rm]').forEach(b => {
       b.addEventListener('click', async () => {
         if (!confirm('この共有を削除しますか?')) return;
