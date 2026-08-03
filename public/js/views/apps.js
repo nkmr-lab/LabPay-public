@@ -141,7 +141,7 @@ export const APPS = [
     desc: '研究室メンバー紹介ポスターを Web で入力 → pptx 自動生成。顔写真 / 名前 / 学年 / 研究テーマ / 趣味などを打ち込むと綺麗な A3 ポスターの pptx が落ちてくる。新歓 / 学会準備 / 研究室訪問対応に。 nkmr-SSO で保護。', defaultVisible: true },
   { id: 'file-browser',   cat: 'tools',    url: 'https://file.nkmr.io', title: '🗄 ファイルブラウザ',
     desc: 'ラボ NFS / VPS 上のファイルをブラウザで一覧・編集・アップロード・ダウンロード。 VS Code Remote がメモリ枯渇するときの代替。 Google 認証で保護、 realpath で閉じ込め済。', defaultVisible: true },
-  { id: 'db-admin',       cat: 'tools',    url: 'https://db2.nkmr.io', title: '🗃 データベース (phpMyAdmin)',
+  { id: 'db-admin',       cat: 'tools',    url: 'https://db.nkmr.io', title: '🗃 データベース (phpMyAdmin)',
     desc: 'MariaDB (home2) を phpMyAdmin で直接触る。 LabPay 本体・poster・mojirage 等の DB を SQL で確認/編集。 admin 権限が必要な人向け。', defaultVisible: true },
   // v934 かんばん (Trello-like)
   // v1002 個人家計簿

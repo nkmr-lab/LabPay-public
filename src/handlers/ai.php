@@ -5284,7 +5284,7 @@ LabPay のトップナビ (下段タブ、 v1132 で 8 タブに整理):
 - **💬 AI 対話 / 翻訳** (#/chat) / **🌐 画像和訳** (#/translate) / **🤖 操作ガイド AI** (#/help、← 今あなたと話している画面)
 - **📞 連絡先** (#/contacts) / **📚 Scrapbox 履歴** (#/scrapbox) / **🕸 関係性グラフ** (#/network)
 - **🧩 ウィジェットセンター** (#/widgets)
-- **🗄 ファイルブラウザ** (https://file.nkmr.io) / **🗃 データベース (phpMyAdmin)** (https://db2.nkmr.io)
+- **🗄 ファイルブラウザ** (https://file.nkmr.io) / **🗃 データベース (phpMyAdmin)** (https://db.nkmr.io)
 
 主要 AI 機能:
 - 場所名 → 緯度経度 + 説明 + 画像自動入力 (タイトル横「🔍 場所を検索」)
