@@ -209,6 +209,20 @@ export async function renderChatRoom({ params }) {
            閉じるのは 右上の 丸 fs-close-btn (router 生成) 一つに 統一。
            従来 fs-close-btn が 「1 発 で 閉じない」問題 は チャンネル 切替 で fsInnerNavCount が
            積み上がって いた こと。 chat-rooms 描画時 に resetFsInnerNav() で ゼロ に 戻して 対応。 -->
+      <!-- v1272 中村さん指摘「DM どうやるか わからなかった」→ nav tabs 右端に 「+ DM」
+           ボタンを常時表示。 click で ユーザ選択 popover を開き、選ぶと DM に即遷移。 -->
+      <button id="cr-new-dm-btn" type="button"
+              style="flex:none; padding:0 12px; background:transparent; color:#fff; border:none; border-left:1px solid rgba(255,255,255,0.25); cursor:pointer; font-size:13px; white-space:nowrap"
+              title="新規 DM を開始">+ DM</button>
+    </div>
+    <!-- DM ユーザ選択 popover (初期は hidden) -->
+    <div id="cr-new-dm-pop" hidden
+         style="position:fixed; top:52px; right:8px; z-index:100; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.15); padding:10px; width:280px; max-width:calc(100vw - 16px)">
+      <div class="hint-sm" style="font-size:11px; color:#666; margin-bottom:6px">💬 DM したい相手を選ぶ</div>
+      <div style="display:flex; gap:6px">
+        <select id="cr-new-dm-select" style="flex:1; padding:4px; font-size:13px"><option value="">読み込み中…</option></select>
+        <button id="cr-new-dm-go" class="btn primary" style="flex:none; padding:4px 12px; font-size:12px">開く</button>
+      </div>
     </div>
     <div id="cr-panes" style="flex:1; min-height:0; display:grid; gap:0; grid-template-columns:${isChannel ? 'repeat(' + paneRooms.length + ', 1fr)' : '1fr'}"></div>
   `;
@@ -232,6 +246,52 @@ export async function renderChatRoom({ params }) {
   _mediaQuery = window.matchMedia(MOBILE_QUERY);
   _mediaListener = () => applyPaneVisibility();
   _mediaQuery.addEventListener('change', _mediaListener);
+
+  // v1272 「+ DM」button ⇔ ユーザ選択 popover の 開閉 と 遷移。
+  const dmBtn = document.getElementById('cr-new-dm-btn');
+  const dmPop = document.getElementById('cr-new-dm-pop');
+  const dmSel = document.getElementById('cr-new-dm-select');
+  const dmGo  = document.getElementById('cr-new-dm-go');
+  if (dmBtn && dmPop && dmSel && dmGo) {
+    let usersLoaded = false;
+    const loadUsers = async () => {
+      if (usersLoaded) return;
+      try {
+        const u = await get('/api/users');
+        const meId = Number(state.me?.id);
+        dmSel.innerHTML = '<option value="">相手を選ぶ…</option>' +
+          (u.items || [])
+            .filter(x => x.id !== meId)
+            .map(x => `<option value="${x.id}">${escapeHtml(x.display_name)}${x.grade ? ` [${escapeHtml(x.grade)}]` : ''}</option>`)
+            .join('');
+        usersLoaded = true;
+      } catch (_) {
+        dmSel.innerHTML = '<option value="">読み込み失敗</option>';
+      }
+    };
+    dmBtn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const wasHidden = dmPop.hidden;
+      dmPop.hidden = !wasHidden;
+      if (!wasHidden) return;
+      await loadUsers();
+    });
+    dmGo.addEventListener('click', () => {
+      const v = Number(dmSel.value);
+      if (!v) { toast('相手を選んでください'); return; }
+      const meId = Number(state.me?.id);
+      const a = Math.min(meId, v);
+      const b = Math.max(meId, v);
+      dmPop.hidden = true;
+      navigate(`#/chat-rooms/dm:${a}-${b}`);
+    });
+    // popover 外クリック で閉じる
+    document.addEventListener('click', (ev) => {
+      if (dmPop.hidden) return;
+      if (dmPop.contains(ev.target) || dmBtn.contains(ev.target)) return;
+      dmPop.hidden = true;
+    });
+  }
 }
 
 function cleanupMediaListener() {
