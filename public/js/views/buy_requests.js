@@ -12,7 +12,7 @@
 //   詳細: 情報表示 + admin なら買った/却下モーダル、依頼者なら編集/取消
 
 import { get, post, patch, del } from '../api.js';
-import { escapeHtml, navigate } from '../router.js';
+import { escapeHtml, navigate, resetFsInnerNav } from '../router.js';
 import { state, toast } from '../app.js';
 
 const STATUS_LABEL = {
@@ -152,6 +152,9 @@ function wireHeader() {
 function wireTabs() {
   document.querySelectorAll('[data-br-tab]').forEach(b => {
     b.addEventListener('click', () => {
+      // v1267 room_requests と同じ症状対策: タブ切替は fullscreen 内部 nav で
+      //   カウント積まれるので、切替時にリセットして「✕ 1発で entry に戻る」に。
+      resetFsInnerNav();
       navigate('#/buy-requests?status=' + b.dataset.brTab);
     });
   });

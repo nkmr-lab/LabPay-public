@@ -257,9 +257,19 @@ function postCard(p, opts = {}) {
   // v736 #346 投稿者本人 / admin は位置情報だけを削除できる
   const canClearLoc = isMine || isAdmin;
   const loc = (p.lat !== null && p.lng !== null)
-    ? `<a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener" class="hint" style="font-size:11px">📍 地図</a>${canClearLoc ? `<button class="btn" data-clear-loc="${p.id}" title="位置情報だけを削除" style="font-size:10px; padding:0 5px; line-height:1.6">📍✕</button>` : ''}`
+    ? `<a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener" class="hint" style="font-size:11px; white-space:nowrap">📍 地図</a>${canClearLoc ? `<button class="btn" data-clear-loc="${p.id}" title="位置情報だけを削除" style="font-size:10px; padding:0 5px; line-height:1.6">📍✕</button>` : ''}`
     : '';
   // v525 #180 アバター + 投稿者名をタップでその人のだけに絞り込み (?user=ID)
+  // v1267 中村さん指摘「投稿マップ (地図リンク) の位置が左に大幅にズレている」→
+  //   .row > * { flex:1 1 auto } で 「時刻」span が 伸びて 地図リンク が 折り返し
+  //   時に 2 行目 の 左端 に飛んでいた。 地図 + 削除 を 「右寄せグループ」 で 囲み、
+  //   時刻 の 直後 に 空白 → 右端 に 地図と削除 が並ぶ (折り返しても一緒に折り返す)。
+  const rightGroup = (loc || canDelete)
+    ? `<div style="margin-left:auto; display:flex; gap:6px; align-items:center; flex:none">
+         ${loc}
+         ${canDelete ? `<button class="btn" data-del-post="${p.id}" style="font-size:11px; padding:2px 6px">削除</button>` : ''}
+       </div>`
+    : '';
   return `
     <div class="list-item" style="align-items:flex-start; gap:8px" data-post-id="${p.id}">
       <a href="#/sns?user=${p.user_id}" style="text-decoration:none; flex:none">${avatarHtml(p.display_name, p.avatar_url, 'sm')}</a>
@@ -267,8 +277,7 @@ function postCard(p, opts = {}) {
         <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
           <a href="#/sns?user=${p.user_id}" class="bold" style="text-decoration:none; color:inherit">${escapeHtml(p.display_name)}</a>
           <span class="hint" style="font-size:11px">${fmtRelative(p.created_at_iso || p.created_at)}</span>
-          ${loc}
-          ${canDelete ? `<button class="btn" data-del-post="${p.id}" style="margin-left:auto; font-size:11px; padding:2px 6px">削除</button>` : ''}
+          ${rightGroup}
         </div>
         ${p.body ? `<div style="font-size:14px; line-height:1.5; margin-top:2px; overflow-wrap:anywhere; word-break:break-word; min-width:0">${renderBodyHtml(p.body)}</div>` : ''}
         ${renderImagesLayout(p, canRotImage)}

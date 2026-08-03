@@ -13,7 +13,7 @@
 // route: #/room-requests, #/room-requests/new, #/room-requests/:id/edit
 
 import { get, post, patch, del } from '../api.js';
-import { escapeHtml, navigate } from '../router.js';
+import { escapeHtml, navigate, resetFsInnerNav } from '../router.js';
 import { toast } from '../app.js';
 
 const FLOOR_GUIDE_URL = 'https://scrapbox.io/nkmr-lab/%E4%B8%AD%E9%87%8E%E3%82%AD%E3%83%A3%E3%83%B3%E3%83%91%E3%82%B9%E3%83%95%E3%83%AD%E3%82%A2%E6%83%85%E5%A0%B1';
@@ -186,6 +186,10 @@ function renderCard(r, isAdmin) {
 function wireTabs() {
   document.querySelectorAll('[data-rr-tab]').forEach(b => {
     b.addEventListener('click', () => {
+      // v1267 中村さん報告「依頼中以外を開くと右上の ✕ で 一発で消えない」→
+      //   タブ切替は fullscreen の内部 nav でカウント積まれる仕様なので、切替時に
+      //   カウントリセットして「✕ を 1 発押せば entry (前ページ) に直行」させる。
+      resetFsInnerNav();
       navigate('#/room-requests?status=' + b.dataset.rrTab);
     });
   });
