@@ -131,6 +131,9 @@ export const APPS = [
   // v1238 中村研 写真基盤 (Google Photos 脱出後の自前アルバム)
   //   v1268 中村さん指示「もう直接 photo.nkmr.io に飛ばしたほうが良い」→
   //     LabPay 内 photo エントリは撤去 し photo-portal (外部リンク) 一本化。
+  // v1274 娯楽ミッション (中村さん要望 D、主催者 + SYSTEM 50/50 出資 の ゲリラ主催型)
+  { id: 'game-missions', cat: 'game', url: '#/game-missions', title: '🎯 娯楽ミッション',
+    desc: '「setlogに1投稿で20pt」等のゲリラミッションを主催・参加。 主催者が出したptと同額をLabPayが補助 (50/50) するので、実質2倍の賞金プールに。 参加者は対象機能を使うだけで自動で報酬支給。', defaultVisible: true },
   // v1251 AI サブスク (共通、 chai.nkmr.io / file.nkmr.io で 使う 1 週間 500pt サブスク)
   { id: 'ai-sub',         cat: 'shared', url: '#/ai-sub', title: '🤖 AIサブスク (共通)',
     desc: '1週間500ptの自動更新サブスク。契約中は論文要約 / 全訳 / DeepResearch / 実験計画書 / 原稿 / 査読 / リライター / 研究特化AIチャットが全部無料に。加えてchai.nkmr.io (ChatGPT/Claude風) やfile.nkmr.io (ファイルブラウザAI) 等の外部サービスでもフル機能。残高500ptを切ると自動解約。', defaultVisible: true },

@@ -34,6 +34,11 @@ class Ledger {
         'exp_plan_check',
         // v1251 AI サブスク (1 週間 500pt、 chai.nkmr.io / file.nkmr.io 等 で 参照)
         'ai_sub',
+        // v1274 娯楽ミッション (中村さん要望 D、主催者 + SYSTEM 50/50 出資)
+        //   起票: host/SYSTEM → ESCROW (mission_deposit)
+        //   達成: ESCROW → 参加者 (mission_reward)
+        //   終了 未消化 返還: ESCROW → host/SYSTEM 半々 (mission_refund)
+        'mission_deposit','mission_reward','mission_refund',
     ];
 
     // Resolve account id by user id. Caller must have started a transaction if locking.

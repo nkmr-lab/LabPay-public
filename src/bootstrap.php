@@ -565,6 +565,7 @@ require_once __DIR__ . '/handlers/kanban.php'; // v934 かんばんボード (Tr
 require_once __DIR__ . '/handlers/buy_requests.php'; // v1080 購入依頼 (#want_to_buy の後継)
 require_once __DIR__ . '/handlers/room_requests.php'; // v1230 教室予約依頼 (fb#502)
 require_once __DIR__ . '/handlers/ai_sub.php'; // v1251 AI サブスク (1 週間 500pt、 chai.nkmr.io / file.nkmr.io 用)
+require_once __DIR__ . '/handlers/game_missions.php'; // v1274 娯楽ミッション (主催者 + SYSTEM 50/50 出資)
 require_once __DIR__ . '/handlers/public_codes.php'; // v941 公開機能の短縮コード
 require_once __DIR__ . '/handlers/joint.php'; // v941 合同研究会用投票
 require_once __DIR__ . '/handlers/public_polls.php'; // v942 公開投票 (誰でも投票)

@@ -246,6 +246,7 @@ export const HOME_CARDS = [
   { id: 'asking',         title: '依頼中 (自分が起案した未完了のもの)' },
   { id: 'fresh-listings', title: '新規入荷' },
   { id: 'invitations',    title: '募集' },
+  { id: 'game-missions',  title: '🎯 開催中の娯楽ミッション' }, // v1274 中村さん要望 D
   { id: 'places',         title: '🍴 食べある記 (新着)' },
   { id: 'notices',        title: '📢 重要連絡 / 学会情報' }, // v514 #139 新規
   { id: 'presence',       title: '今ラボにいる人' },
@@ -280,6 +281,7 @@ export const HOME_CARDS = [
 const DEFAULT_VISIBLE_HOME_CARDS = [
   'my-timers', 'pending', 'groups', 'sns', 'asking',
   'fresh-listings', 'invitations', 'places', 'notices', 'presence',
+  'game-missions',  // v1274 中村さん要望 D (デフォルト ON、 参加率向上目的)
   // v605 ビンゴウィジェットは残高横のサマリで代替できるのでデフォルト OFF に戻す
   'recruiting',     // v641 デフォルト ON
   'entertainment',  // v649 デフォルト ON
@@ -536,6 +538,15 @@ export async function renderHome() {
       <div id="home-invs" class="list"><div class="home-skel-bars"></div></div>
     </div>
 
+    <!-- v1274 娯楽ミッション widget (中村さん要望 D)。開催中の 3 件を表示、無ければ 主催誘導 -->
+    <div class="card" id="home-gm-card" data-card-id="game-missions" hidden>
+      <div class="row center" style="margin-bottom:6px">
+        <h2 class="row-title">🎯 開催中の娯楽ミッション</h2>
+        <a href="#/game-missions" class="hint">一覧 →</a>
+      </div>
+      <div id="home-gm" class="list"><div class="home-skel-bars"></div></div>
+    </div>
+
     <div class="card" id="home-pl-card" data-card-id="playlists" hidden>
       <div class="row center" style="margin-bottom:6px">
         <h2 class="row-title">🎵 新着プレイリスト</h2>
@@ -771,6 +782,7 @@ export async function renderHome() {
     { cardId: 'calendar',       fn: renderCalendarEvents,  label: 'calendar' },
     { cardId: 'groups',         fn: renderMyGroups,        label: 'mygroups' },
     { cardId: 'invitations',    fn: renderFreshInvitations, label: 'invitations' },
+    { cardId: 'game-missions',  fn: renderGameMissionsWidget, label: 'game-missions' }, // v1274
     { cardId: 'playlists',      fn: renderFreshPlaylists,  label: 'playlists' },
     { cardId: 'fresh-listings', fn: renderFreshListings,   label: 'freshlistings' },
     { cardId: 'fresh-tasks',    fn: renderFreshTasks,      label: 'freshtasks' },
@@ -2911,6 +2923,30 @@ async function renderItNewsWidget() {
 
 // v718 #314 🖼 共有中の画像 widget。アクティブな共有があれば大きく表示。
 //   無ければカードごと隠して場所を取らない。
+// v1274 娯楽ミッション home widget。 開催中 の 上位 3 件 を 表示、 無ければ カード 非表示。
+async function renderGameMissionsWidget() {
+  const card = document.getElementById('home-gm-card');
+  const root = document.getElementById('home-gm');
+  if (!card || !root) return;
+  try {
+    const d = await get('/api/game-missions');
+    const items = (d.items || []).filter(m => m.status === 'active').slice(0, 3);
+    if (!items.length) { card.hidden = true; return; }
+    card.hidden = false;
+    root.innerHTML = items.map(m => {
+      const pool = (m.host_deposit_pt|0) + (m.system_grant_pt|0);
+      const remain = m.remaining;
+      const done = m.completed_by_me ? '<span style="color:#059669; font-weight:700; margin-left:4px; font-size:11px">✓ 達成済</span>' : '';
+      return `<a class="list-item" href="#/game-missions/${m.id}" style="padding:8px 4px">
+        <div style="flex:1; min-width:0">
+          <div class="bold" style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">🎯 ${escapeHtml(m.title)}${done}</div>
+          <div class="hint-sm" style="font-size:11px">${escapeHtml(m.feature_label || m.target_feature)} · 報酬 ${m.reward_per_participant}pt · 残 ${remain}枠 · プール ${pool}pt</div>
+        </div>
+      </a>`;
+    }).join('') + `<a class="list-item add-row" href="#/game-missions"><div class="grow hint">一覧 / 主催する →</div></a>`;
+  } catch (_) { card.hidden = true; }
+}
+
 async function renderScreenSharesWidget() {
   const card = document.getElementById('home-ss-card');
   const root = document.getElementById('home-ss');

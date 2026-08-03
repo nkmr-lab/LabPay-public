@@ -89,6 +89,9 @@ function setlog_create(PDO $pdo, array $cfg): void {
     $id = (int)$pdo->lastInsertId();
     $rr = $pdo->prepare(_setlog_base_sql() . " AND c.id = ?");
     $rr->execute([$id]);
+    // v1274 娯楽ミッション hook: 該当 mission があれば 自動 支給。
+    //   失敗は swallow (setlog 投稿自体を止めない)。
+    try { gm_check_and_reward($pdo, $cfg, (int)$u['id'], 'setlog'); } catch (Throwable $e) {}
     json_response(['ok' => true, 'clip' => _setlog_shape($rr->fetch(PDO::FETCH_ASSOC), (int)$u['id'])]);
 }
 
