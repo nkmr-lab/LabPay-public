@@ -58,8 +58,9 @@ export async function renderPaperReview() {
         <div class="hint-sm" id="pr-response-pdf-status" style="font-size:11px; margin-top:4px"></div>
         <div class="hint-sm" style="font-size:11px; margin-top:4px; color:#6b21a8">入力 (テキスト or PDF) すると、査読指摘が回答でカバーされているか / 論文本文と矛盾していないか / 安直な「N増・再実験」で流していないかまで評価します。両方入れたら両方参照。</div>
       </label>
+      ${state.me?.ai_sub_active ? '<div style="background:#d1fae5; color:#065f46; padding:6px 10px; border-radius:6px; font-size:12px; margin:6px 0; text-align:center">🤖 <b>AIサブスク契約中</b> — この機能は無料でご利用いただけます</div>' : ''}
       <div class="row" style="gap:6px; justify-content:flex-end">
-        <button id="pr-go" class="primary" disabled>📄 査読開始</button>
+        <button id="pr-go" class="primary" disabled>📄 査読開始${state.me?.ai_sub_active ? ' (無料)' : ''}</button>
       </div>
     </div>
     <div id="pr-result"></div>
@@ -119,8 +120,11 @@ async function loadSettings() {
     const refresh = () => {
       const m = sel.value;
       const pt = cachedSettings.models[m] || 10;
-      if (info) info.textContent = `選択中: ${m} ・ 1 回 ${pt}pt`;
-      if (btn) btn.textContent = `📄 査読開始 (${pt}pt)`;
+      const subbed = !!state.me?.ai_sub_active;
+      if (info) info.textContent = subbed
+        ? `選択中: ${m} ・ AIサブスク契約中で無料 (通常 ${pt}pt)`
+        : `選択中: ${m} ・ 1 回 ${pt}pt`;
+      if (btn) btn.textContent = subbed ? `📄 査読開始 (無料)` : `📄 査読開始 (${pt}pt)`;
     };
     sel.addEventListener('change', refresh);
     refresh();

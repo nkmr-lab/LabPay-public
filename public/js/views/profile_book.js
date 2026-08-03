@@ -117,7 +117,10 @@ async function renderList(root) {
   // /api/users から人一覧を取ってきて、各人へのリンク
   try {
     const d = await get('/api/users');
-    const users = (d.items || []).filter(u => u.kind === 'human' && u.id !== state.me?.id);
+    // v1275 fb#507「みんなのプロフ帳が見えない」修正: /api/users は SELECT に kind を
+    //   含めていないため u.kind === 'human' が常に false になり全員弾かれていた。
+    //   users API 側で既に WHERE kind='human' 済なので二重 filter 不要。
+    const users = (d.items || []).filter(u => u.id !== state.me?.id);
     if (!users.length) { root.innerHTML = '<div class="pb-card">他のメンバーがいません</div>'; return; }
     root.innerHTML = `
       <div class="pb-card">

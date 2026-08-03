@@ -67,8 +67,9 @@ export async function renderDeepResearch() {
             あとから公開 ON にすると半額分返金 / 公開 OFF に戻すと半額割引分追加課金されます。
           </div>
         </div>
+        ${state.me?.ai_sub_active ? '<div style="background:#d1fae5; color:#065f46; padding:6px 10px; border-radius:6px; font-size:12px; margin:6px 0; text-align:center">🤖 <b>AIサブスク契約中</b> — この機能は無料でご利用いただけます</div>' : ''}
         <div class="row" style="gap:6px; justify-content:flex-end">
-          <button id="dr-go" class="primary" disabled>🔎 調査開始</button>
+          <button id="dr-go" class="primary" disabled>🔎 調査開始${state.me?.ai_sub_active ? ' (無料)' : ''}</button>
         </div>
       </div>
     </details>

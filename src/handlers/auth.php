@@ -17,6 +17,10 @@ function route_auth(PDO $pdo, array $cfg, string $method, array $seg): void {
         $u['avatar_url']    = $row['avatar_url']    ?? null;
         $u['birthday_md']   = $row['birthday_md']   ?? null;
         $u['birthday_year'] = $row['birthday_year'] ?? null;
+        // v1275 fb#509: AI サブスク の active フラグ を user object に埋め込む。
+        //   state.me.ai_sub_active で 各 AI 機能 view が ボタンラベルに
+        //   「(サブスク中: 無料)」を出す判定に使う。
+        $u['ai_sub_active'] = ai_sub_is_active($pdo, (int)$u['id']);
         $stMac = $pdo->prepare('SELECT COUNT(*) FROM presence_devices WHERE user_id=?');
         $stMac->execute([$u['id']]);
         $hasMac = (int)$stMac->fetchColumn() > 0;

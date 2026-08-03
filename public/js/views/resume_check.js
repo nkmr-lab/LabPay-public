@@ -42,8 +42,9 @@ export async function renderResumeCheck() {
         <div class="bold" style="font-size:13px; margin-bottom:4px">原稿 PDF (10 MB まで)</div>
         <input id="rc-pdf" type="file" accept="application/pdf" class="input">
         <div class="hint-sm" style="margin-top:4px">図表入りで OK。 レイアウトのまま AI に渡るので論理展開が伝わりやすい。</div>
+        ${state.me?.ai_sub_active ? '<div style="background:#d1fae5; color:#065f46; padding:6px 10px; border-radius:6px; font-size:12px; margin:8px 0; text-align:center">🤖 <b>AIサブスク契約中</b> — この機能は無料でご利用いただけます</div>' : ''}
         <div style="display:flex; gap:8px; align-items:center; margin-top:10px">
-          <button id="rc-submit" class="btn primary">20pt を支払ってチェック依頼</button>
+          <button id="rc-submit" class="btn primary">${state.me?.ai_sub_active ? 'チェック依頼 (無料)' : '20pt を支払ってチェック依頼'}</button>
           <span class="hint-sm" id="rc-status"></span>
         </div>
       </div>

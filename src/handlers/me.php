@@ -63,6 +63,10 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         $u['birth_place']       = $row['birth_place']       ?? null;
         // Lab-Wi-Fi presence flag — used by the buy UI to grey out the purchase
         // button when the user is off the lab network (purchases are server-gated).
+        // v1275 fb#509: AI サブスク の active フラグ を user object に埋め込む
+        //   (state.me.ai_sub_active で 各 AI 機能 view から 参照 → ボタンラベルに
+        //   「(サブスク中: 無料)」を出す)。
+        $u['ai_sub_active'] = ai_sub_is_active($pdo, (int)$u['id']);
         json_response([
             'user' => $u,
             'balance' => $bal,

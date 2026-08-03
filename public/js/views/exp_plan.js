@@ -6,7 +6,7 @@
 
 import { escapeHtml, resetFsInnerNav } from '../router.js';
 import { get, post, del } from '../api.js';
-import { toast, setAiContext } from '../app.js';
+import { state, toast, setAiContext } from '../app.js';
 import { renderChecklistBox, renderAskAiButton } from '../ai_checklist.js';   // v1141 + v1144
 
 const MAX_CHARS = 40000;
@@ -71,8 +71,9 @@ export async function renderExpPlan() {
             style="width:100%; box-sizing:border-box; font-family:monospace; font-size:13px"></textarea>
           <div id="epc-count" class="hint-sm" style="text-align:right; margin-top:2px">0 / ${MAX_CHARS} 字</div>
         </label>
+        ${state.me?.ai_sub_active ? '<div style="background:#d1fae5; color:#065f46; padding:6px 10px; border-radius:6px; font-size:12px; margin:6px 0; text-align:center">🤖 <b>AIサブスク契約中</b> — この機能は無料でご利用いただけます</div>' : ''}
         <div class="row" style="gap:6px; margin-top:4px; flex-wrap:wrap">
-          <button id="epc-submit" class="btn primary">🧪 精査を依頼</button>
+          <button id="epc-submit" class="btn primary">🧪 精査を依頼${state.me?.ai_sub_active ? ' (無料)' : ''}</button>
           <button id="epc-clear" class="btn">クリア</button>
           <button id="epc-scrapbox" class="btn" title="Scrapbox のページ URL からタイトル + 本文を取り込みます (PAT 設定が必要)">🔗 Scrapboxから取り込む</button>
         </div>

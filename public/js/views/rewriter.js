@@ -35,8 +35,9 @@ export async function renderRewriter() {
           <input id="rw-target" class="input" type="number" min="10" max="5000" value="200">
         </label>
       </div>
+      ${state.me?.ai_sub_active ? '<div style="background:#d1fae5; color:#065f46; padding:6px 10px; border-radius:6px; font-size:12px; margin:8px 0; text-align:center">🤖 <b>AIサブスク契約中</b> — この機能は無料でご利用いただけます</div>' : ''}
       <div style="display:flex; gap:8px; align-items:center">
-        <button id="rw-go" class="btn primary">10pt を支払ってリライト</button>
+        <button id="rw-go" class="btn primary">${state.me?.ai_sub_active ? 'リライト (無料)' : '10pt を支払ってリライト'}</button>
         <span id="rw-status" class="hint-sm"></span>
       </div>
     </div>
@@ -71,7 +72,8 @@ export async function renderRewriter() {
       navigate('#/rewriter/' + r.id);
     } catch (e) {
       toast('失敗: ' + (e?.message || e));
-      btn.disabled = false; btn.textContent = '10pt を支払ってリライト';
+      btn.disabled = false;
+      btn.textContent = state.me?.ai_sub_active ? 'リライト (無料)' : '10pt を支払ってリライト';
       sts.textContent = '';
     }
   });
