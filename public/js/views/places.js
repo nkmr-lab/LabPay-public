@@ -21,6 +21,56 @@ const CATEGORIES = [
 ];
 const CAT_LBL = Object.fromEntries(CATEGORIES.map(c => [c.id, c.label]));
 
+// v1276 tag 分割ヘルパ: 半角/全角カンマ or 空白 で split → trim → 空除外。
+//   比較は 大文字小文字を無視するので、 呼び出し側で toLowerCase() する。
+function _splitTags(s) {
+  if (!s) return [];
+  return String(s).split(/[,，、\s]+/).map(x => x.trim()).filter(Boolean);
+}
+
+// v1276 全タグ chip cloud: 全 places の tags を集約 → 出現頻度順 上位表示、
+//   chip タップで pl-f-tags 入力欄をトグル (AND 絞込)。 現在選択中は反転色。
+function _renderPlacesTagCloud(allItems, selected) {
+  const el = document.getElementById('pl-tag-cloud');
+  if (!el) return;
+  const count = new Map();
+  for (const p of allItems) {
+    for (const t of _splitTags(p.tags)) {
+      const k = t.toLowerCase();
+      count.set(k, (count.get(k) || 0) + 1);
+    }
+  }
+  if (!count.size) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  const sel = new Set(selected);
+  const rows = [...count.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 24);
+  el.innerHTML = `
+    <div class="hint-sm" style="font-size:11px; margin-bottom:4px; color:#6b7280">🏷 タップで絞込追加/解除 (AND)</div>
+    <div style="display:flex; flex-wrap:wrap; gap:4px">
+      ${rows.map(([tag, n]) => {
+        const active = sel.has(tag);
+        const bg = active ? '#4a106d' : '#f3f4f6';
+        const fg = active ? '#fff'    : '#374151';
+        return `<button type="button" data-pl-tag="${escapeHtml(tag)}" style="background:${bg}; color:${fg}; border:1px solid #d1d5db; border-radius:12px; padding:2px 8px; font-size:11px; cursor:pointer; white-space:nowrap">${escapeHtml(tag)} <span style="opacity:0.6">${n}</span></button>`;
+      }).join('')}
+    </div>
+  `;
+  el.querySelectorAll('[data-pl-tag]').forEach(b => {
+    b.addEventListener('click', () => {
+      const inp = document.getElementById('pl-f-tags');
+      if (!inp) return;
+      const cur = _splitTags(inp.value).map(t => t.toLowerCase());
+      const tag = b.dataset.plTag;
+      const has = cur.includes(tag);
+      const next = has ? cur.filter(t => t !== tag) : [...cur, tag];
+      inp.value = next.join(', ');
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  });
+}
+
 function ratingStars(r) {
   if (r === null || r === undefined) return '';
   const full = Math.round(r);
@@ -119,9 +169,15 @@ export async function renderPlaces() {
         <select id="pl-f-cat" style="padding:3px 6px; font-size:12px; border:1px solid #d1d5db; border-radius:4px">
           ${CATEGORIES.map(c => `<option value="${c.id}">${c.id === '' ? '🍴 カテゴリ' : c.label}</option>`).join('')}
         </select>
+        <!-- v1276 中村さん要望「タグベースで絞り込みたい」 半角/全角カンマ or 空白区切りで AND 絞込。
+             全タグ一覧は下の chip cloud で確認 & タップ追記できる。 -->
+        <input type="search" id="pl-f-tags" placeholder="🏷 タグ (カンマ区切り)" style="padding:3px 8px; font-size:12px; border:1px solid #d1d5db; border-radius:4px; max-width:200px">
         <span id="pl-count" class="hint-sm" style="margin-left:auto; font-size:11px"></span>
       </div>
     </div>
+    <!-- v1276 全タグ chip cloud: allItems から集約して 出現頻度順 上位を chip 表示、
+         タップで pl-f-tags 入力欄に追記して即絞込。 chip 状態は refresh で塗り直し。 -->
+    <div id="pl-tag-cloud" class="card" style="padding:6px 10px; margin-bottom:6px; display:none"></div>
     <div id="pl-shell" class="is-${initialView}">
       <div id="pl-map-wrap">
         <div id="pl-map" style="height:100%; width:100%"></div>
@@ -233,16 +289,25 @@ export async function renderPlaces() {
     // v1271 中村さん要望: 店名 (部分一致、大小無視) と カテゴリ で絞る。
     const fTitle = (document.getElementById('pl-f-title')?.value || '').trim().toLowerCase();
     const fCat   = document.getElementById('pl-f-cat')?.value || '';
+    // v1276 タグ AND 絞込 (全部 マッチ するもの のみ)、 大小無視。
+    const fTags  = _splitTags(document.getElementById('pl-f-tags')?.value || '').map(t => t.toLowerCase());
     // v885 新着モードでは地図内フィルタは適用しない (地図が表示されていないので)
     const fBounds  = (typeof viewMode !== 'undefined' && viewMode === 'recent')
                      ? false
                      : document.getElementById('pl-f-bounds').checked;
     const bounds = (fBounds && map) ? map.getBounds() : null;
+    // v1276 タグ AND 判定 (小文字化 して 完全一致 で全部含まれば true)
+    const matchTags = (p) => {
+      if (!fTags.length) return true;
+      const pt = _splitTags(p.tags).map(t => t.toLowerCase());
+      return fTags.every(t => pt.includes(t));
+    };
     const items = allItems.filter(p => {
       if (fLiked   && !p.liked_by_me)   return false;
       if (fVisited && !p.visited_by_me) return false;
       if (fCat     && p.category !== fCat) return false;
       if (fTitle   && !(String(p.title || '').toLowerCase().includes(fTitle))) return false;
+      if (!matchTags(p)) return false;
       // v734 #343 地図内のみフィルタが ON のとき、緯度経度未設定の店は除外 (含めると無条件で残ってしまうので)。
       if (bounds) {
         if (p.lat == null || p.lng == null) return false;
@@ -259,6 +324,7 @@ export async function renderPlaces() {
         if (fVisited && !p.visited_by_me) return false;
         if (fCat     && p.category !== fCat) return false;
         if (fTitle   && !(String(p.title || '').toLowerCase().includes(fTitle))) return false;
+        if (!matchTags(p)) return false;
         return true;
       });
       for (const p of mItems) {
@@ -286,6 +352,9 @@ export async function renderPlaces() {
     }
     const countEl = document.getElementById('pl-count');
     if (countEl) countEl.textContent = `${items.length} 件`;
+    // v1276 タグ chip cloud 更新: 全 places の tags を 集約 → 出現頻度順 上位表示。
+    //   chip タップで pl-f-tags に追記 (トグル)、 現在選択中の tag は 反転表示。
+    _renderPlacesTagCloud(allItems, fTags);
     if (!items.length) {
       document.getElementById('pl-list').innerHTML = '<div class="empty">該当するお店はありません</div>';
       return;
@@ -308,6 +377,15 @@ export async function renderPlaces() {
       const rating = p.avg_rating !== null
         ? `⭐${p.avg_rating.toFixed(1)} (${p.comment_count})`
         : `💬${p.comment_count}`;
+      // v1276 tags chip (最大 4 個 まで tile 上に、 残りは +N)
+      const ptags = _splitTags(p.tags);
+      const shown = ptags.slice(0, 4);
+      const extra = ptags.length - shown.length;
+      const tagsLine = ptags.length
+        ? `<div style="margin-top:3px; display:flex; flex-wrap:wrap; gap:2px">${
+            shown.map(t => `<span style="background:rgba(255,255,255,0.85); color:#4a106d; font-size:10px; padding:1px 5px; border-radius:8px; line-height:1.3">${escapeHtml(t)}</span>`).join('')
+          }${extra > 0 ? `<span style="color:#fff; font-size:10px; opacity:0.85; padding:1px 3px">+${extra}</span>` : ''}</div>`
+        : '';
       const tileBg = p.cover_image_thumb || p.cover_image;
       if (tileBg) {
         return `
@@ -315,6 +393,7 @@ export async function renderPlaces() {
             <div class="tile-overlay">
               <div class="name">${escapeHtml(p.title)}</div>
               <div style="font-size:11px; opacity:0.9; margin-top:2px">${escapeHtml(cat)} · ${rating}</div>
+              ${tagsLine}
               <div style="margin-top:4px">${placeBadgesHtml(p)}</div>
             </div>
           </a>`;
@@ -325,6 +404,7 @@ export async function renderPlaces() {
           <div class="tile-overlay">
             <div class="name">${escapeHtml(p.title)}</div>
             <div style="font-size:11px; opacity:0.9; margin-top:2px">${escapeHtml(cat)} · ${rating}</div>
+            ${tagsLine}
             <div style="margin-top:4px">${placeBadgesHtml(p)}</div>
           </div>
         </a>`;
@@ -370,6 +450,8 @@ export async function renderPlaces() {
   // v1271 店名/カテゴリ 絞り込み
   document.getElementById('pl-f-cat')    ?.addEventListener('change', refresh);
   document.getElementById('pl-f-title')  ?.addEventListener('input',  refresh);
+  // v1276 タグ 絞り込み (input で 即時 反映)
+  document.getElementById('pl-f-tags')   ?.addEventListener('input',  refresh);
   // v730 #338 地図移動でリスト再フィルタ (デフォルト「地図内のみ」 ON)
   if (map) map.on('moveend', refresh);
 
@@ -403,6 +485,16 @@ export async function renderPlaces() {
   }
   // v845 #428 admin 用「🔗 tabelog 自動補完」ボタンとハンドラを撤去。
   //   バックエンドの /api/places/backfill_tabelog_urls は残しているので、必要なら手動で叩ける。
+  // v1276 hash 内 の ?tag=xxx を 拾って 事前絞込 (詳細画面のタグ chip から の 遷移)
+  try {
+    const q = String(location.hash).split('?')[1] || '';
+    const sp = new URLSearchParams(q);
+    const preTag = sp.get('tag');
+    if (preTag) {
+      const inp = document.getElementById('pl-f-tags');
+      if (inp) inp.value = preTag;
+    }
+  } catch (_) {}
   refresh();
 }
 
@@ -652,6 +744,10 @@ export async function renderPlaceNew() {
           ${CATEGORIES.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label)}</option>`).join('')}
         </select>
       </label>
+      <label class="field"><span class="lbl">🏷 タグ (任意、複数可) <span class="hint-sm">— カンマ区切り、 各 40 字、 20 個まで</span></span>
+        <input type="text" id="pln-tags" maxlength="500" placeholder="例: ラーメン, 家系, 深夜営業, 一人でも入りやすい">
+        <span class="hint-sm" style="font-size:11px">ジャンルより 細かく特徴 を残せます。 後から絞り込みに使えます。</span>
+      </label>
       <label class="field"><span class="lbl">住所 (任意)</span>
         <input type="text" id="pln-addr" maxlength="500" placeholder="例: 東京都新宿区...">
       </label>
@@ -826,6 +922,7 @@ export async function renderPlaceNew() {
     try {
       const payload = {
         title, category: cat, address: addr,
+        tags: document.getElementById('pln-tags').value,
         lat: lat !== '' ? Number(lat) : null,
         lng: lng !== '' ? Number(lng) : null,
         description: desc,
@@ -957,10 +1054,18 @@ async function loadPlace(id) {
     const hoursBlock = p.hours
       ? `<div class="meta" style="margin-top:4px; white-space:pre-wrap">🕐 ${escapeHtml(p.hours)}</div>`
       : '';
+    // v1276 tags を chip で 表示 (詳細画面)
+    const pTags = _splitTags(p.tags);
+    const tagsBlock = pTags.length
+      ? `<div class="meta" style="margin-top:4px; display:flex; flex-wrap:wrap; gap:3px; align-items:center">
+           🏷 ${pTags.map(t => `<a href="#/places?tag=${encodeURIComponent(t)}" style="background:#ede4f3; color:#4a106d; padding:1px 8px; border-radius:10px; font-size:11px; text-decoration:none">${escapeHtml(t)}</a>`).join('')}
+         </div>`
+      : '';
     document.getElementById('pld-head').innerHTML = `
       ${heroImg}
       <h2 style="margin:6px 0 0">${escapeHtml(p.title)}</h2>
       ${cat ? `<div class="meta">${escapeHtml(cat)}</div>` : ''}
+      ${tagsBlock}
       ${p.address ? `<div class="meta">📍 ${escapeHtml(p.address)}</div>` : ''}
       ${phoneBlock}
       ${hoursBlock}
@@ -1158,6 +1263,9 @@ async function loadPlace(id) {
               ${CATEGORIES.map(c => `<option value="${escapeHtml(c.id)}" ${c.id === (p.category || '') ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}
             </select>
           </label>
+          <label class="field"><span class="lbl">🏷 タグ (カンマ区切り)</span>
+            <input type="text" id="pld-edit-tags" maxlength="500" value="${escapeHtml(p.tags || '')}" placeholder="例: ラーメン, 家系, 深夜営業">
+          </label>
           <label class="field"><span class="lbl">住所</span>
             <input type="text" id="pld-edit-addr" maxlength="500" value="${escapeHtml(p.address || '')}">
           </label>
@@ -1188,6 +1296,7 @@ async function loadPlace(id) {
             await patch(`/api/places/${id}`, {
               title:       document.getElementById('pld-edit-title').value.trim(),
               category:    document.getElementById('pld-edit-cat').value,
+              tags:        document.getElementById('pld-edit-tags').value,
               address:     document.getElementById('pld-edit-addr').value.trim(),
               description: document.getElementById('pld-edit-desc').value.trim(),
               phone:       document.getElementById('pld-edit-phone').value.trim(),

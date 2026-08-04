@@ -90,7 +90,7 @@ function places_list(PDO $pdo, array $cfg): void {
     // v885 last_activity_at = 場所の作成 or 最終口コミ投稿のうち最新。
     //   フロント側で「新着順」ビューを出すために使う (口コミが新たに付いた店も新着扱い)。
     $st = $pdo->prepare("
-        SELECT p.id, p.title, p.category, p.address, p.lat, p.lng, p.description, p.image_url,
+        SELECT p.id, p.title, p.category, p.tags, p.address, p.lat, p.lng, p.description, p.image_url,
                p.creator_user_id, u.display_name AS creator_name, u.avatar_url AS creator_avatar_url,
                p.created_at,
                GREATEST(
@@ -154,6 +154,32 @@ function _places_image_url_versioned(string $url): string {
     return $clean . $sep . 'v=' . $mtime;
 }
 
+// v1276 tags 正規化: 「a, b, c 」を "a,b,c" に。 半角/全角 カンマ + 空白 で分割、
+//   trim + 重複除去 + 20 個上限 + 各 40 字 まで、 全体 CSV 500 字 に truncate。
+function _places_normalize_tags($raw): ?string {
+    if ($raw === null) return null;
+    $s = trim((string)$raw);
+    if ($s === '') return null;
+    // 区切り: , 、 (全角) + 半角/全角空白/改行
+    $parts = preg_split('/[,\x{FF0C}\x{3001}\s]+/u', $s) ?: [];
+    $seen = [];
+    $out = [];
+    foreach ($parts as $t) {
+        $t = trim($t);
+        if ($t === '') continue;
+        if (mb_strlen($t) > 40) $t = mb_substr($t, 0, 40);
+        $k = mb_strtolower($t);
+        if (isset($seen[$k])) continue;
+        $seen[$k] = true;
+        $out[] = $t;
+        if (count($out) >= 20) break;
+    }
+    if (!$out) return null;
+    $csv = implode(',', $out);
+    if (mb_strlen($csv) > 500) $csv = mb_substr($csv, 0, 500);
+    return $csv;
+}
+
 function places_create(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     $body = read_json_body();
@@ -163,6 +189,7 @@ function places_create(PDO $pdo, array $cfg): void {
     }
     $category = trim((string)($body['category'] ?? ''));
     if (mb_strlen($category) > 50) $category = mb_substr($category, 0, 50);
+    $tags = _places_normalize_tags($body['tags'] ?? null);   // v1276
     $address = trim((string)($body['address'] ?? ''));
     if (mb_strlen($address) > 500) $address = mb_substr($address, 0, 500);
     $description = trim((string)($body['description'] ?? ''));
@@ -196,9 +223,9 @@ function places_create(PDO $pdo, array $cfg): void {
         }
     }
     $ins = $pdo->prepare("INSERT INTO places
-        (title, category, address, lat, lng, description, source_url, phone, hours, image_url, creator_user_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-    $ins->execute([$title, $category, $address ?: null, $lat, $lng,
+        (title, category, tags, address, lat, lng, description, source_url, phone, hours, image_url, creator_user_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+    $ins->execute([$title, $category, $tags, $address ?: null, $lat, $lng,
                    $description ?: null,
                    $sourceUrl !== '' ? $sourceUrl : null,
                    $phone !== '' ? $phone : null,
@@ -317,6 +344,10 @@ function places_edit(PDO $pdo, array $cfg, int $id): void {
     if (array_key_exists('category', $body)) {
         $c = mb_substr(trim((string)$body['category']), 0, 50);
         $sets[] = 'category = ?'; $args[] = $c;
+    }
+    if (array_key_exists('tags', $body)) {
+        $t = _places_normalize_tags($body['tags']);  // v1276
+        $sets[] = 'tags = ?'; $args[] = $t;
     }
     if (array_key_exists('address', $body)) {
         $a = mb_substr(trim((string)$body['address']), 0, 500);
