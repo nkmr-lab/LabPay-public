@@ -46,14 +46,34 @@ export async function renderPaperTranslate() {
     </div>
     <details class="card" id="pt-form">
       <summary style="cursor:pointer; font-weight:600; padding:4px 0; user-select:none">➕ 新しい論文要約を依頼</summary>
-      <!-- v1221 中村さん要望「同時依頼 チェック は 依頼ボタン すぐ下 に、 default ON、
-           モデル 額 は チェック 有無 で 切替、 共有 も default ON、 ラベル を 共有チェック に」 -->
+      <p class="hint" style="font-size:13px; margin:8px 0">
+        論文 PDF をアップすると、全体要約 → RQ/仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) →
+        今後の課題 → 落合メソッドまとめという順番で構造化して返します。全体 1500-2500 字 (≒ 3-5 分で読める分量)。
+      </p>
+      <!-- v1280 中村さん要望 で 順序 変更: (1) PDF → (2) モデル → (3) 同時依頼 → (4) 共有 -->
+      <label class="field">
+        <span class="lbl">① 論文 PDF (最大 30 MB)</span>
+        <input type="file" id="pt-file" accept="application/pdf,.pdf">
+        <div class="hint-sm" id="pt-file-status" style="margin-top:4px"></div>
+      </label>
+      <label class="field">
+        <span class="lbl">② 🤖 モデル (高いほど高品質)</span>
+        <select id="pt-model" style="font-size:13px">
+          <option value="">読み込み中…</option>
+        </select>
+        <div class="hint-sm" id="pt-model-info" style="margin-top:4px; font-size:11px"></div>
+      </label>
+      <!-- v1221 同時依頼。 v1280 「(お得!)」表記削除 (中村さん指摘「別に お得 じゃないのでは？」)
+           = backend は 単に POST を 2 本 順に投げる だけで 割引 は 無い。 -->
       <fieldset class="field" style="border:1px dashed #7b3fa0; border-radius:6px; padding:8px; margin:8px 0; background:#faf5ff">
-        <legend style="font-size:12px; color:#4a106d; font-weight:600">📑📑 同時 依頼</legend>
+        <legend style="font-size:12px; color:#4a106d; font-weight:600">③ 📑📑 同時 依頼 (任意)</legend>
         <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600">
           <input type="checkbox" id="pt-also-full" checked>
-          要約 と 全訳 を 同時に 依頼 する (お得!)
+          要約 と 一緒に 全訳 も 依頼する
         </label>
+        <div class="hint-sm" style="font-size:11px; color:#6b7280; margin:2px 0 6px 22px">
+          1 度の アップロード で 両方 まとめて 依頼 できます (料金は 別々 に 依頼した 場合と 同じ)。
+        </div>
         <div id="pt-also-full-opts" style="margin-top:6px">
           <label class="field" style="margin:4px 0">
             <span class="lbl" style="font-size:11px">全訳 の 翻訳方向</span>
@@ -69,27 +89,11 @@ export async function renderPaperTranslate() {
           </label>
         </div>
       </fieldset>
-      <p class="hint" style="font-size:13px; margin:8px 0">
-        論文 PDF をアップすると、全体要約 → RQ/仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) →
-        今後の課題 → 落合メソッドまとめという順番で構造化して返します。全体 1500-2500 字 (≒ 3-5 分で読める分量)。
-      </p>
-      <label class="field">
-        <span class="lbl">🤖 モデル (高いほど高品質)</span>
-        <select id="pt-model" style="font-size:13px">
-          <option value="">読み込み中…</option>
-        </select>
-        <div class="hint-sm" id="pt-model-info" style="margin-top:4px; font-size:11px"></div>
-      </label>
-      <label class="field">
-        <span class="lbl">論文 PDF (最大 30 MB)</span>
-        <input type="file" id="pt-file" accept="application/pdf,.pdf">
-        <div class="hint-sm" id="pt-file-status" style="margin-top:4px"></div>
-      </label>
       <!-- v916/v1221 共有=半額割引 (default ON) -->
       <div style="background:linear-gradient(135deg, #dcfce7, #bbf7d0); border:2px solid #22c55e; border-radius:10px; padding:14px 16px; margin:8px 0; box-shadow:0 2px 6px rgba(34,197,94,0.15)">
         <label style="display:flex; align-items:center; gap:10px; cursor:pointer">
           <input type="checkbox" id="pt-auto-share" checked style="width:20px; height:20px; accent-color:#16a34a; cursor:pointer">
-          <span style="font-size:16px; font-weight:700; color:#14532d">🎁 共有チェック ON で半額になります!</span>
+          <span style="font-size:16px; font-weight:700; color:#14532d">④ 🎁 共有チェック ON で半額になります!</span>
         </label>
         <div style="font-size:12px; color:#166534; margin-top:8px; line-height:1.6">
           完了と同時に公開 ON にする (= みんなの検索に載せる)。研究室全体で共有すると誰かの参考になる資産なので、共有なら半額割引。<br>

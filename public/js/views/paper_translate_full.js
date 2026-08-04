@@ -27,13 +27,35 @@ export async function renderPaperTranslateFull() {
     </div>
     <details class="card" id="pft-form">
       <summary style="cursor:pointer; font-weight:600; padding:4px 0; user-select:none">➕ 新しい全訳を依頼</summary>
-      <!-- v1221 中村さん要望「同時依頼 チェック は 依頼ボタン すぐ下 に、 default ON、 モデル 額 は チェック 有無 で 切替」 -->
+      <!-- v1280 中村さん要望 で 順序 変更: (1) PDF → (2) 方向 + モデル → (3) 同時依頼 → (4) 共有 -->
+      <label class="field">
+        <span class="lbl">① 論文 PDF (最大 30 MB)</span>
+        <input type="file" id="pft-file" accept="application/pdf,.pdf">
+        <div class="hint-sm" id="pft-file-status" style="margin-top:4px"></div>
+      </label>
+      <label class="field" style="margin-top:8px">
+        <span class="lbl">② 🌐 翻訳方向</span>
+        <select id="pft-direction">
+          <option value="en2ja" selected>英語 → 日本語 (E→J)</option>
+          <option value="ja2en">日本語 → 英語 (J→E、 5x 料金)</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="lbl">③ 🤖 モデル</span>
+        <select id="pft-model"></select>
+        <div class="hint-sm" id="pft-cost-info" style="font-size:12px; margin-top:4px; color:#6b21a8"></div>
+      </label>
+      <!-- v1221 同時依頼。 v1280 「(お得!)」表記削除 (中村さん指摘「別に お得 じゃないのでは？」)
+           = backend は 単に POST を 2 本 順に投げる だけで 割引 は 無い。 -->
       <fieldset class="field" style="border:1px dashed #7b3fa0; border-radius:6px; padding:8px; margin:8px 0; background:#faf5ff">
-        <legend style="font-size:12px; color:#4a106d; font-weight:600">📑📑 同時 依頼</legend>
+        <legend style="font-size:12px; color:#4a106d; font-weight:600">④ 📑📑 同時 依頼 (任意)</legend>
         <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600">
           <input type="checkbox" id="pft-also-summary" checked>
-          全訳 と 要約 を 同時に 依頼 する (お得!)
+          全訳 と 一緒に 要約 も 依頼する
         </label>
+        <div class="hint-sm" style="font-size:11px; color:#6b7280; margin:2px 0 6px 22px">
+          1 度の アップロード で 両方 まとめて 依頼 できます (料金は 別々 に 依頼した 場合と 同じ)。
+        </div>
         <div id="pft-also-summary-opts" style="margin-top:6px">
           <label class="field" style="margin:4px 0">
             <span class="lbl" style="font-size:11px">要約モデル</span>
@@ -42,28 +64,11 @@ export async function renderPaperTranslateFull() {
           </label>
         </div>
       </fieldset>
-      <label class="field" style="margin-top:8px">
-        <span class="lbl">🌐 翻訳方向</span>
-        <select id="pft-direction">
-          <option value="en2ja" selected>英語 → 日本語 (E→J)</option>
-          <option value="ja2en">日本語 → 英語 (J→E、 5x 料金)</option>
-        </select>
-      </label>
-      <label class="field">
-        <span class="lbl">🤖 モデル</span>
-        <select id="pft-model"></select>
-        <div class="hint-sm" id="pft-cost-info" style="font-size:12px; margin-top:4px; color:#6b21a8"></div>
-      </label>
-      <label class="field">
-        <span class="lbl">論文 PDF (最大 30 MB)</span>
-        <input type="file" id="pft-file" accept="application/pdf,.pdf">
-        <div class="hint-sm" id="pft-file-status" style="margin-top:4px"></div>
-      </label>
       <!-- v916/v1221 共有=半額割引 (default ON) -->
       <div style="background:linear-gradient(135deg, #dcfce7, #bbf7d0); border:2px solid #22c55e; border-radius:10px; padding:14px 16px; margin:8px 0; box-shadow:0 2px 6px rgba(34,197,94,0.15)">
         <label style="display:flex; align-items:center; gap:10px; cursor:pointer">
           <input type="checkbox" id="pft-auto-share" checked style="width:20px; height:20px; accent-color:#16a34a; cursor:pointer">
-          <span style="font-size:16px; font-weight:700; color:#14532d">🎁 共有チェック ON で半額になります!</span>
+          <span style="font-size:16px; font-weight:700; color:#14532d">⑤ 🎁 共有チェック ON で半額になります!</span>
         </label>
         <div style="font-size:12px; color:#166534; margin-top:8px; line-height:1.6">
           完了と同時に公開 ON にする (= みんなの検索に載せる)。研究室全体で共有すると誰かの参考になる資産なので、共有なら半額割引。<br>
