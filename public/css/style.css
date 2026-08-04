@@ -1070,3 +1070,24 @@ a.list-item { text-decoration: none; color: inherit; }
     margin-right: auto !important;
   }
 }
+
+/* v1279 サンプルサイズ検定力 (#/power) の プリセット ボタン反応 (中村さん要望
+   「プリセットボタン 押した時 そのボタンが反応して その下のテキストボックスが
+   入力されたことがわかる感じにしたい。今、押せた？となる」)。
+   ボタン (data-pw-* / data-lmm* / data-bay-* / data-nb-* / data-sd-preset) を
+   一瞬パルス + 対応 input を 一瞬 紫でハイライト。 */
+button.pw-preset-flash {
+  transform: scale(0.94);
+  background: #4a106d !important;
+  color: #fff !important;
+  border-color: #4a106d !important;
+  transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+@keyframes pw-input-flash-kf {
+  0%   { background-color: #ede4f3; box-shadow: 0 0 0 3px rgba(74,16,109,0.55); }
+  60%  { background-color: #ede4f3; box-shadow: 0 0 0 3px rgba(74,16,109,0.20); }
+  100% { background-color: #fff;    box-shadow: 0 0 0 0 rgba(74,16,109,0);      }
+}
+input.pw-input-flash {
+  animation: pw-input-flash-kf 0.9s ease-out;
+}

@@ -2108,13 +2108,74 @@ const state = {
   loaded_owner_name: null,   // 他人の共有をロード中の owner
 };
 
+// v1279 中村さん要望「プリセットボタン押した時、そのボタンが反応して、その下のテキスト
+//   ボックスが入力されたことがわかるような感じにしたい。今、押せた？となるので」→
+//   view=power の 全 preset button click を capture して、ボタンを一瞬パルス +
+//   対応 input を 一瞬 ハイライト。 個別 handler は無変更で共通反応を追加。
+const _PW_PRESET_KEYS = [
+  'pwAlpha','pwPower','pwEff','pwRho','pwEps','pwPairedr',
+  'lmmBeta','lmm3Beta','lmm3Sdslopep','lmm3Sdslopes',
+  'bayD','bayBf','bayR','nbR0','nbRr','nbTheta',
+  'sdPreset',
+];
+function _pwFindRelatedInput(btn) {
+  const ds = btn.dataset;
+  // data-sd-preset="targetId:value" は 明示的に input id を持つ
+  if (ds.sdPreset) {
+    const [tid] = String(ds.sdPreset).split(':');
+    const el = document.getElementById(tid);
+    if (el) return el;
+  }
+  // 兄弟 (前後) を 遡って input[type=number] を 探す
+  for (let s = btn.previousElementSibling; s; s = s.previousElementSibling) {
+    if (s.tagName === 'INPUT' && (s.type === 'number' || s.type === 'text')) return s;
+  }
+  for (let s = btn.nextElementSibling; s; s = s.nextElementSibling) {
+    if (s.tagName === 'INPUT' && (s.type === 'number' || s.type === 'text')) return s;
+  }
+  // 親を 4 段まで遡って親内の最初の input[type=number] を探す
+  let node = btn.parentElement;
+  for (let i = 0; node && i < 4; i++, node = node.parentElement) {
+    const inp = node.querySelector('input[type="number"]');
+    if (inp) return inp;
+  }
+  return null;
+}
+function _pwFlashPreset(btn, inputEl) {
+  if (!btn) return;
+  btn.classList.add('pw-preset-flash');
+  setTimeout(() => btn.classList.remove('pw-preset-flash'), 500);
+  if (inputEl) {
+    inputEl.classList.remove('pw-input-flash');
+    // reflow で animation を強制的に 再スタート
+    void inputEl.offsetWidth;
+    inputEl.classList.add('pw-input-flash');
+    setTimeout(() => inputEl.classList.remove('pw-input-flash'), 950);
+  }
+}
+let _pwFlashWired = false;
+function _ensurePwFlashWired() {
+  if (_pwFlashWired) return;
+  _pwFlashWired = true;
+  document.addEventListener('click', (ev) => {
+    if (document.body.dataset.view !== 'power') return;
+    const btn = ev.target?.closest?.('button');
+    if (!btn) return;
+    const ds = btn.dataset;
+    if (!_PW_PRESET_KEYS.some(k => k in ds)) return;
+    _pwFlashPreset(btn, _pwFindRelatedInput(btn));
+  }, true);   // capture 相 で 個別 handler より 先 に flash 発火
+}
+
 export function renderPower() {
+  _ensurePwFlashWired();
   render();
   loadSavedList();
 }
 
 // v1026 共有 URL 経由 (/#/power/r/{token}) からロード
 export async function renderPowerShared({ params }) {
+  _ensurePwFlashWired();
   try {
     const d = await get('/api/power/r/' + encodeURIComponent(params.token));
     applyLoaded(d);
