@@ -166,11 +166,10 @@ function applyFullscreenMode(topPart, prevHash) {
   document.body.classList.toggle('app-fullscreen', fs);
   // 閉じる ✕ ボタンを動的に生成 / 撤去
   let closeBtn = document.getElementById('fs-close-btn');
-  // v1270 中村さん要望「どこでもホームに戻れるように『LabPay』を表示し、押したら
-  //   ホームに戻れるように」→ fullscreen 中は topbar (LabPay ロゴ含) が hidden
-  //   なので、 fs 突入時に 左上に 小さい 「🏠 LabPay」 ロゴ button を固定表示、
-  //   click で #/ (ホーム)。 右上 ✕ (fs-close-btn) と 位置が 被らないよう 左上。
-  let homeBtn = document.getElementById('fs-home-btn');
+  // v1278 fs-home-btn は v1270 で 追加した が 中村さん判断 「ちょっと邪魔だな。一旦消そう」
+  //   に伴い撤去。 過去互換 で もし DOM に残っていたら 掃除する。
+  const staleHomeBtn = document.getElementById('fs-home-btn');
+  if (staleHomeBtn) staleHomeBtn.remove();
   if (fs) {
     if (!closeBtn) {
       closeBtn = document.createElement('button');
@@ -182,20 +181,9 @@ function applyFullscreenMode(topPart, prevHash) {
       closeBtn.addEventListener('click', closeFullscreen);
       document.body.appendChild(closeBtn);
     }
-    if (!homeBtn) {
-      homeBtn = document.createElement('button');
-      homeBtn.id = 'fs-home-btn';
-      homeBtn.type = 'button';
-      homeBtn.title = 'ホームに戻る';
-      homeBtn.textContent = '🏠 LabPay';
-      homeBtn.style.cssText = 'position:fixed; top:8px; left:8px; z-index:1001; height:36px; padding:0 12px; border-radius:18px; border:none; background:rgba(74,16,109,0.85); color:#fff; font-size:13px; font-weight:700; line-height:36px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.3); font-family:inherit';
-      homeBtn.addEventListener('click', () => { location.hash = '#/'; });
-      document.body.appendChild(homeBtn);
-    }
     ensureFullscreenEscHandler();
-  } else {
-    if (closeBtn) closeBtn.remove();
-    if (homeBtn)  homeBtn.remove();
+  } else if (closeBtn) {
+    closeBtn.remove();
   }
 }
 

@@ -115,14 +115,23 @@ body.app-fullscreen nav#tabs,
 body.app-fullscreen #install-banner { display: none !important; }
 body.app-fullscreen main#app { max-width: none; padding: 8px 10px 12px 10px; }
 body.app-fullscreen { background: #fff; }
-/* v867 #449 フルスクリーン系 ページ で カード が 画面 横 一杯 まで 伸びて、 中身 の
-   長い URL や 英単語 が wrap せず 右に 溢れて 横スクロール が 出ていた。 直接 の 子
-   (主に カード) を 1400px の センター 揃え に + .card に overflow-wrap を 効かせて、
-   PC でも 適切な 横幅 + 長文字列 の 折り返し を 強制 する。 */
+/* v1278 中村さん要望「いろいろな機能の横幅がウインドウサイズになってしまってるのが
+   使いにくいものが結構ある。 ボードとか全画面を使いたいやつ以外は、横幅をある程度
+   固定したい」→ fullscreen デフォルトは 720px (ホームと同じ) に絞る。
+   本当に全画面が欲しい機能 (board / kanban / chat-rooms) だけ 1400px で例外。
+   旧: v867 で全 fullscreen 1400px にしていた (paper 系の右溢れ対策) が、 過剰に広い
+   ので、 今回 720px に戻して paper 系 の overflow-wrap 対策は残す。
+   sns 系は 640px の 個別上書きが元々ある (140-147行) ので そのまま。 */
 body.app-fullscreen main#app > * {
-  max-width: 1400px;
+  max-width: 720px;
   margin-left: auto;
   margin-right: auto;
+}
+/* 例外: 本当に全画面が欲しいアプリ (D&D grid / 3-4 pane 横並び) */
+body.app-fullscreen[data-view^="board"] main#app > *,
+body.app-fullscreen[data-view^="kanban"] main#app > *,
+body.app-fullscreen[data-view^="chat-rooms"] main#app > * {
+  max-width: none;
 }
 .card { overflow-wrap: anywhere; word-break: break-word; }
 /* v868 #450 論文要約 / 全訳 系 ページ で 「右 に 溢れる」 件 の 強化 防御。
@@ -390,6 +399,9 @@ input[type=file]::file-selector-button {
 
 /* Lists */
 .list { display: grid; gap: var(--space-2); }
+/* v1278 中村さん要望「アプリケーションとかそこら辺は 1 列だけど 2 列にしてしまう方が良い」
+   → apps.js の 各カテゴリ list を 2 列 (画面狭ければ 1 列に自動 fallback) に。 */
+.list.apps-grid-2col { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .list-item {
   background: white; border: 1px solid var(--line); border-radius: var(--radius);
   padding: var(--space-3); display: flex; justify-content: space-between; gap: 10px;

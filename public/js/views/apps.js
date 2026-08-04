@@ -336,7 +336,7 @@ export async function renderApps(ctx = {}) {
           <div style="margin-top:10px">
             <div class="bold" style="font-size:13px; color:var(--primary); margin-bottom:2px">${escapeHtml(sg.label)}</div>
             ${sg.hint ? `<p class="hint" style="margin:0 0 6px; font-size:11px">${escapeHtml(sg.hint)}</p>` : ''}
-            <div class="list">
+            <div class="list apps-grid-2col">
               ${sgItems.map(renderItemRow).join('')}
             </div>
           </div>`;
@@ -345,7 +345,7 @@ export async function renderApps(ctx = {}) {
       const leftoverHtml = leftover.length ? `
         <div style="margin-top:10px">
           <div class="bold" style="font-size:13px; color:#6b7280; margin-bottom:4px">（その他）</div>
-          <div class="list">${leftover.map(renderItemRow).join('')}</div>
+          <div class="list apps-grid-2col">${leftover.map(renderItemRow).join('')}</div>
         </div>` : '';
       return `
         <div class="card" style="margin-top:10px">
@@ -360,7 +360,7 @@ export async function renderApps(ctx = {}) {
       <div class="card" style="margin-top:10px">
         <h3 style="margin:0 0 4px">${escapeHtml(c.label)}</h3>
         <p class="hint" style="margin:0 0 8px">${escapeHtml(c.hint)}</p>
-        <div class="list">
+        <div class="list apps-grid-2col">
           ${items.map(renderItemRow).join('')}
         </div>
       </div>`;
