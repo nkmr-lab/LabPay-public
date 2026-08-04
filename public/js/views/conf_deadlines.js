@@ -294,8 +294,10 @@ export async function renderConfDeadlineForm({ params } = {}) {
         txt.style.display = '';
       }
       // v908 date+time 分離。 datetime-local を YYYY-MM-DDTHH:MM に整形して 分割。
+      // v1277 fb: jstStrToAoeStr は space 区切りで返すため、 split('T') 前に T 区切りへ
+      //   正規化しないと date input に "YYYY-MM-DD HH:MM" 全体が入って無効化 → 空欄化する。
       const dtRaw = initial.is_aoe
-        ? jstStrToAoeStr(initial.deadline_at)
+        ? jstStrToAoeStr(initial.deadline_at).replace(' ', 'T')
         : String(initial.deadline_at || '').replace(' ', 'T').slice(0, 16);
       const [d16, t16] = dtRaw.split('T');
       row.querySelector('.cd-ex-date').value = d16 || '';
@@ -377,8 +379,14 @@ export async function renderConfDeadlineForm({ params } = {}) {
       document.getElementById('cd-deadline-aoe').checked = !!Number(r.deadline_is_aoe);
       document.getElementById('cd-deadline-tentative').checked = !!Number(r.deadline_is_tentative);
       // v908 date+time 分離。 datetime-local を YYYY-MM-DDTHH:MM に整形して 分割。
+      // v1277 fb (中村さん報告「編集で修正しようとすると 設定していたはずの〆切 (メイン)
+      //   が消えてしまっている」): jstStrToAoeStr は space 区切りで返す (詳細画面での
+      //   表示表記 "2026-08-11 23:59" を優先) ため、 split('T') 前に T 区切りへ正規化
+      //   しないと date input に "YYYY-MM-DD HH:MM" 全体が入って無効化 → 空欄化する。
+      //   AOE 付きの学会 (OzCHI / INTERACT 等) を編集開くと この経路で メイン締切 が
+      //   消えて見えていた。
       const dlRaw = Number(r.deadline_is_aoe)
-        ? jstStrToAoeStr(r.deadline_at)
+        ? jstStrToAoeStr(r.deadline_at).replace(' ', 'T')
         : (r.deadline_at || '').replace(' ', 'T').slice(0, 16);
       const [dPart, tPart] = dlRaw.split('T');
       document.getElementById('cd-deadline-date').value = dPart || '';
