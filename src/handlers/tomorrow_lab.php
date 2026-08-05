@@ -138,6 +138,17 @@ function tla_create(PDO $pdo, array $cfg): void {
         $pdo->rollBack();
         throw $e;
     }
+    // v1283 fb#510 中村さん「明日来る？の 募集は 通知が 来ない」→ 新規プラン (最初の宣言)
+    //   の時 だけ Slack へ broadcast (join は 通知過多 防止で 送らない)。
+    try {
+        $baseUrl = rtrim((string)($cfg['app']['base_url'] ?? ''), '/');
+        $link = $baseUrl . '/#/tomorrow-lab';
+        $memoLine = $memo !== '' ? "\nメモ: {$memo}" : '';
+        slack_notify($cfg,
+            "🏫 *明日、研究室に一緒に行こう*  <{$link}|{$date}>\n"
+            . "発起人: {$u['display_name']}  ·  罰金 fee: {$fee}pt (行かなかった人 → 行った人で山分け)"
+            . $memoLine);
+    } catch (Throwable $e) { /* swallow */ }
     json_response(['ok' => true, 'id' => $id, 'plan' => _tla_plan_row($pdo, $id, $uid), 'joined_existing' => false]);
 }
 
