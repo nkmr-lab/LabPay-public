@@ -1071,6 +1071,29 @@ a.list-item { text-decoration: none; color: inherit; }
   }
 }
 
+/* v1281 中村さん要望「AIサブスクの自動更新をON/OFF切り替えれるようにしておいて欲しい」
+   → ai_sub.js の 契約状態カード の 「🔄 自動更新」行に埋め込む トグルスイッチ。 */
+.as-toggle {
+  position: relative; display: inline-block;
+  width: 40px; height: 22px; vertical-align: middle;
+}
+.as-toggle input { opacity: 0; width: 0; height: 0; margin: 0; }
+.as-toggle .slider {
+  position: absolute; inset: 0; cursor: pointer;
+  background: #cbd5e1; border-radius: 22px;
+  transition: background 0.2s ease;
+}
+.as-toggle .slider::before {
+  position: absolute; content: '';
+  height: 16px; width: 16px; left: 3px; top: 3px;
+  background: #fff; border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  transition: transform 0.2s ease;
+}
+.as-toggle input:checked + .slider { background: #059669; }
+.as-toggle input:checked + .slider::before { transform: translateX(18px); }
+.as-toggle input:disabled + .slider { opacity: 0.5; cursor: wait; }
+
 /* v1279 サンプルサイズ検定力 (#/power) の プリセット ボタン反応 (中村さん要望
    「プリセットボタン 押した時 そのボタンが反応して その下のテキストボックスが
    入力されたことがわかる感じにしたい。今、押せた？となる」)。

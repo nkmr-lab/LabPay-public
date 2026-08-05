@@ -85,13 +85,11 @@ function renderStatusCard(d) {
   const canSubscribe = d.can_subscribe;
   const balance = d.balance;
 
-  // 状態別 の 主 アクション ボタン
+  // 状態別 の 主 アクション ボタン。 v1281 中村さん要望「AIサブスクの自動更新を
+  //   ON/OFF 切り替えれるように」→ 契約中 (active / graceful) は cancel/resume の
+  //   別ボタンではなく、 下の 詳細行にトグル 1 つで ON/OFF 切替。 subscribe は残す。
   let actions = '';
-  if (s.status === 'active') {
-    actions = `<button class="btn" id="as-cancel">✋ 自動更新を停止 (期限までは使える)</button>`;
-  } else if (s.status === 'graceful') {
-    actions = `<button class="btn primary" id="as-resume">▶ 自動更新を再開</button>`;
-  } else if (s.status === 'expired' || s.status === 'never') {
+  if (s.status === 'expired' || s.status === 'never') {
     if (canSubscribe) {
       actions = `<button class="btn primary" id="as-subscribe">🟢 契約する (500pt / 週)</button>`;
     } else {
@@ -103,10 +101,21 @@ function renderStatusCard(d) {
   // 詳細 (契約中 or 解約予約 の 場合)
   let detail = '';
   if (s.status === 'active' || s.status === 'graceful') {
+    const autoOn = !!s.auto_renew;
+    // v1281 auto_renew トグルスイッチ (CSS は style.css の .as-toggle)。
+    //   ON = active (自動更新継続) / OFF = graceful (期限で自動解約)。
+    const toggle = `
+      <label class="as-toggle" title="自動更新の ON/OFF" style="margin:0 6px">
+        <input type="checkbox" id="as-auto-renew" ${autoOn ? 'checked' : ''} aria-label="自動更新">
+        <span class="slider"></span>
+      </label>`;
+    const stateText = autoOn
+      ? `<b style="color:#059669">ON</b> <span class="hint-sm" style="font-size:11px">(期限到達で自動500pt引き落し)</span>`
+      : `<b style="color:#a16207">OFF</b> <span class="hint-sm" style="font-size:11px">(期限で自動解約)</span>`;
     detail = `
       <div class="hint-sm" style="margin-top:8px; line-height:1.7">
         📅 期限: <b>${escapeHtml(fmtYmdHm(s.current_period_end))}</b> (あと${s.days_left}日)<br>
-        ${s.auto_renew ? '🔄 自動更新: <b style="color:#059669">ON</b> (期限到達で自動500pt引き落し)' : '⏸ 自動更新: <b style="color:#a16207">OFF</b> (期限で自動解約)'}<br>
+        <span style="display:inline-flex; align-items:center; gap:2px">🔄 自動更新: ${toggle} ${stateText}</span><br>
         🎫 サイクル数: ${s.cycle_count} / 累積支払: ${s.total_paid}pt<br>
         ${s.last_charged_at ? `💰 直近引き落し: ${escapeHtml(fmtYmdHm(s.last_charged_at))}<br>` : ''}
       </div>
@@ -152,29 +161,28 @@ function wireButtons() {
       btn.disabled = false;
     }
   });
-  document.getElementById('as-cancel')?.addEventListener('click', async (e) => {
-    if (!confirm('自動更新を停止しますか?\n\n現在の期限までは使えます。期限で自動解約されます。')) return;
-    const btn = e.currentTarget;
-    btn.disabled = true; btn.textContent = '停止中…';
-    try {
-      await post('/api/ai-sub/cancel', {});
-      toast('自動更新を停止しました');
-      await loadAndRender();
-    } catch (e2) {
-      toast('失敗: ' + (e2?.message || e2));
-      btn.disabled = false;
+  // v1281 自動更新 ON/OFF トグル。 change で 対応 API を叩き、 UI 再描画。
+  //   ON→OFF (cancel): 「期限まで使える + 期限で自動解約」を短く confirm。
+  //   OFF→ON (resume): 迷いなく戻せるよう confirm なしで即発火。
+  //   失敗時は checkbox 状態を元に戻す。
+  document.getElementById('as-auto-renew')?.addEventListener('change', async (e) => {
+    const cb = e.currentTarget;
+    const turnOn = cb.checked;      // 変更後の希望状態
+    if (!turnOn) {
+      if (!confirm('自動更新を OFF にしますか?\n\n現在の期限までは使えます。期限が来たら自動的に解約されます。')) {
+        cb.checked = true;
+        return;
+      }
     }
-  });
-  document.getElementById('as-resume')?.addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true; btn.textContent = '再開中…';
+    cb.disabled = true;
     try {
-      await post('/api/ai-sub/resume', {});
-      toast('自動更新を再開しました');
+      await post(turnOn ? '/api/ai-sub/resume' : '/api/ai-sub/cancel', {});
+      toast(turnOn ? '🔄 自動更新を ON にしました' : '⏸ 自動更新を OFF にしました');
       await loadAndRender();
     } catch (e2) {
       toast('失敗: ' + (e2?.message || e2));
-      btn.disabled = false;
+      cb.checked = !turnOn;
+      cb.disabled = false;
     }
   });
 }
