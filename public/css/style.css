@@ -1071,6 +1071,16 @@ a.list-item { text-decoration: none; color: inherit; }
   }
 }
 
+/* v1285 中村さん要望「購入依頼の通知から購入に直接行きたい」→ 通知タップで
+   #/buy-requests?open=ID に飛ばし、 該当カードを scrollIntoView + 2秒 紫リング で
+   強調するための アニメーション。 */
+@keyframes br-card-flash-kf {
+  0%   { box-shadow: 0 0 0 4px rgba(74,16,109,0.7);  background-color: rgba(74,16,109,0.10); }
+  40%  { box-shadow: 0 0 0 4px rgba(74,16,109,0.5);  background-color: rgba(74,16,109,0.06); }
+  100% { box-shadow: 0 0 0 0   rgba(74,16,109,0);    background-color: transparent; }
+}
+.br-card-flash { animation: br-card-flash-kf 2s ease-out; }
+
 /* v1281 中村さん要望「AIサブスクの自動更新をON/OFF切り替えれるようにしておいて欲しい」
    → ai_sub.js の 契約状態カード の 「🔄 自動更新」行に埋め込む トグルスイッチ。 */
 .as-toggle {

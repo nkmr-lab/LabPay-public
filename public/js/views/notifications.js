@@ -172,6 +172,16 @@ function refUrl(n) {
     case 'drafts':         return n.ref_id ? '#/drafts/' + n.ref_id : '#/drafts';
     case 'wishlist':       return '#/wishlist';
     case 'purchase':       return '#/history';
+    // v1285 中村さん要望「購入依頼の通知から購入に直接行きたい」→ 該当カードを
+    //   ハイライト+スクロールする open= クエリで一覧に遷移 (該当 status が
+    //   bought/declined/cancelled 済でも見つかるよう all タブ強制)。
+    case 'buy_request':    return n.ref_id ? '#/buy-requests?open=' + n.ref_id : '#/buy-requests';
+    // v1282 📝 原稿チェック依頼 (id ある想定、なければ一覧)
+    case 'manuscript_review': return n.ref_id ? '#/manuscript-reviews/' + n.ref_id : '#/manuscript-reviews';
+    // v1274 🎯 娯楽ミッション
+    case 'game_mission':   return n.ref_id ? '#/game-missions/' + n.ref_id : '#/game-missions';
+    // v1230 🏫 教室予約依頼 (id 詳細 route はないので 一覧、 status に応じたタブは無指定)
+    case 'room_request':   return '#/room-requests';
     case 'scrapbox':       return '#/history';
     case 'feedback':       return state.me?.role === 'admin' ? '#/feedback-admin' : '#/settings';
     default: return null;

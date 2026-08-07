@@ -43,7 +43,10 @@ function fmtTime(iso) {
 // ------- 一覧 -------
 export async function renderBuyRequests({ query } = {}) {
   const app = document.getElementById('app');
-  const tab = (query && query.status) || 'open';
+  // v1285 通知経由の「?open=ID」= 該当依頼が bought / declined / cancelled 済でも
+  //   見つかるよう tab を all に強制、 描画後 該当カードに scrollIntoView + 一瞬強調。
+  const openId = query && query.open ? Number(query.open) : null;
+  const tab = openId ? 'all' : ((query && query.status) || 'open');
   app.innerHTML = renderShell(tab);
   wireHeader();
   try {
@@ -54,9 +57,21 @@ export async function renderBuyRequests({ query } = {}) {
     document.getElementById('br-tabs').innerHTML = renderTabs(tab, d.counts || {});
     wireList(d.is_admin || false);
     wireTabs();
+    if (openId) _highlightBuyRequestCard(openId);
   } catch (e) {
     document.getElementById('br-list').innerHTML = `<div class="card" style="color:#dc2626">読み込み失敗: ${escapeHtml(e?.message || String(e))}</div>`;
   }
+}
+
+// v1285 該当カードを scrollIntoView + 一瞬 紫リング で 強調 (通知経由 の 直行)。
+function _highlightBuyRequestCard(id) {
+  requestAnimationFrame(() => {
+    const el = document.getElementById('br-card-' + id);
+    if (!el) return;
+    try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) { el.scrollIntoView(); }
+    el.classList.add('br-card-flash');
+    setTimeout(() => el.classList.remove('br-card-flash'), 2000);
+  });
 }
 
 function renderShell(tab) {
@@ -122,7 +137,7 @@ function renderCard(r, isAdmin) {
   // v1082 中村さん「もう一度お願いするボタン」→ 依頼者本人だけ、 closed 状態のときに表示
   const canReask = r.is_mine && (r.status === 'bought' || r.status === 'declined' || r.status === 'cancelled');
   return `
-    <div class="card" style="border-left:4px solid ${meta.color}; background:${meta.bg}44">
+    <div class="card" id="br-card-${r.id}" data-br-row-id="${r.id}" style="border-left:4px solid ${meta.color}; background:${meta.bg}44">
       <div class="row" style="align-items:center; gap:8px; flex-wrap:wrap">
         <span style="font-size:11px; padding:2px 8px; border-radius:4px; background:${meta.color}; color:#fff; font-weight:600">${meta.emoji} ${meta.label}</span>
         ${urgMark}
