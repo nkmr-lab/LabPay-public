@@ -86,13 +86,12 @@ function do_checkin_for_user(PDO $pdo, int $userId, string $source = 'manual'): 
                     $missed++;
                 }
             }
-            if ($missed === 0) {
-                $newStreak = $curStreak + 1;
-            } else if ($weekdayOnly) {
-                $newStreak = max(1, $curStreak - $missed * $decay + 1);
-            } else {
-                $newStreak = 1;
-            }
+            // v1286 中村さん指示「完全リセットで良い」→ 平日 (weekday_only なら 稼働日 のみ、
+            //   OFF なら 全日) を 1 日でも 休んだら streak=1 に 完全リセット。
+            //   従来 (v498〜v1285): weekday_only=1 の 場合 は decay 減点 (missed × 5、 max 1)
+            //   だった が、 「1 日 休んだ くらいで たった -5 で 済む の は 緩すぎる」の 指摘。
+            //   $decay は 現在 未使用 だが 変数 は 温存 (将来 の 中間案 で 復活可)。
+            $newStreak = ($missed === 0) ? ($curStreak + 1) : 1;
         }
         $newLongest = max((int)($streak['longest_streak'] ?? 0), $newStreak);
 
