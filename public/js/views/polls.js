@@ -555,11 +555,11 @@ async function openCreateGroupDialog(pollId, poll, options) {
     title: '🏘 投票結果でグループ作成',
     bodyHtml,
     buttons: [
-      { label: 'キャンセル', kind: 'ghost', onClick: (close) => close() },
+      { label: 'キャンセル', kind: 'ghost', onClick: ({ close }) => close() },
       {
         label: '🏘 作成する',
         kind: 'primary',
-        onClick: async (close) => {
+        onClick: async ({ close }) => {
           const optIds = Array.from(document.querySelectorAll('input[name="cg-opt"]:checked'))
             .map(el => Number(el.value)).filter(Number.isFinite);
           if (!optIds.length) { toast('選択肢を 1 つ以上選んでください'); return; }
