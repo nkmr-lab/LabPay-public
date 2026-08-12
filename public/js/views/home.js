@@ -2760,18 +2760,27 @@ async function fetchRecruitingItems() {
   return _recruitingCache;
 }
 
+// v1297 tag メタ を 1 箇所 に 集約 (以前 は tagHtml / tagPriority / counts で 3 重定義)。
+// icon+label: バッジ 表示、 fg/bg: バッジ 色、 headFg+headLabel: 見出し カウント 用、
+// priority: renderCategoryWidget の ソート順 (小さい ほど 上)。
+// v739 #352 で finished (結果) を、 v1295 で request (依頼中) を 追加。
+const TAG_META = {
+  active:   { icon: '▶',  label: '参加中',   fg: '#065f46', bg: '#d1fae5', headFg: '#10b981', headLabel: '参加中', priority: 0 },
+  request:  { icon: '📮', label: '依頼中',   fg: '#991b1b', bg: '#fee2e2', headFg: '#dc2626', headLabel: '依頼',   priority: 0 },
+  vote:     { icon: '🗳', label: '未応答',   fg: '#5b21b6', bg: '#ede9fe', headFg: '#7c3aed', headLabel: '未応答', priority: 1 },
+  work:     { icon: '⏳', label: '進行中',   fg: '#1e40af', bg: '#dbeafe', headFg: '#0369a1', headLabel: '進行中', priority: 2 },
+  open:     { icon: '🎯', label: '募集中',   fg: '#92400e', bg: '#fef3c7', headFg: '#f59e0b', headLabel: '募集',   priority: 3 },
+  pending:  { icon: '⏳', label: '結果待ち', fg: '#4b5563', bg: '#f3f4f6', headFg: '#4b5563', headLabel: '結果待ち', priority: 4 },
+  finished: { icon: '🏁', label: '結果',     fg: '#374151', bg: '#e5e7eb', headFg: '#374151', headLabel: '結果',   priority: 5 },
+};
+// 見出し に 出す 順序 (TAG_META.priority で 決定、 但し pending/finished は 見出し に 出さない)
+const HEAD_TAG_ORDER = ['active', 'request', 'open', 'vote', 'work'];
+
 function tagHtml(tag) {
-  return ({
-    active:   '<span class="tag" style="background:#d1fae5; color:#065f46; font-size:10px">▶ 参加中</span>',
-    // v1295 中村さん指示「募集中じゃなくて依頼中」で buy_request 用の request タグを追加
-    request:  '<span class="tag" style="background:#fee2e2; color:#991b1b; font-size:10px">📮 依頼中</span>',
-    open:     '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>',
-    vote:     '<span class="tag" style="background:#ede9fe; color:#5b21b6; font-size:10px">🗳 未応答</span>',
-    work:     '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px">⏳ 進行中</span>',
-    pending:  '<span class="tag" style="background:#f3f4f6; color:#4b5563; font-size:10px">⏳ 結果待ち</span>',
-    // v739 #352 結果確定後 24h は widget に残すようになったので 'finished' tag を追加
-    finished: '<span class="tag" style="background:#e5e7eb; color:#374151; font-size:10px">🏁 結果</span>',
-  })[tag] || '';
+  const m = TAG_META[tag];
+  return m
+    ? `<span class="tag" style="background:${m.bg}; color:${m.fg}; font-size:10px">${m.icon} ${m.label}</span>`
+    : '';
 }
 
 function renderItemRow(it) {
@@ -3088,19 +3097,17 @@ async function renderCategoryWidget({ cardId, rootId, title, cat, emptyMsg, show
     root.innerHTML = `<div class="hint" style="font-size:12px">${emptyMsg}</div>`;
     return;
   }
-  // v1295 request (📮 依頼中) は active と同格 で 最優先
-  const tagPriority = { active: 0, request: 0, vote: 1, work: 2, open: 3, pending: 4 };
-  items.sort((a, b) => (tagPriority[a.tag] ?? 9) - (tagPriority[b.tag] ?? 9));
+  // v1297 tag メタ を TAG_META から 参照 (以前 は ここ で 再定義 して 3 重管理 に なって いた)
+  items.sort((a, b) => (TAG_META[a.tag]?.priority ?? 9) - (TAG_META[b.tag]?.priority ?? 9));
   const { soon, later } = splitByDeadline(items);
-  // タイトルにカウント
-  const counts = { active: 0, request: 0, vote: 0, work: 0, open: 0 };
+  const counts = {};
   for (const it of items) counts[it.tag] = (counts[it.tag] || 0) + 1;
   const parts = [];
-  if (counts.active)  parts.push(`<span style="color:#10b981">参加中 ${counts.active}</span>`);
-  if (counts.request) parts.push(`<span style="color:#dc2626">依頼 ${counts.request}</span>`);
-  if (counts.open)    parts.push(`<span style="color:#f59e0b">募集 ${counts.open}</span>`);
-  if (counts.vote)    parts.push(`<span style="color:#7c3aed">未応答 ${counts.vote}</span>`);
-  if (counts.work)    parts.push(`<span style="color:#0369a1">進行中 ${counts.work}</span>`);
+  for (const tag of HEAD_TAG_ORDER) {
+    if (!counts[tag]) continue;
+    const m = TAG_META[tag];
+    parts.push(`<span style="color:${m.headFg}">${m.headLabel} ${counts[tag]}</span>`);
+  }
   card.querySelector('.row-title').innerHTML = `${title} ・ ${parts.join(' / ') || ''}`;
   // v693 #277 showAll=true で全件 (= soon + later) を並べる。既定は従来通り上位 10 + 他 N 件 hint。
   let html;

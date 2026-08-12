@@ -17,7 +17,29 @@ function route_checkins(PDO $pdo, array $cfg, string $method, array $seg): void 
     json_error('not_found', "no checkins route for $method $sub", 404);
 }
 
-// v1288 最長連続ラボイン ランキング。 継続中 判定 (me.php と 同じ missed ロジック) を 付与。
+// last_checkin_date と current_streak から 「まだ 継続中 か」 を 判定 する 共通関数。
+// 継続中 = 「次回 checkin で streak++」に なる 状態。 途切れて いれば 次回 checkin で 1 に リセット。
+//   - current_streak <= 0 or last_checkin_date が NULL → 継続中 でない
+//   - last が 今日 or 昨日 → 即 継続中
+//   - それ 以外 は last+1 日目 から 昨日 まで を 走査、 稼働日 (weekday_only 時) が 1 日 でも
+//     空いて いれば 継続中 でない (missed > 0)。 me.php の 表示計算 と checkin_streak_ranking
+//     の is_ongoing 判定 が これ を 使う (v1297 で 統合)。
+function is_streak_ongoing(PDO $pdo, ?string $last, int $curStreak, bool $weekdayOnly, DateTimeZone $tz): bool {
+    if ($curStreak <= 0 || !$last) return false;
+    $today = (new DateTimeImmutable('now', $tz))->format('Y-m-d');
+    $yest  = (new DateTimeImmutable('yesterday', $tz))->format('Y-m-d');
+    if ($last === $today || $last === $yest) return true;
+    $d = new DateTimeImmutable($last, $tz);
+    $limit = new DateTimeImmutable($yest, $tz);
+    for ($safety = 0; $safety < 400; $safety++) {
+        $d = $d->modify('+1 day');
+        if ($d > $limit) return true; // limit まで missed ゼロ で 到達 = 継続中
+        if (!$weekdayOnly || Calendar::isWorkday($pdo, $d->format('Y-m-d'))) return false;
+    }
+    return false; // 400 日超過 = 安全網
+}
+
+// v1288 最長連続ラボイン ランキング。 継続中判定 は is_streak_ongoing() で 統一。
 // v1289 各人 の 「最長 window の 開始日〜終了日」 と 「継続中 window の 開始日」 を checkins から
 //   再構築 して 追加。 weekday_only 対応 (稼働日 gap を Calendar::isWorkday で 判定)。
 function checkin_streak_ranking(PDO $pdo, array $cfg): void {
@@ -33,8 +55,6 @@ function checkin_streak_ranking(PDO $pdo, array $cfg): void {
     ")->fetchAll(PDO::FETCH_ASSOC);
     $weekdayOnly = (string)cfg_get($pdo, 'streak_weekday_only', '1') !== '0';
     $tz = new DateTimeZone(date_default_timezone_get());
-    $today = (new DateTimeImmutable('now', $tz))->format('Y-m-d');
-    $yest  = (new DateTimeImmutable('yesterday', $tz))->format('Y-m-d');
 
     // 上位 50 名 の checkins を 一括取得 (user_id, checkin_date ASC)
     $winByUser = [];
@@ -58,23 +78,7 @@ function checkin_streak_ranking(PDO $pdo, array $cfg): void {
         $uid  = (int)$r['user_id'];
         $cur  = (int)$r['current_streak'];
         $last = $r['last_checkin_date'];
-        $ongoing = false;
-        if ($cur > 0 && $last) {
-            if ($last === $today || $last === $yest) {
-                $ongoing = true;
-            } else {
-                $d = new DateTimeImmutable($last, $tz);
-                $limit = new DateTimeImmutable($yest, $tz);
-                $missed = 0;
-                $safety = 400;
-                while ($safety-- > 0) {
-                    $d = $d->modify('+1 day');
-                    if ($d > $limit) break;
-                    if (!$weekdayOnly || Calendar::isWorkday($pdo, $d->format('Y-m-d'))) $missed++;
-                }
-                $ongoing = ($missed === 0);
-            }
-        }
+        $ongoing = is_streak_ongoing($pdo, $last, $cur, $weekdayOnly, $tz);
         $win = $winByUser[$uid] ?? ['longest' => null, 'latest' => null];
         $out[] = [
             'user_id'          => $uid,

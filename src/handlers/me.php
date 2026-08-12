@@ -14,28 +14,12 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
             FROM streaks WHERE user_id=?');
         $st->execute([$u['id']]);
         $streak = $st->fetch() ?: ['current_streak' => 0, 'longest_streak' => 0, 'last_checkin_date' => null];
-        // v1286 中村さん指示 で 平日ミス時 の 挙動を「完全リセット」に統一
-        //   (checkins.php も 同時修正)。 表示上も 「last_checkin 以降に 平日 が 1日
-        //   でも挟まっていれば 次回 checkin で 1 にリセットされる」旨を反映して 0 表示。
-        //   土日祝しか跨いでいなければ DB 値そのまま (連続 継続中)。
-        if ($streak['last_checkin_date']) {
-            $tz = new DateTimeZone(date_default_timezone_get());
-            $today = (new DateTimeImmutable('now', $tz))->format('Y-m-d');
-            $yest  = (new DateTimeImmutable('yesterday', $tz))->format('Y-m-d');
-            if ($streak['last_checkin_date'] !== $today && $streak['last_checkin_date'] !== $yest) {
-                $weekdayOnly = (string)cfg_get($pdo, 'streak_weekday_only', '1') !== '0';
-                $missed = 0;
-                $d = new DateTimeImmutable($streak['last_checkin_date'], $tz);
-                $limit = new DateTimeImmutable($yest, $tz);
-                $safety = 400;
-                while ($safety-- > 0) {
-                    $d = $d->modify('+1 day');
-                    if ($d > $limit) break;
-                    // weekday_only=1 なら 稼働日 のみ、 OFF なら 全日
-                    if (!$weekdayOnly || Calendar::isWorkday($pdo, $d->format('Y-m-d'))) $missed++;
-                }
-                if ($missed > 0) $streak['current_streak'] = 0;
-            }
+        // v1286 平日ミス時 は 「次回 checkin で 1 に 完全リセット」の 挙動 を 表示側 でも 反映。
+        //   v1297 判定 は checkins.php is_streak_ongoing() に 集約 (checkin_streak_ranking と 共通)。
+        $weekdayOnly = (string)cfg_get($pdo, 'streak_weekday_only', '1') !== '0';
+        $tz = new DateTimeZone(date_default_timezone_get());
+        if (!is_streak_ongoing($pdo, $streak['last_checkin_date'], (int)$streak['current_streak'], $weekdayOnly, $tz)) {
+            $streak['current_streak'] = 0;
         }
         $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id, hobbies, favorites, paypay_id, bank_info, birthday_md, birthday_year, birth_place FROM users WHERE id=?');
         $av->execute([$u['id']]);
