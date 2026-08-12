@@ -18,6 +18,8 @@ function route_checkins(PDO $pdo, array $cfg, string $method, array $seg): void 
 }
 
 // v1288 最長連続ラボイン ランキング。 継続中 判定 (me.php と 同じ missed ロジック) を 付与。
+// v1289 各人 の 「最長 window の 開始日〜終了日」 と 「継続中 window の 開始日」 を checkins から
+//   再構築 して 追加。 weekday_only 対応 (稼働日 gap を Calendar::isWorkday で 判定)。
 function checkin_streak_ranking(PDO $pdo, array $cfg): void {
     Auth::requireUser($pdo, $cfg);
     $rows = $pdo->query("
@@ -33,9 +35,28 @@ function checkin_streak_ranking(PDO $pdo, array $cfg): void {
     $tz = new DateTimeZone(date_default_timezone_get());
     $today = (new DateTimeImmutable('now', $tz))->format('Y-m-d');
     $yest  = (new DateTimeImmutable('yesterday', $tz))->format('Y-m-d');
+
+    // 上位 50 名 の checkins を 一括取得 (user_id, checkin_date ASC)
+    $winByUser = [];
+    if ($rows) {
+        $ids = array_map(fn($r) => (int)$r['user_id'], $rows);
+        $place = implode(',', array_fill(0, count($ids), '?'));
+        $stC = $pdo->prepare("SELECT user_id, checkin_date FROM checkins
+                               WHERE user_id IN ($place) ORDER BY user_id, checkin_date");
+        $stC->execute($ids);
+        $datesByUser = [];
+        foreach ($stC->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            $datesByUser[(int)$c['user_id']][] = (string)$c['checkin_date'];
+        }
+        foreach ($datesByUser as $uid => $dates) {
+            $winByUser[$uid] = compute_streak_windows($pdo, $dates, $weekdayOnly, $tz);
+        }
+    }
+
     $out = [];
     foreach ($rows as $r) {
-        $cur = (int)$r['current_streak'];
+        $uid  = (int)$r['user_id'];
+        $cur  = (int)$r['current_streak'];
         $last = $r['last_checkin_date'];
         $ongoing = false;
         if ($cur > 0 && $last) {
@@ -54,17 +75,54 @@ function checkin_streak_ranking(PDO $pdo, array $cfg): void {
                 $ongoing = ($missed === 0);
             }
         }
+        $win = $winByUser[$uid] ?? ['longest' => null, 'latest' => null];
         $out[] = [
-            'user_id'          => (int)$r['user_id'],
+            'user_id'          => $uid,
             'display_name'     => (string)$r['display_name'],
             'avatar_url'       => $r['avatar_url'],
             'longest_streak'   => (int)$r['longest_streak'],
             'current_streak'   => $cur,
             'is_ongoing'       => $ongoing,
             'last_checkin_date'=> $last,
+            'longest_start'    => $win['longest']['start'] ?? null,
+            'longest_end'      => $win['longest']['end']   ?? null,
+            'current_start'    => ($ongoing && $win['latest']) ? $win['latest']['start'] : null,
         ];
     }
     json_response(['ranking' => $out]);
+}
+
+// checkins.checkin_date の ASC 配列 から window を 走査、 最長 と 最新 の (start, end, len) を返す。
+// weekday_only=true なら 「前 checkin の 次 稼働日 == 今回 checkin」 で 連続判定、 false なら 単純 +1 日。
+function compute_streak_windows(PDO $pdo, array $dates, bool $weekdayOnly, DateTimeZone $tz): array {
+    $winStart = null; $winLen = 0; $prev = null;
+    $longest = null; $latest = null;
+    $flush = function() use (&$longest, &$latest, &$winStart, &$prev, &$winLen) {
+        if ($winLen <= 0) return;
+        $w = ['start' => $winStart, 'end' => $prev, 'len' => $winLen];
+        if (!$longest || $w['len'] > $longest['len']) $longest = $w;
+        $latest = $w;
+    };
+    foreach ($dates as $d) {
+        if ($prev === null) {
+            $winStart = $d; $winLen = 1; $prev = $d; continue;
+        }
+        $connected = false;
+        if (!$weekdayOnly) {
+            $connected = ((new DateTimeImmutable($prev, $tz))->modify('+1 day')->format('Y-m-d') === $d);
+        } else {
+            $x = new DateTimeImmutable($prev, $tz);
+            for ($i = 0; $i < 10; $i++) {
+                $x = $x->modify('+1 day');
+                if (Calendar::isWorkday($pdo, $x->format('Y-m-d'))) break;
+            }
+            $connected = ($x->format('Y-m-d') === $d);
+        }
+        if ($connected) { $winLen++; $prev = $d; }
+        else { $flush(); $winStart = $d; $winLen = 1; $prev = $d; }
+    }
+    $flush();
+    return ['longest' => $longest, 'latest' => $latest];
 }
 
 // Shared: do the check-in for a user on today's date. Idempotent (UNIQUE on (user,date)).
