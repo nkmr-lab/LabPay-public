@@ -2763,6 +2763,8 @@ async function fetchRecruitingItems() {
 function tagHtml(tag) {
   return ({
     active:   '<span class="tag" style="background:#d1fae5; color:#065f46; font-size:10px">▶ 参加中</span>',
+    // v1295 中村さん指示「募集中じゃなくて依頼中」で buy_request 用の request タグを追加
+    request:  '<span class="tag" style="background:#fee2e2; color:#991b1b; font-size:10px">📮 依頼中</span>',
     open:     '<span class="tag" style="background:#fef3c7; color:#92400e; font-size:10px">🎯 募集中</span>',
     vote:     '<span class="tag" style="background:#ede9fe; color:#5b21b6; font-size:10px">🗳 未応答</span>',
     work:     '<span class="tag" style="background:#dbeafe; color:#1e40af; font-size:10px">⏳ 進行中</span>',
@@ -3086,17 +3088,19 @@ async function renderCategoryWidget({ cardId, rootId, title, cat, emptyMsg, show
     root.innerHTML = `<div class="hint" style="font-size:12px">${emptyMsg}</div>`;
     return;
   }
-  const tagPriority = { active: 0, vote: 1, work: 2, open: 3, pending: 4 };
+  // v1295 request (📮 依頼中) は active と同格 で 最優先
+  const tagPriority = { active: 0, request: 0, vote: 1, work: 2, open: 3, pending: 4 };
   items.sort((a, b) => (tagPriority[a.tag] ?? 9) - (tagPriority[b.tag] ?? 9));
   const { soon, later } = splitByDeadline(items);
   // タイトルにカウント
-  const counts = { active: 0, vote: 0, work: 0, open: 0 };
+  const counts = { active: 0, request: 0, vote: 0, work: 0, open: 0 };
   for (const it of items) counts[it.tag] = (counts[it.tag] || 0) + 1;
   const parts = [];
-  if (counts.active) parts.push(`<span style="color:#10b981">参加中 ${counts.active}</span>`);
-  if (counts.open)   parts.push(`<span style="color:#f59e0b">募集 ${counts.open}</span>`);
-  if (counts.vote)   parts.push(`<span style="color:#7c3aed">未応答 ${counts.vote}</span>`);
-  if (counts.work)   parts.push(`<span style="color:#0369a1">進行中 ${counts.work}</span>`);
+  if (counts.active)  parts.push(`<span style="color:#10b981">参加中 ${counts.active}</span>`);
+  if (counts.request) parts.push(`<span style="color:#dc2626">依頼 ${counts.request}</span>`);
+  if (counts.open)    parts.push(`<span style="color:#f59e0b">募集 ${counts.open}</span>`);
+  if (counts.vote)    parts.push(`<span style="color:#7c3aed">未応答 ${counts.vote}</span>`);
+  if (counts.work)    parts.push(`<span style="color:#0369a1">進行中 ${counts.work}</span>`);
   card.querySelector('.row-title').innerHTML = `${title} ・ ${parts.join(' / ') || ''}`;
   // v693 #277 showAll=true で全件 (= soon + later) を並べる。既定は従来通り上位 10 + 他 N 件 hint。
   let html;

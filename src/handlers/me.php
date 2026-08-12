@@ -1049,7 +1049,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                     $fee = $r['price_estimate'] !== null
                         ? '想定 ' . number_format((int)$r['price_estimate']) . '円'
                         : '';
-                    $items[] = ['cat' => 'work', 'tag' => 'open', 'icon' => $icon, 'kind' => 'buy-request',
+                    $items[] = ['cat' => 'work', 'tag' => 'request', 'icon' => $icon, 'kind' => 'buy-request',
                                 'title' => '購入依頼: ' . mb_substr((string)$r['title'], 0, 26),
                                 'by' => $r['by_name'], 'fee' => $fee,
                                 'url' => '#/buy-requests?open=' . (int)$r['id']];
