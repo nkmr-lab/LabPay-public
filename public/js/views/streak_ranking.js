@@ -55,23 +55,27 @@ export async function renderStreakRanking() {
           : '';
         periodHtml = lineLongest + lineOngoing;
       }
+      // NOTE: 親 .row の 既定 CSS `.row > * { flex: 1 1 auto; }` (style.css) が
+      //   全 子要素 に flex-grow:1 を 付ける ので、 側要素 は `flex: 0 0 幅` で grow を
+      //   潰さないと avatar が 余剰幅 を 吸って 横長 に なる (v1289 で shrink だけ 潰したら
+      //   grow が 残って 再発)。 中央 の 名前カラム だけ flex:1 で 伸縮させる。
       const av = r.avatar_url
         ? `<img src="${escapeHtml(r.avatar_url)}" alt=""
              style="width:36px; height:36px; border-radius:50%; object-fit:cover;
-                    flex-shrink:0; display:block">`
+                    flex:0 0 36px; display:block">`
         : `<div style="width:36px; height:36px; border-radius:50%; background:#eee;
-                       flex-shrink:0"></div>`;
+                       flex:0 0 36px"></div>`;
       return `
         <a href="#/users/${r.user_id}" class="row center"
            style="gap:10px; padding:10px 4px; border-bottom:1px solid var(--line);
                   text-decoration:none; color:inherit">
-          <span style="min-width:36px; flex-shrink:0; font-weight:600; color:#666">${medal}</span>
+          <span style="flex:0 0 36px; font-weight:600; color:#666; text-align:right">${medal}</span>
           ${av}
-          <div style="flex:1; min-width:0">
+          <div style="flex:1 1 0; min-width:0">
             <div style="font-weight:500">${escapeHtml(r.display_name)}</div>
             ${periodHtml}
           </div>
-          <div style="text-align:right; min-width:56px; flex-shrink:0">
+          <div style="flex:0 0 56px; text-align:right">
             <div style="font-size:22px; font-weight:700; color:#7b3fa0; line-height:1">
               ${r.longest_streak}<span style="font-size:11px; color:#666; font-weight:400"> 日</span>
             </div>
