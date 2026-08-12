@@ -12,8 +12,59 @@ function route_checkins(PDO $pdo, array $cfg, string $method, array $seg): void 
 
     if ($sub === '' && $method === 'POST') { checkin_manual($pdo, $cfg); return; }
     if ($sub === 'status' && $method === 'GET') { checkin_status($pdo, $cfg); return; }
+    if ($sub === 'streak-ranking' && $method === 'GET') { checkin_streak_ranking($pdo, $cfg); return; }
 
     json_error('not_found', "no checkins route for $method $sub", 404);
+}
+
+// v1288 最長連続ラボイン ランキング。 継続中 判定 (me.php と 同じ missed ロジック) を 付与。
+function checkin_streak_ranking(PDO $pdo, array $cfg): void {
+    Auth::requireUser($pdo, $cfg);
+    $rows = $pdo->query("
+        SELECT s.user_id, s.current_streak, s.longest_streak, s.last_checkin_date,
+               u.display_name, u.avatar_url
+          FROM streaks s
+          JOIN users u ON u.id = s.user_id
+         WHERE s.longest_streak > 0
+         ORDER BY s.longest_streak DESC, s.current_streak DESC, u.display_name
+         LIMIT 50
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    $weekdayOnly = (string)cfg_get($pdo, 'streak_weekday_only', '1') !== '0';
+    $tz = new DateTimeZone(date_default_timezone_get());
+    $today = (new DateTimeImmutable('now', $tz))->format('Y-m-d');
+    $yest  = (new DateTimeImmutable('yesterday', $tz))->format('Y-m-d');
+    $out = [];
+    foreach ($rows as $r) {
+        $cur = (int)$r['current_streak'];
+        $last = $r['last_checkin_date'];
+        $ongoing = false;
+        if ($cur > 0 && $last) {
+            if ($last === $today || $last === $yest) {
+                $ongoing = true;
+            } else {
+                $d = new DateTimeImmutable($last, $tz);
+                $limit = new DateTimeImmutable($yest, $tz);
+                $missed = 0;
+                $safety = 400;
+                while ($safety-- > 0) {
+                    $d = $d->modify('+1 day');
+                    if ($d > $limit) break;
+                    if (!$weekdayOnly || Calendar::isWorkday($pdo, $d->format('Y-m-d'))) $missed++;
+                }
+                $ongoing = ($missed === 0);
+            }
+        }
+        $out[] = [
+            'user_id'          => (int)$r['user_id'],
+            'display_name'     => (string)$r['display_name'],
+            'avatar_url'       => $r['avatar_url'],
+            'longest_streak'   => (int)$r['longest_streak'],
+            'current_streak'   => $cur,
+            'is_ongoing'       => $ongoing,
+            'last_checkin_date'=> $last,
+        ];
+    }
+    json_response(['ranking' => $out]);
 }
 
 // Shared: do the check-in for a user on today's date. Idempotent (UNIQUE on (user,date)).

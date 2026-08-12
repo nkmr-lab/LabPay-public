@@ -489,6 +489,7 @@ route('/bug-report',      lazy(() => import('./views/feedback_user.js'), 'render
 route('/feedback',        lazy(() => import('./views/feedback_user.js'), 'renderFeedbackForm'));    // v517 #146 新統合
 route('/settings',       lazy(() => import('./views/settings.js'), 'renderSettings'));
 route('/achievements',   lazy(() => import('./views/achievements.js'), 'renderAchievements'));
+route('/streak-ranking', lazy(() => import('./views/streak_ranking.js'), 'renderStreakRanking'));
 route('/tasks',          lazy(() => import('./views/tasks.js'), 'renderTasks'));
 route('/tasks/:id',      lazy(() => import('./views/tasks.js'), 'renderTaskDetail'));
 route('/send',           lazy(() => import('./views/transfer.js'), 'renderTransfer'));

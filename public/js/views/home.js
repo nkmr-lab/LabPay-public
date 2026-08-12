@@ -1036,7 +1036,9 @@ function paintFinancials(me) {
   const sl = document.getElementById('streak-line');
   if (sl) {
     const s = me.streak || {};
-    sl.textContent = `連続ラボイン ${s.current_streak ?? 0} 日 (最長 ${s.longest_streak ?? 0} 日)`;
+    // v1288 最長 の 隣 に ランキング リンク
+    sl.innerHTML = `連続ラボイン ${s.current_streak ?? 0} 日 (最長 ${s.longest_streak ?? 0} 日)` +
+      ` <a href="#/streak-ranking" style="margin-left:4px; text-decoration:none" title="最長連続ラボイン ランキング">🏆</a>`;
   }
 }
 async function refreshFinancials({ silent }) {
