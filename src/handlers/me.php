@@ -1032,6 +1032,30 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                             'sec_ahead' => $r['sec_ahead'] !== null ? (int)$r['sec_ahead'] : null];
             }
         } catch (Throwable $_) {}
+        try {
+            // v1294 🛒 購入依頼 (open) を 「あなた宛て」に 追加。 買物 対応 は 主に admin (中村さん)
+            //   に 通知 が 飛ぶ 設計 (buy_requests.php buy_requests_create) と 一致 させて admin のみ表示。
+            //   自分 が 起案 したもの は 除外 (依頼者 に 見せても 対応先 が 自分 で 意味なし)。
+            if (($u['role'] ?? '') === 'admin') {
+                $st = $pdo->prepare("SELECT b.id, b.title, b.urgency, b.price_estimate, ur.display_name AS by_name
+                                       FROM buy_requests b
+                                       JOIN users ur ON ur.id = b.requester_user_id
+                                      WHERE b.status='open' AND b.requester_user_id <> ?
+                                      ORDER BY (b.urgency='urgent') DESC, b.created_at DESC
+                                      LIMIT 8");
+                $st->execute([$uid]);
+                foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                    $icon = $r['urgency'] === 'urgent' ? '🚨' : '🛒';
+                    $fee = $r['price_estimate'] !== null
+                        ? '想定 ' . number_format((int)$r['price_estimate']) . '円'
+                        : '';
+                    $items[] = ['cat' => 'work', 'tag' => 'open', 'icon' => $icon, 'kind' => 'buy-request',
+                                'title' => '購入依頼: ' . mb_substr((string)$r['title'], 0, 26),
+                                'by' => $r['by_name'], 'fee' => $fee,
+                                'url' => '#/buy-requests?open=' . (int)$r['id']];
+                }
+            }
+        } catch (Throwable $_) {}
 
         // v660 (feedback #243) 娯楽 item (active/open) に参加者アバター用データを付与。
         // kind 別に最大 6 名まで。 fetch 失敗は無視して元のまま。
