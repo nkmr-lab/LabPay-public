@@ -32,28 +32,22 @@ export async function renderStreakRanking() {
     }
     list.innerHTML = d.ranking.map((r, i) => {
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
-      // 期間: 継続中 かつ 最長 window の 開始 == 継続中 window の 開始 なら
-      //   「YYYY/M/D 〜 継続中 🔥」に統合。 それ以外 は 最長期間 と 継続中 を 別行 で。
-      let periodHtml = '';
+      // v1291 中村さん指示「継続中🔥は本当に継続しているやつだけを出すべき」。
+      //   = 「その人の 最長記録 を 今 まさに 更新中」の 場合 だけ 🔥 を 出す。
+      //   最長 window と 現在 継続中 window の 開始日 が 一致 (= longestSame) の 時 のみ。
+      //   過去 に 大記録 が あって 今 別の 短い window を 積んでる 人 (宮本 52→今2 等) は
+      //   「記録期間: A 〜 B」だけ 表示、 🔥 は 出さない。
       const longestSame = r.longest_start && r.current_start && r.longest_start === r.current_start;
+      let periodHtml = '';
       if (longestSame) {
         periodHtml = `<div class="muted" style="font-size:11px">
           ${fmtDate(r.longest_start)} 〜 <span style="color:#e64; font-weight:600">継続中 🔥</span>
           (現在 ${r.current_streak} 日)
         </div>`;
-      } else {
-        const lineLongest = r.longest_start && r.longest_end
-          ? `<div class="muted" style="font-size:11px">
-               記録期間: ${fmtDate(r.longest_start)} 〜 ${fmtDate(r.longest_end)}
-             </div>`
-          : '';
-        const lineOngoing = r.is_ongoing
-          ? `<div class="muted" style="font-size:11px">
-               <span style="color:#e64; font-weight:600">🔥 継続中</span>
-               ${r.current_start ? fmtDate(r.current_start) + ' 〜 ' : ''}(現在 ${r.current_streak} 日)
-             </div>`
-          : '';
-        periodHtml = lineLongest + lineOngoing;
+      } else if (r.longest_start && r.longest_end) {
+        periodHtml = `<div class="muted" style="font-size:11px">
+          記録期間: ${fmtDate(r.longest_start)} 〜 ${fmtDate(r.longest_end)}
+        </div>`;
       }
       // NOTE: 親 .row の 既定 CSS `.row > * { flex: 1 1 auto; }` (style.css) が
       //   全 子要素 に flex-grow:1 を 付ける ので、 側要素 は `flex: 0 0 幅` で grow を
