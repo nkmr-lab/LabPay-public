@@ -93,14 +93,22 @@ function checkin_streak_ranking(PDO $pdo, array $cfg): void {
 }
 
 // checkins.checkin_date の ASC 配列 から window を 走査、 最長 と 最新 の (start, end, len) を返す。
-// weekday_only=true なら 「前 checkin の 次 稼働日 == 今回 checkin」 で 連続判定、 false なら 単純 +1 日。
+// weekday_only=true なら 「稼働日 の checkin だけ」 を 使って 「前 稼働日 checkin == 今回 の 前 稼働日」 で 連続判定
+//   (checkins.php do_checkin の streak 加算ロジック と 意味論 を 揃える。 土日祝 の checkin は
+//    streak には 関与 しない ので ここ でも 除外)。
+// weekday_only=false なら 単純 +1 日 で 判定。
+// tie break: 同 len の window が 複数 ある 場合 は 「最新 の window」を longest として採用
+//   (>= で 上書き) — 継続中 window が 最長 と 一致 する ケース で 「🔥 継続中」を 出す ため。
 function compute_streak_windows(PDO $pdo, array $dates, bool $weekdayOnly, DateTimeZone $tz): array {
+    if ($weekdayOnly) {
+        $dates = array_values(array_filter($dates, fn($d) => Calendar::isWorkday($pdo, $d)));
+    }
     $winStart = null; $winLen = 0; $prev = null;
     $longest = null; $latest = null;
     $flush = function() use (&$longest, &$latest, &$winStart, &$prev, &$winLen) {
         if ($winLen <= 0) return;
         $w = ['start' => $winStart, 'end' => $prev, 'len' => $winLen];
-        if (!$longest || $w['len'] > $longest['len']) $longest = $w;
+        if (!$longest || $w['len'] >= $longest['len']) $longest = $w;
         $latest = $w;
     };
     foreach ($dates as $d) {
@@ -111,6 +119,7 @@ function compute_streak_windows(PDO $pdo, array $dates, bool $weekdayOnly, DateT
         if (!$weekdayOnly) {
             $connected = ((new DateTimeImmutable($prev, $tz))->modify('+1 day')->format('Y-m-d') === $d);
         } else {
+            // 既に 稼働日のみ に 絞ってある ので、 prev の 次 稼働日 == d で判定
             $x = new DateTimeImmutable($prev, $tz);
             for ($i = 0; $i < 10; $i++) {
                 $x = $x->modify('+1 day');
