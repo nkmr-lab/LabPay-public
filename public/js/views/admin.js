@@ -12,6 +12,60 @@ async function loadTable(elementId, fetcher) {
   catch (e) { el.textContent = '取得失敗: ' + e.message; }
 }
 
+// ---------------- v1296 AI サブスク 契約週数 ランキング ----------------
+async function loadAdminAiSub() {
+  const el = document.getElementById('admin-aisub');
+  if (!el) return;
+  try {
+    const d = await get('/api/admin/ai-sub/ranking');
+    const items = d.items || [];
+    if (!items.length) {
+      el.innerHTML = '<div class="hint">契約経験のあるユーザーはまだいません。</div>';
+      return;
+    }
+    const stateLabel = {
+      renewing: '<span style="color:#059669; font-weight:600">🔄 更新ON</span>',
+      ends:     '<span style="color:#d97706">⏳ 期限まで</span>',
+      expired:  '<span style="color:#6b7280">🏁 終了</span>',
+    };
+    el.innerHTML = `
+      <div style="overflow-x:auto">
+      <table class="mono" style="width:100%; border-collapse:collapse; font-size:12px">
+        <thead>
+          <tr style="background:#f6f6f9; text-align:left">
+            <th style="padding:6px 8px">#</th>
+            <th style="padding:6px 8px">ユーザ</th>
+            <th style="padding:6px 8px; text-align:right">週数</th>
+            <th style="padding:6px 8px; text-align:right">累計課金</th>
+            <th style="padding:6px 8px">状態</th>
+            <th style="padding:6px 8px">現期間</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((r, i) => {
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
+            const av = r.avatar_url
+              ? `<img src="${escapeHtml(r.avatar_url)}" alt="" style="width:22px; height:22px; border-radius:50%; object-fit:cover; flex:0 0 22px; vertical-align:middle; margin-right:6px">`
+              : `<span style="display:inline-block; width:22px; height:22px; border-radius:50%; background:#eee; margin-right:6px; vertical-align:middle"></span>`;
+            const endShort = (r.current_period_end || '').replace('T', ' ').slice(0, 16);
+            return `
+              <tr style="border-bottom:1px solid var(--line)">
+                <td style="padding:6px 8px; white-space:nowrap">${medal}</td>
+                <td style="padding:6px 8px">${av}${escapeHtml(r.display_name || '')}</td>
+                <td style="padding:6px 8px; text-align:right; font-weight:600; color:#7b3fa0">${r.cycle_count}</td>
+                <td style="padding:6px 8px; text-align:right">${Number(r.total_paid || 0).toLocaleString()}pt</td>
+                <td style="padding:6px 8px">${stateLabel[r.state] || r.state}</td>
+                <td style="padding:6px 8px; color:#666">〜${escapeHtml(endShort)}</td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      </div>`;
+  } catch (e) {
+    el.innerHTML = `<div class="hint" style="color:#c00">取得失敗: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
 // ---------------- Admin: Zoom 連携 (旧 settings から移設) ----------------
 async function loadAdminZoom() {
   const root = document.getElementById('zoom-section');
@@ -185,6 +239,15 @@ export async function renderAdmin() {
       </div>
     </div>
 
+    <!-- v1296 AI サブスク 契約週数 ランキング (中村さん要望) -->
+    <div class="card">
+      <h3 style="margin:0">🤖 AI サブスク 契約週数 ランキング</h3>
+      <div class="hint" style="font-size:11px; margin-top:2px">
+        cycle_count 降順 (tie は 累計課金 降順 → 契約開始 昇順)。 週数 = auto-renew cron が 週 1 で +1。
+      </div>
+      <div id="admin-aisub" class="muted" style="margin-top:8px">読み込み中…</div>
+    </div>
+
     <div class="card">
       <h3 style="margin:0">Slack 通知診断</h3>
       <p class="hint">「Notifier slack DM failed」が増えてる時の調査用。 bot token とスコープを確認。</p>
@@ -344,6 +407,9 @@ export async function renderAdmin() {
   }
   if (dash) renderSupply(dash);
   if (dash) renderDashboard(dash);
+
+  // v1296 AI サブスク 契約週数 ランキング
+  loadAdminAiSub();
 
   // --- Zoom 連携 + Scrapbox 名簿 ---
   await loadAdminZoom();

@@ -925,5 +925,26 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         return;
     }
 
+    // v1296 AI サブスク 契約週数 ランキング (中村さん要望)
+    if ($sub === 'ai-sub' && ($seg[2] ?? '') === 'ranking' && $method === 'GET') {
+        $st = $pdo->query("
+            SELECT s.user_id, u.display_name, u.avatar_url,
+                   s.cycle_count, s.total_paid, s.covered_count, s.covered_pt,
+                   s.auto_renew, s.current_period_start, s.current_period_end,
+                   s.canceled_at, s.created_at,
+                   CASE
+                     WHEN s.current_period_end > NOW() AND s.auto_renew = 1 THEN 'renewing'
+                     WHEN s.current_period_end > NOW() AND s.auto_renew = 0 THEN 'ends'
+                     ELSE 'expired'
+                   END AS state
+              FROM ai_subs s
+              JOIN users u ON u.id = s.user_id
+             ORDER BY s.cycle_count DESC, s.total_paid DESC, s.created_at ASC
+             LIMIT 100
+        ");
+        json_response(['items' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+        return;
+    }
+
     json_error('not_found', "no admin route for $method $sub", 404);
 }
