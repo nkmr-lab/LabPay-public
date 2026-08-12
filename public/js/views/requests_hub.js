@@ -29,7 +29,7 @@ export async function renderRequestsHub() {
     <div class="card page-header">
       <h2 style="margin:0">依頼</h2>
     </div>
-    <div class="list">
+    <div class="list apps-grid-2col">
       ${ITEMS.map(a => `
         <a class="list-item" href="${a.url}">
           <div class="grow">
