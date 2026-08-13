@@ -64,6 +64,9 @@ function rankings_all(PDO $pdo): void {
             'exp_delegated'          => rank_exp_delegated($pdo, RANK_TOP_N),
             // v1311 ルーレット当選数
             'roulette_won'           => rank_roulette_won($pdo, RANK_TOP_N),
+            // v1312 部屋別 滞在日数 (10F / 7F)
+            'room_days_10F'          => rank_room_days($pdo, '10F', RANK_TOP_N),
+            'room_days_7F'           => rank_room_days($pdo, '7F',  RANK_TOP_N),
         ],
     ]);
 }
@@ -346,6 +349,21 @@ function rank_exp_done(PDO $pdo, int $n): array {
          GROUP BY p.user_id
          ORDER BY count DESC, p.user_id ASC LIMIT ?");
     $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1312 21) 部屋別 滞在日数: presence_sessions の 指定 room_id で started_at.date が
+//   DISTINCT な 日数 by user_id。 化石 (24h+) は 現状 データ に なし。
+function rank_room_days(PDO $pdo, string $roomId, int $n): array {
+    $st = $pdo->prepare("
+        SELECT user_id, COUNT(DISTINCT DATE(started_at)) AS count
+          FROM presence_sessions
+         WHERE user_id IS NOT NULL AND room_id = ?
+         GROUP BY user_id
+         ORDER BY count DESC, user_id ASC LIMIT ?");
+    $st->bindValue(1, $roomId, PDO::PARAM_STR);
+    $st->bindValue(2, $n, PDO::PARAM_INT);
     $st->execute();
     return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
 }
