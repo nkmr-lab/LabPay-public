@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v1314', d: '2026-08-13', s: '📐 最長ラボ滞在 の 位置 を 徹夜 の 右 (直後) に 移動 (中村さん指示)。 従来: CARDS 配列 末尾 (7F滞在日数 の 後)。 変更: all_nighter の 直後 に 移動 で 「日/滞在時間 系」の 塊 に 集約。sw.js v1314 bump。' },
   { v: 'v1313', d: '2026-08-13', s: '⭐ Rankings で 自分の行をハイライト (中村さん要望)。 renderRow で state.me.id === r.user_id を 判定、 該当行 は 薄い黄背景 (#fff9db) + 左に3pxのアクセントborder (#f59e0b) + 名前を太字 + 「(あなた)」オレンジタグ。 25 カード 全部 に 効く。sw.js v1313 bump。' },
   { v: 'v1312', d: '2026-08-13', s: '🏢 Rankings に 「10F 滞在日数」「7F 滞在日数」追加 (中村さん要望)。 rank_room_days(room_id) を 追加、 presence_sessions で 指定 room の DISTINCT DATE(started_at) を user 毎 に 集計。 rankings_all で 10F と 7F の 2 entry を 生成。 全25カード。sw.js v1312 bump。' },
   { v: 'v1311', d: '2026-08-13', s: '🧪 実験ランキング の 対称化 + 🎰 ルーレット当選数 追加 (中村さん指摘「exp_done と exp_delegated の 数が合わない、 ルーレット当たった数も欲しい」)。 (1) exp_done が deleted な recruit の 参加 も カウント して いた ため exp_delegated (deleted除外) と 非対称 に なって いた (差 = 34 件、 主に メンバー23の 削除実験#6 の 19人 分)。 rank_exp_done も JOIN + r.deleted_at IS NULL で 対称化。 (2) rank_roulette_won 追加 = roulettes.winner_user_id の 件数、 Achievements の「運命の人」と 同定義、 dry-run spin は 記録なし で 実勝負 のみ。 全23カード。sw.js v1311 bump。' },

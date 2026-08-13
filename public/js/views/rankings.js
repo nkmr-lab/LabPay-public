@@ -16,6 +16,8 @@ const CARDS = [
   { key: 'early_bird',             title: '🌅 早起きラボ',         unit: '日',  desc: '朝7:00〜8:30にラボにいた日数 (泊まり除外)' },
   { key: 'night_use',              title: '🌙 夜間ラボ族',         unit: '日',  desc: '夜23:00〜25:00にラボにいた日数' },
   { key: 'all_nighter',            title: '🛌 徹夜',                unit: '日',  desc: '日付をまたぐ在室 (0:00越え) の日数' },
+  { key: 'longest_visit',          title: '⏱ 最長ラボ滞在',        unit: '',   desc: '1回のラボ滞在の最長時間 (presence_sessionsの単一 duration MAX)',
+    format: n => { const h = Math.floor(n / 60); const m = n % 60; return h > 0 ? `${h}時間${m}分` : `${m}分`; } },
   { key: 'sns_reactions_received', title: '❤️ 受けたリアクション', unit: '個',  desc: '自分のらぼったー投稿に付いたリアクションの累計 (自分のを除外)' },
   { key: 'sns_reactions_given',    title: '👍 したリアクション',    unit: '個',  desc: '他人のらぼったー投稿に自分が付けたリアクションの累計 (自postは除外)' },
   { key: 'sales_count',            title: '🏷 販売数',              unit: '個',  desc: '販売した商品の累計数量 (販売タブ/出品)' },
@@ -33,8 +35,6 @@ const CARDS = [
   { key: 'roulette_won',           title: '🎰 ルーレット当選数',    unit: '回', desc: 'ルーレットで当選した回数 (「運命の人」実績と同定義)' },
   { key: 'room_days_10F',          title: '🏢 10F 滞在日数',        unit: '日', desc: '10F にセッションが記録されたユニーク日数 (presence_sessions の DISTINCT DATE)' },
   { key: 'room_days_7F',           title: '🏢 7F 滞在日数',         unit: '日', desc: '7F にセッションが記録されたユニーク日数' },
-  { key: 'longest_visit',          title: '⏱ 最長ラボ滞在',        unit: '',   desc: '1回のラボ滞在の最長時間 (presence_sessionsの単一 duration MAX)',
-    format: n => { const h = Math.floor(n / 60); const m = n % 60; return h > 0 ? `${h}時間${m}分` : `${m}分`; } },
 ];
 
 export async function renderRankings() {
