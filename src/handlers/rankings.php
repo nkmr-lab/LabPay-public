@@ -252,14 +252,16 @@ function rank_peak_buy(PDO $pdo, int $n): array {
 }
 
 // v1305 15) 使用ポイント累計: ledger で user account から 送出 した 合計 (受取 は 含まない)。
-//    「何 に 使ったか」問わず 全 out-flow を 単純累計。 users.kind=human で pseudo 除外。
+//    users.kind=human で pseudo 除外。
+//    v1307 中村さん指示 で type='deposit' (escrow 預入 = 一時 lock、 返還 可能 で 消費 でない)
+//    を 除外。 AI 課金 (paper_review/paper_translate/ai_sub/deep_research 等) は そのまま含める。
 function rank_spent_total(PDO $pdo, int $n): array {
     $st = $pdo->prepare("
         SELECT a.owner_user_id AS user_id, SUM(l.amount) AS count
           FROM ledger l
           JOIN accounts a ON a.id = l.from_account_id
           JOIN users u    ON u.id = a.owner_user_id
-         WHERE u.kind = 'human'
+         WHERE u.kind = 'human' AND l.type <> 'deposit'
          GROUP BY a.owner_user_id
          ORDER BY count DESC, a.owner_user_id ASC LIMIT ?");
     $st->bindValue(1, $n, PDO::PARAM_INT);
