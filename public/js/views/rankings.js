@@ -22,9 +22,9 @@ const CARDS = [
   { key: 'sns_reactions_given',    title: '👍 したリアクション',    unit: '個',  desc: '他人のらぼったー投稿に自分が付けたリアクションの累計 (自postは除外)' },
   { key: 'sales_count',            title: '🏷 販売数',              unit: '個',  desc: '販売した商品の累計数量 (販売タブ/出品)' },
   { key: 'sales_amount',           title: '💰 販売額',              unit: 'pt', desc: '販売で稼いだpt累計 (unit_price × qty)' },
-  { key: 'peak_sale',              title: '🏆 最高売上 (単一取引)', unit: 'pt', desc: '販売者ごとの1取引の最高金額 (unit_price × qty のMAX)' },
   { key: 'purchases_count',        title: '🛒 購入数',              unit: '個',  desc: '購入した商品の累計数量' },
   { key: 'purchases_amount',       title: '💸 購入額',              unit: 'pt', desc: '購入に使ったpt累計 (unit_price × qty)' },
+  { key: 'peak_sale',              title: '🏆 最高売上 (単一取引)', unit: 'pt', desc: '販売者ごとの1取引の最高金額 (unit_price × qty のMAX)' },
   { key: 'peak_buy',               title: '💎 最高購入額 (単一取引)', unit: 'pt', desc: '買い手ごとの1取引の最高金額 (unit_price × qty のMAX)' },
   { key: 'spent_total',            title: '💳 使用ポイント累計',    unit: 'pt', desc: '実際に使ったptの累計' },
   { key: 'peak_balance',           title: '👑 富豪度 (歴代最高保持額)', unit: 'pt', desc: 'ledgerを時系列走査して各時点の残高を求め、その歴代最高値' },
@@ -32,9 +32,9 @@ const CARDS = [
   { key: 'task_delegated',         title: '📋 タスクやってもらった', unit: '件', desc: '自分が発注したタスクで完了承認された件数' },
   { key: 'exp_done',               title: '🧪 実験やった (被験者)', unit: '回', desc: '実験募集に被験者として参加した延べ回数' },
   { key: 'exp_delegated',          title: '👥 実験やってもらった',  unit: '人', desc: '自分主催の実験募集に集まった延べ参加者数' },
-  { key: 'roulette_won',           title: '🎰 ルーレット当選数',    unit: '回', desc: 'ルーレットで当選した回数 (「運命の人」実績と同定義)' },
   { key: 'room_days_10F',          title: '🏢 10F 滞在日数',        unit: '日', desc: '10F にセッションが記録されたユニーク日数 (presence_sessions の DISTINCT DATE)' },
   { key: 'room_days_7F',           title: '🏢 7F 滞在日数',         unit: '日', desc: '7F にセッションが記録されたユニーク日数' },
+  { key: 'roulette_won',           title: '🎰 ルーレット当選数',    unit: '回', desc: 'ルーレットで当選した回数 (「運命の人」実績と同定義)' },
 ];
 
 export async function renderRankings() {
