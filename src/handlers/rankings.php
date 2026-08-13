@@ -41,6 +41,7 @@ function rankings_all(PDO $pdo): void {
             'all_nighter'            => rank_all_nighter($pdo, RANK_TOP_N),
             // v1301 販売/購入/リアクション (Achievements.tallyForUser 同型)
             'sns_reactions_received' => rank_sns_reactions_received($pdo, RANK_TOP_N),
+            'sns_reactions_given'    => rank_sns_reactions_given($pdo, RANK_TOP_N),
             'sales_count'            => rank_purchases_agg($pdo, 'seller_user_id', 'qty',              RANK_TOP_N),
             'sales_amount'           => rank_purchases_agg($pdo, 'seller_user_id', 'unit_price * qty', RANK_TOP_N),
             'purchases_count'        => rank_purchases_agg($pdo, 'buyer_user_id',  'qty',              RANK_TOP_N),
@@ -205,6 +206,20 @@ function rank_sns_reactions_received(PDO $pdo, int $n): array {
          WHERE l.user_id <> p.user_id
          GROUP BY p.user_id
          ORDER BY count DESC, p.user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1302 8b) 送信リアクション数: 自分 が 他人 の 投稿 に 付けた post_likes 数 (自 post は 除外)。
+function rank_sns_reactions_given(PDO $pdo, int $n): array {
+    $st = $pdo->prepare("
+        SELECT l.user_id, COUNT(*) AS count
+          FROM post_likes l
+          JOIN posts p ON p.id = l.post_id
+         WHERE l.user_id <> p.user_id
+         GROUP BY l.user_id
+         ORDER BY count DESC, l.user_id ASC LIMIT ?");
     $st->bindValue(1, $n, PDO::PARAM_INT);
     $st->execute();
     return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));

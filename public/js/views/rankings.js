@@ -17,6 +17,7 @@ const CARDS = [
   { key: 'all_nighter',            title: '🛌 徹夜',                unit: '日',  desc: '日付 を またぐ 在室 (0:00 越え) の 日数' },
   // v1301 中村さん要望
   { key: 'sns_reactions_received', title: '❤️ 受けた リアクション', unit: '個',  desc: '自分 の らぼったー 投稿 に 付いた リアクション の 累計 (自分 の を 除外)' },
+  { key: 'sns_reactions_given',    title: '👍 した リアクション',    unit: '個',  desc: '他人 の らぼったー 投稿 に 自分 が 付けた リアクション の 累計 (自 post は 除外)' },
   { key: 'sales_count',            title: '🏷 販売数',              unit: '個',  desc: '販売 した 商品 の 累計 数量 (販売 タブ / 出品)' },
   { key: 'sales_amount',           title: '💰 販売額',              unit: 'pt', desc: '販売 で 稼いだ pt 累計 (unit_price × qty)' },
   { key: 'purchases_count',        title: '🛒 購入数',              unit: '個',  desc: '購入 した 商品 の 累計 数量' },
