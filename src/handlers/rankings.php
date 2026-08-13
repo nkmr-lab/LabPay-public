@@ -46,6 +46,8 @@ function rankings_all(PDO $pdo): void {
             'sales_amount'           => rank_purchases_agg($pdo, 'seller_user_id', 'unit_price * qty', RANK_TOP_N),
             'purchases_count'        => rank_purchases_agg($pdo, 'buyer_user_id',  'qty',              RANK_TOP_N),
             'purchases_amount'       => rank_purchases_agg($pdo, 'buyer_user_id',  'unit_price * qty', RANK_TOP_N),
+            // v1304 保持額 歴代最高 (「富豪度合い」)
+            'peak_balance'           => rank_peak_balance($pdo, RANK_TOP_N),
         ],
     ]);
 }
@@ -206,6 +208,35 @@ function rank_sns_reactions_received(PDO $pdo, int $n): array {
          WHERE l.user_id <> p.user_id
          GROUP BY p.user_id
          ORDER BY count DESC, p.user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1304 13) 保持額 歴代最高 (peak balance): ledger を id 昇順 (=時系列) に 走査、
+//   各 user account の 累積残高 を window function で 計算、 その 最大値 が peak。
+//   from/to の どちら も user account の 場合 (人→人 送金) は 2 delta 生成する ため UNION ALL。
+//   users.kind='human' で SYSTEM/ESCROW 等 の 疑似ユーザ を 除外。
+function rank_peak_balance(PDO $pdo, int $n): array {
+    $sql = "
+        WITH user_deltas AS (
+          SELECT a.owner_user_id AS uid, l.id AS lid, l.amount AS delta
+            FROM ledger l JOIN accounts a ON a.id = l.to_account_id
+           WHERE a.owner_user_id IS NOT NULL
+          UNION ALL
+          SELECT a.owner_user_id AS uid, l.id AS lid, -l.amount AS delta
+            FROM ledger l JOIN accounts a ON a.id = l.from_account_id
+           WHERE a.owner_user_id IS NOT NULL
+        ),
+        running AS (
+          SELECT uid, SUM(delta) OVER (PARTITION BY uid ORDER BY lid) AS bal FROM user_deltas
+        )
+        SELECT r.uid AS user_id, MAX(r.bal) AS count
+          FROM running r JOIN users u ON u.id = r.uid
+         WHERE u.kind = 'human'
+         GROUP BY r.uid
+         ORDER BY count DESC, r.uid ASC LIMIT ?";
+    $st = $pdo->prepare($sql);
     $st->bindValue(1, $n, PDO::PARAM_INT);
     $st->execute();
     return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));

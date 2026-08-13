@@ -8,20 +8,20 @@ import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
 
 const CARDS = [
-  { key: 'streak',                 title: '🔥 最長連続ラボイン',  unit: '日',  desc: '連続 で ラボ に 来た 最長 記録 日数' },
-  { key: 'checkins',               title: '🏠 累計ラボイン',      unit: '日',  desc: 'これ まで の 総 checkin 日数' },
-  { key: 'opener',                 title: '🔓 オープナー',         unit: '日',  desc: 'その日 最初 に ラボ に 入った 日数 (前夜 泊まり 除外)' },
-  { key: 'closer',                 title: '🌃 クローザー',         unit: '日',  desc: 'その日 最後 に ラボ を 出た 日数 (その夜 泊まり 除外)' },
-  { key: 'early_bird',             title: '🌅 早起きラボ',         unit: '日',  desc: '朝 7:00〜8:30 に ラボ に いた 日数 (泊まり 除外)' },
-  { key: 'night_use',              title: '🌙 夜間ラボ族',         unit: '日',  desc: '夜 23:00〜25:00 に ラボ に いた 日数' },
-  { key: 'all_nighter',            title: '🛌 徹夜',                unit: '日',  desc: '日付 を またぐ 在室 (0:00 越え) の 日数' },
-  // v1301 中村さん要望
-  { key: 'sns_reactions_received', title: '❤️ 受けた リアクション', unit: '個',  desc: '自分 の らぼったー 投稿 に 付いた リアクション の 累計 (自分 の を 除外)' },
-  { key: 'sns_reactions_given',    title: '👍 した リアクション',    unit: '個',  desc: '他人 の らぼったー 投稿 に 自分 が 付けた リアクション の 累計 (自 post は 除外)' },
-  { key: 'sales_count',            title: '🏷 販売数',              unit: '個',  desc: '販売 した 商品 の 累計 数量 (販売 タブ / 出品)' },
-  { key: 'sales_amount',           title: '💰 販売額',              unit: 'pt', desc: '販売 で 稼いだ pt 累計 (unit_price × qty)' },
-  { key: 'purchases_count',        title: '🛒 購入数',              unit: '個',  desc: '購入 した 商品 の 累計 数量' },
-  { key: 'purchases_amount',       title: '💸 購入額',              unit: 'pt', desc: '購入 に 使った pt 累計 (unit_price × qty)' },
+  { key: 'streak',                 title: '🔥 最長連続ラボイン',  unit: '日',  desc: '連続でラボに来た最長記録日数' },
+  { key: 'checkins',               title: '🏠 累計ラボイン',      unit: '日',  desc: 'これまでの総checkin日数' },
+  { key: 'opener',                 title: '🔓 オープナー',         unit: '日',  desc: 'その日最初にラボに入った日数 (前夜泊まり除外)' },
+  { key: 'closer',                 title: '🌃 クローザー',         unit: '日',  desc: 'その日最後にラボを出た日数 (その夜泊まり除外)' },
+  { key: 'early_bird',             title: '🌅 早起きラボ',         unit: '日',  desc: '朝7:00〜8:30にラボにいた日数 (泊まり除外)' },
+  { key: 'night_use',              title: '🌙 夜間ラボ族',         unit: '日',  desc: '夜23:00〜25:00にラボにいた日数' },
+  { key: 'all_nighter',            title: '🛌 徹夜',                unit: '日',  desc: '日付をまたぐ在室 (0:00越え) の日数' },
+  { key: 'sns_reactions_received', title: '❤️ 受けたリアクション', unit: '個',  desc: '自分のらぼったー投稿に付いたリアクションの累計 (自分のを除外)' },
+  { key: 'sns_reactions_given',    title: '👍 したリアクション',    unit: '個',  desc: '他人のらぼったー投稿に自分が付けたリアクションの累計 (自postは除外)' },
+  { key: 'sales_count',            title: '🏷 販売数',              unit: '個',  desc: '販売した商品の累計数量 (販売タブ/出品)' },
+  { key: 'sales_amount',           title: '💰 販売額',              unit: 'pt', desc: '販売で稼いだpt累計 (unit_price × qty)' },
+  { key: 'purchases_count',        title: '🛒 購入数',              unit: '個',  desc: '購入した商品の累計数量' },
+  { key: 'purchases_amount',       title: '💸 購入額',              unit: 'pt', desc: '購入に使ったpt累計 (unit_price × qty)' },
+  { key: 'peak_balance',           title: '👑 富豪度 (歴代最高保持額)', unit: 'pt', desc: 'ledgerを時系列走査して各時点の残高を求め、その歴代最高値' },
 ];
 
 export async function renderRankings() {
@@ -30,7 +30,7 @@ export async function renderRankings() {
     <div class="card page-header">
       <h2 style="margin:0">🏆 Ranking</h2>
       <div class="hint-sm" style="color:#666; font-size:11px; margin-top:2px">
-        各 top 10。 意味論 は 実績ページ の 対応バッジ と 揃えて います。
+        各top10。意味論は実績ページの対応バッジと揃えています。
       </div>
     </div>
     <div class="list apps-grid-2col" id="rk-grid">
@@ -54,7 +54,7 @@ export async function renderRankings() {
       if (!body) continue;
       const rows = rk[c.key] || [];
       if (!rows.length) {
-        body.innerHTML = '<div class="hint">まだ 記録 なし</div>';
+        body.innerHTML = '<div class="hint">まだ記録なし</div>';
         continue;
       }
       body.innerHTML = rows.map((r, i) => renderRow(r, i, c.unit)).join('');

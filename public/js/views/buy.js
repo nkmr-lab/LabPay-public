@@ -38,15 +38,8 @@ export async function renderBuy() {
       </div>
     </details>
 
-    <div class="card">
-      <p class="muted" style="margin:6px 0">バーコードを読み取るか、下の一覧から選んでください。</p>
-      <button class="primary" id="scan-toggle" style="width:100%">📷 バーコードを読み取って買う</button>
-      <div id="scanner-wrap" hidden style="margin-top:10px">
-        <video id="buy-video" playsinline style="width:100%; max-width:480px; border-radius:12px; background:#000; display:block; margin:0 auto"></video>
-        <div class="scanner-status" id="scan-status" style="text-align:center; margin-top:4px"></div>
-      </div>
-    </div>
-
+    <!-- v1304 中村さん指示「バーコードなしの商品が多いので商品リスト選択を主に、バーコードは補助に」
+         → 出品一覧を先頭に、 バーコードカードは下の補助扱いに反転。 primary → btn に格下げ。 -->
     <div class="card">
       <div class="row center" style="margin-bottom:8px; flex-wrap:wrap; gap:6px">
         <h3 class="row-title">出品中の商品</h3>
@@ -59,6 +52,15 @@ export async function renderBuy() {
       </div>
       <div id="grouped"><div class="muted">読み込み中…</div></div>
       <a href="#/wishlist" class="btn" style="display:block; width:100%; text-align:center; margin-top:12px">ここにないこれが欲しい!</a>
+    </div>
+
+    <div class="card">
+      <p class="muted" style="margin:6px 0; font-size:12px">バーコード付きの商品はスキャンでも買えます (補助)。</p>
+      <button class="btn" id="scan-toggle" style="width:100%">📷 バーコードで買う</button>
+      <div id="scanner-wrap" hidden style="margin-top:10px">
+        <video id="buy-video" playsinline style="width:100%; max-width:480px; border-radius:12px; background:#000; display:block; margin:0 auto"></video>
+        <div class="scanner-status" id="scan-status" style="text-align:center; margin-top:4px"></div>
+      </div>
     </div>
   `;
 
@@ -286,6 +288,13 @@ async function loadListings() {
         ? `<span class="stock-pill">×${totalQty}</span>`
         : '';
       const locText = locs.length ? '📍 ' + escapeHtml(locs.join('/')) : '';
+      // v1304 中村さん指示: バーコードなし商品を可視化。 products.php no_jan で
+      //   合成 JAN は 「9 + yymmddhhmm + 2桁乱数」 (13 桁 で 先頭9)。 実 JAN は 4/45/49 系
+      //   なので、 13 桁 で 先頭 9 の JAN は 合成 = バーコードなし と 判定 (誤検出 極小)。
+      const isSynthetic = g.jan && g.jan.length === 13 && g.jan.startsWith('9');
+      const noBarcodeMark = isSynthetic
+        ? ' <span title="バーコードなし商品 (手入力登録)" style="font-size:10px; color:#cbd5e1; margin-left:2px">📵</span>'
+        : '';
       return `
         <a class="tile" href="#/product/${encodeURIComponent(g.jan)}" ${bg}>
           ${inner}
@@ -293,7 +302,7 @@ async function loadListings() {
           ${repeatBadge}
           ${sellerBadge}
           <div class="tile-overlay">
-            <div class="name">${escapeHtml(g.name)}</div>
+            <div class="name">${escapeHtml(g.name)}${noBarcodeMark}</div>
             <div class="price-row"><span class="price">${priceLabel}</span>${stockInline}</div>
             ${locText ? `<div class="meta">${locText}</div>` : ''}
           </div>
