@@ -48,6 +48,16 @@ function rankings_all(PDO $pdo): void {
             'purchases_amount'       => rank_purchases_agg($pdo, 'buyer_user_id',  'unit_price * qty', RANK_TOP_N),
             // v1304 保持額 歴代最高 (「富豪度合い」)
             'peak_balance'           => rank_peak_balance($pdo, RANK_TOP_N),
+            // v1305 (中村さん要望) 販売系: 単一取引 最高額
+            'peak_sale'              => rank_peak_sale($pdo, RANK_TOP_N),
+            // v1305 使用pt累計 (from-side ledger)
+            'spent_total'            => rank_spent_total($pdo, RANK_TOP_N),
+            // v1305 タスク系
+            'task_done'              => rank_task_done($pdo, RANK_TOP_N),
+            'task_delegated'         => rank_task_delegated($pdo, RANK_TOP_N),
+            // v1305 実験系
+            'exp_done'               => rank_exp_done($pdo, RANK_TOP_N),
+            'exp_delegated'          => rank_exp_delegated($pdo, RANK_TOP_N),
         ],
     ]);
 }
@@ -208,6 +218,88 @@ function rank_sns_reactions_received(PDO $pdo, int $n): array {
          WHERE l.user_id <> p.user_id
          GROUP BY p.user_id
          ORDER BY count DESC, p.user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1305 14) 単一取引 最高売上 (販売者ごとの MAX(unit_price*qty))。
+function rank_peak_sale(PDO $pdo, int $n): array {
+    $st = $pdo->prepare("
+        SELECT seller_user_id AS user_id, MAX(unit_price * qty) AS count
+          FROM purchases
+         WHERE seller_user_id IS NOT NULL
+         GROUP BY seller_user_id
+         ORDER BY count DESC, seller_user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1305 15) 使用ポイント累計: ledger で user account から 送出 した 合計 (受取 は 含まない)。
+//    「何 に 使ったか」問わず 全 out-flow を 単純累計。 users.kind=human で pseudo 除外。
+function rank_spent_total(PDO $pdo, int $n): array {
+    $st = $pdo->prepare("
+        SELECT a.owner_user_id AS user_id, SUM(l.amount) AS count
+          FROM ledger l
+          JOIN accounts a ON a.id = l.from_account_id
+          JOIN users u    ON u.id = a.owner_user_id
+         WHERE u.kind = 'human'
+         GROUP BY a.owner_user_id
+         ORDER BY count DESC, a.owner_user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1305 16) タスクやった: task_claims.status='approved' の 件数 by user_id。
+function rank_task_done(PDO $pdo, int $n): array {
+    $st = $pdo->prepare("
+        SELECT user_id, COUNT(*) AS count
+          FROM task_claims
+         WHERE status='approved'
+         GROUP BY user_id
+         ORDER BY count DESC, user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1305 17) タスクやってもらった: 自分 が 発注した tasks に 対する approved claim の 件数。
+function rank_task_delegated(PDO $pdo, int $n): array {
+    $st = $pdo->prepare("
+        SELECT t.requester_user_id AS user_id, COUNT(*) AS count
+          FROM task_claims c JOIN tasks t ON t.id = c.task_id
+         WHERE c.status='approved'
+         GROUP BY t.requester_user_id
+         ORDER BY count DESC, t.requester_user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1305 18) 実験やった (被験者参加): exp_recruit_participations の 件数 by user_id。
+function rank_exp_done(PDO $pdo, int $n): array {
+    $st = $pdo->prepare("
+        SELECT user_id, COUNT(*) AS count
+          FROM exp_recruit_participations
+         GROUP BY user_id
+         ORDER BY count DESC, user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1305 19) 実験やってもらった: 自分 主催 の 実験募集 に 参加した 延べ人数 (deleted は 除外)。
+function rank_exp_delegated(PDO $pdo, int $n): array {
+    $st = $pdo->prepare("
+        SELECT r.creator_user_id AS user_id, COUNT(p.id) AS count
+          FROM exp_recruit_participations p
+          JOIN exp_recruit_slots s ON s.id = p.slot_id
+          JOIN exp_recruits r      ON r.id = s.recruit_id
+         WHERE r.deleted_at IS NULL
+         GROUP BY r.creator_user_id
+         ORDER BY count DESC, r.creator_user_id ASC LIMIT ?");
     $st->bindValue(1, $n, PDO::PARAM_INT);
     $st->execute();
     return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
