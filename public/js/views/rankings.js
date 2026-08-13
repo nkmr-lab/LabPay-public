@@ -23,7 +23,7 @@ const CARDS = [
   { key: 'purchases_count',        title: '🛒 購入数',              unit: '個',  desc: '購入した商品の累計数量' },
   { key: 'purchases_amount',       title: '💸 購入額',              unit: 'pt', desc: '購入に使ったpt累計 (unit_price × qty)' },
   { key: 'peak_buy',               title: '💎 最高購入額 (単一取引)', unit: 'pt', desc: '買い手ごとの1取引の最高金額 (unit_price × qty のMAX)' },
-  { key: 'spent_total',            title: '💳 使用ポイント累計',    unit: 'pt', desc: 'ledgerで自分のアカウントから送出したptの合計 (購入・送金・AI課金など、 escrow預入は除外)' },
+  { key: 'spent_total',            title: '💳 使用ポイント累計',    unit: 'pt', desc: '実際に使って戻ってこなかったptの累計。 出金合計から失敗返金 (AI empty/やりなおし/サブスク解約) を相殺、 escrow預入とその返還は対称に除外' },
   { key: 'peak_balance',           title: '👑 富豪度 (歴代最高保持額)', unit: 'pt', desc: 'ledgerを時系列走査して各時点の残高を求め、その歴代最高値' },
   { key: 'task_done',              title: '✅ タスクやった',        unit: '件', desc: '承認済のタスク完了件数 (task_claims.status=approved)' },
   { key: 'task_delegated',         title: '📋 タスクやってもらった', unit: '件', desc: '自分が発注したタスクで完了承認された件数' },

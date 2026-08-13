@@ -251,19 +251,38 @@ function rank_peak_buy(PDO $pdo, int $n): array {
     return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
 }
 
-// v1305 15) 使用ポイント累計: ledger で user account から 送出 した 合計 (受取 は 含まない)。
-//    users.kind=human で pseudo 除外。
-//    v1307 中村さん指示 で type='deposit' (escrow 預入 = 一時 lock、 返還 可能 で 消費 でない)
-//    を 除外。 AI 課金 (paper_review/paper_translate/ai_sub/deep_research 等) は そのまま含める。
+// v1305 15) 使用ポイント累計: 「実際 に 使って 戻ってこなかった pt」 の 累計。
+//    out-flow (自分 account から 出た pt) の 合計 から、 failed/cancelled 由来 の
+//    refund 受取 を 差し引く。
+//    除外 の 対称対 (v1307/v1308):
+//      out 側: type='deposit' (escrow 預入 = 一時lock で 消費 でない)
+//      refund 側: ref_type='task' (deposit の 返還 = 対応 する out も 数えて いない)
+//    含まれる: AI 課金 (paper_review/translate/full_translate/deep_research/rewriter/
+//    resume_check/exp_plan_check/ai_sub)、 購入、 送金、 ゲームbuyin、 fee 等。
+//    差し引かれる: AI 失敗返金 (paper_review empty / paper_translate やりなおし /
+//    resume_check 失敗 / ai_sub_period キャンセル)。
 function rank_spent_total(PDO $pdo, int $n): array {
     $st = $pdo->prepare("
-        SELECT a.owner_user_id AS user_id, SUM(l.amount) AS count
-          FROM ledger l
-          JOIN accounts a ON a.id = l.from_account_id
-          JOIN users u    ON u.id = a.owner_user_id
-         WHERE u.kind = 'human' AND l.type <> 'deposit'
-         GROUP BY a.owner_user_id
-         ORDER BY count DESC, a.owner_user_id ASC LIMIT ?");
+        WITH out_flow AS (
+          SELECT a.owner_user_id AS uid, SUM(l.amount) AS spent
+            FROM ledger l
+            JOIN accounts a ON a.id = l.from_account_id
+            JOIN users u    ON u.id = a.owner_user_id
+           WHERE u.kind = 'human' AND l.type <> 'deposit'
+           GROUP BY a.owner_user_id
+        ),
+        refunds_back AS (
+          SELECT a.owner_user_id AS uid, SUM(l.amount) AS ref_amt
+            FROM ledger l
+            JOIN accounts a ON a.id = l.to_account_id
+            JOIN users u    ON u.id = a.owner_user_id
+           WHERE u.kind = 'human' AND l.type = 'refund' AND l.ref_type <> 'task'
+           GROUP BY a.owner_user_id
+        )
+        SELECT o.uid AS user_id, (o.spent - COALESCE(r.ref_amt, 0)) AS count
+          FROM out_flow o LEFT JOIN refunds_back r ON r.uid = o.uid
+         WHERE (o.spent - COALESCE(r.ref_amt, 0)) > 0
+         ORDER BY count DESC, o.uid ASC LIMIT ?");
     $st->bindValue(1, $n, PDO::PARAM_INT);
     $st->execute();
     return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
