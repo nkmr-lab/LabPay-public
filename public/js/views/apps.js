@@ -153,6 +153,9 @@ export const APPS = [
   { id: 'expenses',       cat: 'health', url: '#/expenses',      title: '💰 家計簿 (領収書撮影)',
     desc: '個人の支出を記録。手動追加 or 領収書を撮影して OpenAI Vision で店名/日付/金額/カテゴリを自動抽出。月別 + カテゴリ別合計 + 明細一覧。全て個人スコープ (他人には見えない)。', defaultVisible: true },
   { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的タスクボード。列 (Backlog/Doing/Done 等) + カードを D&D。カードは担当者 / ラベル / 期限 / チェックリスト / Markdown 説明 + コメント。アサインとコメントで通知、履歴も残る。', defaultVisible: true },
+  // v1300 中村さん指示「ランキングは娯楽のみんなで共有にいれとくと良い」
+  { id: 'rankings', cat: 'shared', url: '#/rankings', title: '🏆 Ranking',
+    desc: 'ラボ全体 の top 10 を 7 種 (最長連続ラボイン / 累計ラボイン / オープナー / クローザー / 早起き / 夜間ラボ族 / 徹夜) を 1 ページ に カード 並び。 実績ページ の 対応バッジ と 同じ 意味論。 ホーム の 🏆 アイコン から も 開ける。', defaultVisible: true },
   { id: 'exp-recruits', cat: 'research', url: '#/exp-recruits', title: '🧪 実験協力者募集', desc: '実験の被験者を早い者順で募集。 枠 (時間帯や日程) と定員を並べて公開、 メンバーは空いてる枠に自分でエントリー。 実施者は代理追加も可能。 参加者は自分の枠を後から確認できる。', defaultVisible: false },
   { id: 'bokete', cat: 'game', url: '#/bokete', title: '😆 ぼけて (bokete)', desc: '画像大喜利。 お題 (画像 + 任意の一言) を出して、みんなでボケ (面白い一言) を書く → ⭐ で評価 → ⭐ 数で ランキング。 bokete.jp 的、 無料。', defaultVisible: true },
   { id: 'setlog', cat: 'game', url: '#/setlog', title: '📸 setlog (LabPay 版 Vlog)', desc: '1 日を短いクリップ (写真 + キャプション) で断片記録するラボ内 Vlog (BeReal 的)。写真を随時ポスト → 日別・ユーザ別に時系列でまとまる。今日のみんなのフィードもある。', defaultVisible: true },
@@ -282,6 +285,7 @@ const CATEGORY_ORDER = {
     'notices',                      // 📢 重要連絡 / 学会情報
     'poster-maker',                 // 📇 メンバー紹介ポスター作成
     'kanban',                       // 📋 かんばん
+    'rankings',                     // v1300 🏆 Ranking (7 種 top 10)
     'overleaf',                     // v1018 📝 Overleaf 更新状況 (中村さん指示: 共有タブの一番下)
   ],
 };
