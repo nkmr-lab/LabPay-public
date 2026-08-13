@@ -1036,9 +1036,9 @@ function paintFinancials(me) {
   const sl = document.getElementById('streak-line');
   if (sl) {
     const s = me.streak || {};
-    // v1288 最長 の 隣 に ランキング リンク
+    // v1288 最長 の 隣 に ランキング リンク。 v1299 で ハブ (#/rankings) に 遷移先 変更。
     sl.innerHTML = `連続ラボイン ${s.current_streak ?? 0} 日 (最長 ${s.longest_streak ?? 0} 日)` +
-      ` <a href="#/streak-ranking" style="margin-left:4px; text-decoration:none" title="最長連続ラボイン ランキング">🏆</a>`;
+      ` <a href="#/rankings" style="margin-left:4px; text-decoration:none" title="🏆 Ranking (最長連続 / オープナー / 徹夜 等)">🏆</a>`;
   }
 }
 async function refreshFinancials({ silent }) {

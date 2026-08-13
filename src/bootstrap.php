@@ -518,6 +518,7 @@ require_once __DIR__ . '/handlers/products.php';
 require_once __DIR__ . '/handlers/listings.php';
 require_once __DIR__ . '/handlers/purchases.php';
 require_once __DIR__ . '/handlers/checkins.php';
+require_once __DIR__ . '/handlers/rankings.php';   // v1299
 require_once __DIR__ . '/handlers/sellers.php';
 require_once __DIR__ . '/handlers/notifications.php';
 require_once __DIR__ . '/handlers/admin.php';

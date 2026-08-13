@@ -490,6 +490,7 @@ route('/feedback',        lazy(() => import('./views/feedback_user.js'), 'render
 route('/settings',       lazy(() => import('./views/settings.js'), 'renderSettings'));
 route('/achievements',   lazy(() => import('./views/achievements.js'), 'renderAchievements'));
 route('/streak-ranking', lazy(() => import('./views/streak_ranking.js'), 'renderStreakRanking'));
+route('/rankings',       lazy(() => import('./views/rankings.js'), 'renderRankings'));
 route('/tasks',          lazy(() => import('./views/tasks.js'), 'renderTasks'));
 route('/tasks/:id',      lazy(() => import('./views/tasks.js'), 'renderTaskDetail'));
 route('/send',           lazy(() => import('./views/transfer.js'), 'renderTransfer'));

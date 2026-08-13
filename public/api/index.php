@@ -54,6 +54,7 @@ $routes = [
     'listings'       => 'route_listings',
     'purchases'      => 'route_purchases',
     'checkins'       => 'route_checkins',
+    'rankings'       => 'route_rankings',   // v1299 全ランキング統合
     'sellers'        => 'route_sellers',
     'notifications'  => 'route_notifications',
     'admin'          => 'route_admin',
