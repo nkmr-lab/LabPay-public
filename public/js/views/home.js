@@ -1037,8 +1037,8 @@ function paintFinancials(me) {
   if (sl) {
     const s = me.streak || {};
     // v1288 最長 の 隣 に ランキング リンク。 v1299 で ハブ (#/rankings) に 遷移先 変更。
-    sl.innerHTML = `連続ラボイン ${s.current_streak ?? 0} 日 (最長 ${s.longest_streak ?? 0} 日)` +
-      ` <a href="#/rankings" style="margin-left:4px; text-decoration:none" title="🏆 Ranking (最長連続 / オープナー / 徹夜 等)">🏆</a>`;
+    sl.innerHTML = `連続ラボイン${s.current_streak ?? 0}日 (最長${s.longest_streak ?? 0}日)` +
+      ` <a href="#/rankings" style="margin-left:4px; text-decoration:none" title="🏆 Ranking (最長連続/オープナー/徹夜など)">🏆</a>`;
   }
 }
 async function refreshFinancials({ silent }) {
@@ -4376,6 +4376,12 @@ export function renderRoom(r, windowMin) {
     const h = Math.floor(mins / 60), m = mins % 60;
     return m === 0 ? `${h}時間` : `${h}時間${m}分`;
   };
+  // v1303 中村さん指示: last_scan_at が 5 分以上前 なら 「誰もいない」 でなく
+  //   「在室チェックシステムが機能していないかもしれません」を 出す。 実装ミス で 誰も
+  //   居ない と 誤解させない ため。 5 分閾値: scan は 毎分 想定 の scanner を 5 分 待って
+  //   なお 沈黙 なら 死亡 疑い で 十分。
+  const scanStaleMs = r.last_scan_at ? (now - parseJst(r.last_scan_at)) : Infinity;
+  const scanStale = scanStaleMs > 5 * 60 * 1000;
   const peopleHtml = r.users.length
     ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px">
          ${r.users.map(u => {
@@ -4411,7 +4417,9 @@ export function renderRoom(r, windowMin) {
              </span>`;
          }).join('')}
        </div>`
-    : `<div class="muted" style="font-size:13px; margin-top:4px">誰も検知されていません</div>`;
+    : (scanStale
+        ? `<div style="font-size:13px; margin-top:4px; color:#c62828">⚠ 在室チェックシステムが機能していないかもしれません</div>`
+        : `<div class="muted" style="font-size:13px; margin-top:4px">誰も検知されていません</div>`);
   const scan = r.last_scan_at ? `· 最終スキャン ${escapeHtml(r.last_scan_at)}` : '· 未スキャン';
   return `
     <div style="margin-bottom:12px">
