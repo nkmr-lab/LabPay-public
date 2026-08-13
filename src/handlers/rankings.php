@@ -50,6 +50,8 @@ function rankings_all(PDO $pdo): void {
             'peak_balance'           => rank_peak_balance($pdo, RANK_TOP_N),
             // v1305 (中村さん要望) 販売系: 単一取引 最高額
             'peak_sale'              => rank_peak_sale($pdo, RANK_TOP_N),
+            // v1306 買い手側の 単一取引 最高額 (「一番高いものを買った人」)
+            'peak_buy'               => rank_peak_buy($pdo, RANK_TOP_N),
             // v1305 使用pt累計 (from-side ledger)
             'spent_total'            => rank_spent_total($pdo, RANK_TOP_N),
             // v1305 タスク系
@@ -231,6 +233,19 @@ function rank_peak_sale(PDO $pdo, int $n): array {
          WHERE seller_user_id IS NOT NULL
          GROUP BY seller_user_id
          ORDER BY count DESC, seller_user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1306 14b) 単一取引 最高購入額 (買い手ごとの MAX(unit_price*qty))。 peak_sale の 対。
+function rank_peak_buy(PDO $pdo, int $n): array {
+    $st = $pdo->prepare("
+        SELECT buyer_user_id AS user_id, MAX(unit_price * qty) AS count
+          FROM purchases
+         WHERE buyer_user_id IS NOT NULL
+         GROUP BY buyer_user_id
+         ORDER BY count DESC, buyer_user_id ASC LIMIT ?");
     $st->bindValue(1, $n, PDO::PARAM_INT);
     $st->execute();
     return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
