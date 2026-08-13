@@ -32,13 +32,19 @@ function route_rankings(PDO $pdo, array $cfg, string $method, array $seg): void 
 function rankings_all(PDO $pdo): void {
     json_response([
         'rankings' => [
-            'streak'        => rank_streak_longest($pdo, RANK_TOP_N),
-            'checkins'      => rank_checkins_total($pdo, RANK_TOP_N),
-            'opener'        => rank_opener($pdo, RANK_TOP_N),
-            'closer'        => rank_closer($pdo, RANK_TOP_N),
-            'early_bird'    => rank_time_window_morning($pdo, RANK_TOP_N),
-            'night_use'     => rank_night_use($pdo, RANK_TOP_N),
-            'all_nighter'   => rank_all_nighter($pdo, RANK_TOP_N),
+            'streak'                 => rank_streak_longest($pdo, RANK_TOP_N),
+            'checkins'               => rank_checkins_total($pdo, RANK_TOP_N),
+            'opener'                 => rank_opener($pdo, RANK_TOP_N),
+            'closer'                 => rank_closer($pdo, RANK_TOP_N),
+            'early_bird'             => rank_time_window_morning($pdo, RANK_TOP_N),
+            'night_use'              => rank_night_use($pdo, RANK_TOP_N),
+            'all_nighter'            => rank_all_nighter($pdo, RANK_TOP_N),
+            // v1301 販売/購入/リアクション (Achievements.tallyForUser 同型)
+            'sns_reactions_received' => rank_sns_reactions_received($pdo, RANK_TOP_N),
+            'sales_count'            => rank_purchases_agg($pdo, 'seller_user_id', 'qty',              RANK_TOP_N),
+            'sales_amount'           => rank_purchases_agg($pdo, 'seller_user_id', 'unit_price * qty', RANK_TOP_N),
+            'purchases_count'        => rank_purchases_agg($pdo, 'buyer_user_id',  'qty',              RANK_TOP_N),
+            'purchases_amount'       => rank_purchases_agg($pdo, 'buyer_user_id',  'unit_price * qty', RANK_TOP_N),
         ],
     ]);
 }
@@ -184,6 +190,45 @@ function rank_all_nighter(PDO $pdo, int $n): array {
          WHERE user_id IS NOT NULL AND DATE(started_at) <> DATE(ended_at)
          GROUP BY user_id
          ORDER BY count DESC, user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1301 8) 受信リアクション数: 自分 の 投稿 に 付いた post_likes 数 (自分 は 除外)。
+//    Achievements.tallyForUser sns_reactions_received と 同 SQL 構造。
+function rank_sns_reactions_received(PDO $pdo, int $n): array {
+    $st = $pdo->prepare("
+        SELECT p.user_id, COUNT(*) AS count
+          FROM post_likes l
+          JOIN posts p ON p.id = l.post_id
+         WHERE l.user_id <> p.user_id
+         GROUP BY p.user_id
+         ORDER BY count DESC, p.user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1301 9-12) 販売/購入 の 数量/金額 集計。 purchases テーブル を role × metric で 4 通り 集計。
+//    $role: 'seller_user_id' or 'buyer_user_id'
+//    $expr: 'qty' (数量) or 'unit_price * qty' (金額)
+//    Achievements.tallyForUser sales_count / purchases_count / turnover_earned / turnover_spent と 同型。
+function rank_purchases_agg(PDO $pdo, string $role, string $expr, int $n): array {
+    if (!in_array($role, ['seller_user_id', 'buyer_user_id'], true)) {
+        throw new ApiException('server_error', 'bad role', 500);
+    }
+    if (!in_array($expr, ['qty', 'unit_price * qty'], true)) {
+        throw new ApiException('server_error', 'bad expr', 500);
+    }
+    $sql = "SELECT $role AS user_id, COALESCE(SUM($expr), 0) AS count
+              FROM purchases
+             WHERE $role IS NOT NULL
+             GROUP BY $role
+             HAVING count > 0
+             ORDER BY count DESC, user_id ASC
+             LIMIT ?";
+    $st = $pdo->prepare($sql);
     $st->bindValue(1, $n, PDO::PARAM_INT);
     $st->execute();
     return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));

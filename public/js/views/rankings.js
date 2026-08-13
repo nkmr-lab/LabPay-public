@@ -8,13 +8,19 @@ import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
 
 const CARDS = [
-  { key: 'streak',      title: '🔥 最長連続ラボイン',  unit: '日', desc: '連続 で ラボ に 来た 最長 記録 日数' },
-  { key: 'checkins',    title: '🏠 累計ラボイン',      unit: '日', desc: 'これ まで の 総 checkin 日数' },
-  { key: 'opener',      title: '🔓 オープナー',         unit: '日', desc: 'その日 最初 に ラボ に 入った 日数 (前夜 泊まり 除外)' },
-  { key: 'closer',      title: '🌃 クローザー',         unit: '日', desc: 'その日 最後 に ラボ を 出た 日数 (その夜 泊まり 除外)' },
-  { key: 'early_bird',  title: '🌅 早起きラボ',         unit: '日', desc: '朝 7:00〜8:30 に ラボ に いた 日数 (泊まり 除外)' },
-  { key: 'night_use',   title: '🌙 夜間ラボ族',         unit: '日', desc: '夜 23:00〜25:00 に ラボ に いた 日数' },
-  { key: 'all_nighter', title: '🛌 徹夜',                unit: '日', desc: '日付 を またぐ 在室 (0:00 越え) の 日数' },
+  { key: 'streak',                 title: '🔥 最長連続ラボイン',  unit: '日',  desc: '連続 で ラボ に 来た 最長 記録 日数' },
+  { key: 'checkins',               title: '🏠 累計ラボイン',      unit: '日',  desc: 'これ まで の 総 checkin 日数' },
+  { key: 'opener',                 title: '🔓 オープナー',         unit: '日',  desc: 'その日 最初 に ラボ に 入った 日数 (前夜 泊まり 除外)' },
+  { key: 'closer',                 title: '🌃 クローザー',         unit: '日',  desc: 'その日 最後 に ラボ を 出た 日数 (その夜 泊まり 除外)' },
+  { key: 'early_bird',             title: '🌅 早起きラボ',         unit: '日',  desc: '朝 7:00〜8:30 に ラボ に いた 日数 (泊まり 除外)' },
+  { key: 'night_use',              title: '🌙 夜間ラボ族',         unit: '日',  desc: '夜 23:00〜25:00 に ラボ に いた 日数' },
+  { key: 'all_nighter',            title: '🛌 徹夜',                unit: '日',  desc: '日付 を またぐ 在室 (0:00 越え) の 日数' },
+  // v1301 中村さん要望
+  { key: 'sns_reactions_received', title: '❤️ 受けた リアクション', unit: '個',  desc: '自分 の らぼったー 投稿 に 付いた リアクション の 累計 (自分 の を 除外)' },
+  { key: 'sales_count',            title: '🏷 販売数',              unit: '個',  desc: '販売 した 商品 の 累計 数量 (販売 タブ / 出品)' },
+  { key: 'sales_amount',           title: '💰 販売額',              unit: 'pt', desc: '販売 で 稼いだ pt 累計 (unit_price × qty)' },
+  { key: 'purchases_count',        title: '🛒 購入数',              unit: '個',  desc: '購入 した 商品 の 累計 数量' },
+  { key: 'purchases_amount',       title: '💸 購入額',              unit: 'pt', desc: '購入 に 使った pt 累計 (unit_price × qty)' },
 ];
 
 export async function renderRankings() {
@@ -76,7 +82,7 @@ function renderRow(r, i, unit) {
         ${escapeHtml(r.display_name)}
       </div>
       <div style="flex:0 0 auto; text-align:right; font-weight:700; color:#7b3fa0; font-size:14px">
-        ${r.count}<span style="font-size:10px; color:#666; font-weight:400; margin-left:2px">${unit}</span>
+        ${Number(r.count).toLocaleString()}<span style="font-size:10px; color:#666; font-weight:400; margin-left:2px">${unit}</span>
       </div>
     </a>
   `;
