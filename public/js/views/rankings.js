@@ -29,6 +29,7 @@ const CARDS = [
   { key: 'task_delegated',         title: '📋 タスクやってもらった', unit: '件', desc: '自分が発注したタスクで完了承認された件数' },
   { key: 'exp_done',               title: '🧪 実験やった (被験者)', unit: '回', desc: '実験募集に被験者として参加した延べ回数' },
   { key: 'exp_delegated',          title: '👥 実験やってもらった',  unit: '人', desc: '自分主催の実験募集に集まった延べ参加者数' },
+  { key: 'roulette_won',           title: '🎰 ルーレット当選数',    unit: '回', desc: 'ルーレットで当選した回数 (「運命の人」実績と同定義)' },
   { key: 'longest_visit',          title: '⏱ 最長ラボ滞在',        unit: '',   desc: '1回のラボ滞在の最長時間 (presence_sessionsの単一 duration MAX)',
     format: n => { const h = Math.floor(n / 60); const m = n % 60; return h > 0 ? `${h}時間${m}分` : `${m}分`; } },
 ];

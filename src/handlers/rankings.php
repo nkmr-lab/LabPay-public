@@ -62,6 +62,8 @@ function rankings_all(PDO $pdo): void {
             // v1305 実験系
             'exp_done'               => rank_exp_done($pdo, RANK_TOP_N),
             'exp_delegated'          => rank_exp_delegated($pdo, RANK_TOP_N),
+            // v1311 ルーレット当選数
+            'roulette_won'           => rank_roulette_won($pdo, RANK_TOP_N),
         ],
     ]);
 }
@@ -332,12 +334,31 @@ function rank_task_delegated(PDO $pdo, int $n): array {
 }
 
 // v1305 18) 実験やった (被験者参加): exp_recruit_participations の 件数 by user_id。
+// v1311 中村さん指摘「exp_done と exp_delegated の 数 が 合わない」 → 対称化 で
+//   deleted な recruit の 参加 は 両方 とも 除外 (削除された 実験 は 集計 に 入れない)。
 function rank_exp_done(PDO $pdo, int $n): array {
     $st = $pdo->prepare("
-        SELECT user_id, COUNT(*) AS count
-          FROM exp_recruit_participations
-         GROUP BY user_id
-         ORDER BY count DESC, user_id ASC LIMIT ?");
+        SELECT p.user_id, COUNT(*) AS count
+          FROM exp_recruit_participations p
+          JOIN exp_recruit_slots s ON s.id = p.slot_id
+          JOIN exp_recruits r      ON r.id = s.recruit_id
+         WHERE r.deleted_at IS NULL
+         GROUP BY p.user_id
+         ORDER BY count DESC, p.user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1311 20) ルーレット当選数: roulettes.winner_user_id の 件数。 Achievements の 「運命の人」
+//   (roulettes_won) と 同 定義。 dry-run spin は そもそも insert されない ので 実勝負 のみ。
+function rank_roulette_won(PDO $pdo, int $n): array {
+    $st = $pdo->prepare("
+        SELECT winner_user_id AS user_id, COUNT(*) AS count
+          FROM roulettes
+         WHERE winner_user_id IS NOT NULL
+         GROUP BY winner_user_id
+         ORDER BY count DESC, winner_user_id ASC LIMIT ?");
     $st->bindValue(1, $n, PDO::PARAM_INT);
     $st->execute();
     return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
