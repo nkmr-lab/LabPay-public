@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v1313', d: '2026-08-13', s: '⭐ Rankings で 自分の行をハイライト (中村さん要望)。 renderRow で state.me.id === r.user_id を 判定、 該当行 は 薄い黄背景 (#fff9db) + 左に3pxのアクセントborder (#f59e0b) + 名前を太字 + 「(あなた)」オレンジタグ。 25 カード 全部 に 効く。sw.js v1313 bump。' },
   { v: 'v1312', d: '2026-08-13', s: '🏢 Rankings に 「10F 滞在日数」「7F 滞在日数」追加 (中村さん要望)。 rank_room_days(room_id) を 追加、 presence_sessions で 指定 room の DISTINCT DATE(started_at) を user 毎 に 集計。 rankings_all で 10F と 7F の 2 entry を 生成。 全25カード。sw.js v1312 bump。' },
   { v: 'v1311', d: '2026-08-13', s: '🧪 実験ランキング の 対称化 + 🎰 ルーレット当選数 追加 (中村さん指摘「exp_done と exp_delegated の 数が合わない、 ルーレット当たった数も欲しい」)。 (1) exp_done が deleted な recruit の 参加 も カウント して いた ため exp_delegated (deleted除外) と 非対称 に なって いた (差 = 34 件、 主に メンバー23の 削除実験#6 の 19人 分)。 rank_exp_done も JOIN + r.deleted_at IS NULL で 対称化。 (2) rank_roulette_won 追加 = roulettes.winner_user_id の 件数、 Achievements の「運命の人」と 同定義、 dry-run spin は 記録なし で 実勝負 のみ。 全23カード。sw.js v1311 bump。' },
   { v: 'v1310', d: '2026-08-13', s: '📝 使用ポイント累計 の 説明文 を シンプル化 (中村さん指示「ややこしいので普通に実際に使ったptの累計で良い」)。 「実際に使って戻ってこなかったptの累計。 出金合計から失敗返金 (AI empty/やりなおし/サブスク解約) を相殺、 escrow預入とその返還は対称に除外」→「実際に使ったptの累計」に短縮。 計算ロジック は v1308 の まま (deposit と task refund を 対称除外、 AI 失敗返金 を 相殺 して 実消費 に)。sw.js v1310 bump。' },

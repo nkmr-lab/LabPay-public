@@ -6,6 +6,7 @@
 
 import { get } from '../api.js';
 import { escapeHtml } from '../router.js';
+import { state } from '../app.js';
 
 const CARDS = [
   { key: 'streak',                 title: '🔥 最長連続ラボイン',  unit: '日',  desc: '連続でラボに来た最長記録日数' },
@@ -89,14 +90,20 @@ function renderRow(r, i, card) {
   const numHtml = card.format
     ? card.format(Number(r.count))
     : `${Number(r.count).toLocaleString()}<span style="font-size:10px; color:#666; font-weight:400; margin-left:2px">${card.unit}</span>`;
+  // v1313 自分の 行 を ハイライト (薄い黄背景 + 左に太めのアクセント border)
+  const isMe = state?.me?.id && Number(state.me.id) === Number(r.user_id);
+  const rowStyle = isMe
+    ? 'gap:8px; padding:5px 6px; border-bottom:1px solid var(--line); text-decoration:none; color:inherit; background:#fff9db; border-left:3px solid #f59e0b'
+    : 'gap:8px; padding:5px 2px; border-bottom:1px solid var(--line); text-decoration:none; color:inherit';
+  const nameHtml = isMe
+    ? `<b>${escapeHtml(r.display_name)}</b> <span style="color:#f59e0b; font-size:11px; margin-left:2px">(あなた)</span>`
+    : escapeHtml(r.display_name);
   return `
-    <a href="#/users/${r.user_id}" class="row center"
-       style="gap:8px; padding:5px 2px; border-bottom:1px solid var(--line);
-              text-decoration:none; color:inherit">
+    <a href="#/users/${r.user_id}" class="row center" style="${rowStyle}">
       <span style="flex:0 0 28px; font-weight:600; color:#666; text-align:right; font-size:12px">${medal}</span>
       ${av}
       <div style="flex:1 1 0; min-width:0; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-        ${escapeHtml(r.display_name)}
+        ${nameHtml}
       </div>
       <div style="flex:0 0 auto; text-align:right; font-weight:700; color:#7b3fa0; font-size:14px">
         ${numHtml}
