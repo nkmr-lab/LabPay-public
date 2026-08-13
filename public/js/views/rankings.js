@@ -29,6 +29,8 @@ const CARDS = [
   { key: 'task_delegated',         title: '📋 タスクやってもらった', unit: '件', desc: '自分が発注したタスクで完了承認された件数' },
   { key: 'exp_done',               title: '🧪 実験やった (被験者)', unit: '回', desc: '実験募集に被験者として参加した延べ回数' },
   { key: 'exp_delegated',          title: '👥 実験やってもらった',  unit: '人', desc: '自分主催の実験募集に集まった延べ参加者数' },
+  { key: 'longest_visit',          title: '⏱ 最長ラボ滞在',        unit: '',   desc: '1回のラボ滞在の最長時間 (presence_sessionsの単一 duration MAX)',
+    format: n => { const h = Math.floor(n / 60); const m = n % 60; return h > 0 ? `${h}時間${m}分` : `${m}分`; } },
 ];
 
 export async function renderRankings() {
@@ -64,7 +66,7 @@ export async function renderRankings() {
         body.innerHTML = '<div class="hint">まだ記録なし</div>';
         continue;
       }
-      body.innerHTML = rows.map((r, i) => renderRow(r, i, c.unit)).join('');
+      body.innerHTML = rows.map((r, i) => renderRow(r, i, c)).join('');
     }
   } catch (e) {
     for (const c of CARDS) {
@@ -74,12 +76,16 @@ export async function renderRankings() {
   }
 }
 
-function renderRow(r, i, unit) {
+function renderRow(r, i, card) {
   const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
   const av = r.avatar_url
     ? `<img src="${escapeHtml(r.avatar_url)}" alt=""
          style="width:26px; height:26px; border-radius:50%; object-fit:cover; flex:0 0 26px; display:block">`
     : `<div style="width:26px; height:26px; border-radius:50%; background:#eee; flex:0 0 26px"></div>`;
+  // card.format があれば それを 使う (「N時間MM分」等)、 なければ toLocaleString + unit
+  const numHtml = card.format
+    ? card.format(Number(r.count))
+    : `${Number(r.count).toLocaleString()}<span style="font-size:10px; color:#666; font-weight:400; margin-left:2px">${card.unit}</span>`;
   return `
     <a href="#/users/${r.user_id}" class="row center"
        style="gap:8px; padding:5px 2px; border-bottom:1px solid var(--line);
@@ -90,7 +96,7 @@ function renderRow(r, i, unit) {
         ${escapeHtml(r.display_name)}
       </div>
       <div style="flex:0 0 auto; text-align:right; font-weight:700; color:#7b3fa0; font-size:14px">
-        ${Number(r.count).toLocaleString()}<span style="font-size:10px; color:#666; font-weight:400; margin-left:2px">${unit}</span>
+        ${numHtml}
       </div>
     </a>
   `;

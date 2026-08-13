@@ -52,6 +52,8 @@ function rankings_all(PDO $pdo): void {
             'peak_sale'              => rank_peak_sale($pdo, RANK_TOP_N),
             // v1306 買い手側の 単一取引 最高額 (「一番高いものを買った人」)
             'peak_buy'               => rank_peak_buy($pdo, RANK_TOP_N),
+            // v1309 最長ラボ滞在 (単一 session の max duration)
+            'longest_visit'          => rank_longest_visit($pdo, RANK_TOP_N),
             // v1305 使用pt累計 (from-side ledger)
             'spent_total'            => rank_spent_total($pdo, RANK_TOP_N),
             // v1305 タスク系
@@ -233,6 +235,21 @@ function rank_peak_sale(PDO $pdo, int $n): array {
          WHERE seller_user_id IS NOT NULL
          GROUP BY seller_user_id
          ORDER BY count DESC, seller_user_id ASC LIMIT ?");
+    $st->bindValue(1, $n, PDO::PARAM_INT);
+    $st->execute();
+    return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// v1309 20) 最長ラボ滞在時間 (単一 session の 最大 duration_minutes)。
+//    presence_sessions の user_id NOT NULL に 限定。 化石session (24h+) は 実データで
+//    0 件 だった ので filter なし。 unit は 分 だが UI 側 で 「N時間MM分」に format する。
+function rank_longest_visit(PDO $pdo, int $n): array {
+    $st = $pdo->prepare("
+        SELECT user_id, MAX(duration_minutes) AS count
+          FROM presence_sessions
+         WHERE user_id IS NOT NULL
+         GROUP BY user_id
+         ORDER BY count DESC, user_id ASC LIMIT ?");
     $st->bindValue(1, $n, PDO::PARAM_INT);
     $st->execute();
     return rank_attach_users($pdo, $st->fetchAll(PDO::FETCH_ASSOC));
