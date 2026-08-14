@@ -5264,7 +5264,7 @@ LabPay のトップナビ (下段タブ、 v1132 で 8 タブに整理):
 ── 運営タブ (#/lab-mgmt) ──
 - **📣 点呼** (#/rollcalls) / **📊 投票・アンケート** (#/polls) / **🗳 公開投票** (#/public-polls) / **🎪 合同研究会投票** (#/joint-events)
 - **💴 請求 (集金)** (#/requests) / **💼 アルバイト申請** (#/bait)
-- **🛒 購入依頼** (#/buy-requests) : #want_to_buy の後継。 URL + 品名 + 理由を出して中村さんが「買った / 却下」を返す。 v1294 open な依頼 は ホーム の 🎯 あなた宛て widget にも 中村さん (admin) に 一覧 表示 される (通知タップ以外 の 入口)
+- **🛒 購入依頼** (#/buy-requests) : #want_to_buy の後継。 URL + 品名 + 理由を出して中村さんが「買った / 却下」を返す。 v1294 open な依頼 は ホーム の 🎯 あなた宛て widget にも 中村さん (admin) に 一覧 表示 される (通知タップ以外 の 入口)。 v1317 bought 済 の 依頼 は admin 画面 で 「💰 fund 未転送」/「💰 fund 転送済」バッジ 表示、 未転送 は 「fund に転送」ボタン から fund.nkmr.io に 予算/科目/金額/日付 指定 の modal で 直接 支払アイテム 追加 (fund_pushed_at で 重複防止)
 - **🏫 教室予約依頼** (#/room-requests) : v1230 fb#502。発表練習や会議で教室を押さえてほしい時、教室番号は指定不要 (プロジェクター / 大人数 / 何階などの条件で中村さんが最適な教室を押さえる)。中野キャンパスフロア情報 (Cosense) リンクつき。 pending / confirmed / declined のタブ、依頼者は pending 中のみ編集/取消、admin (中村さん) は 教室確定 (教室名 + メモ) / 却下 (理由) を返す。 LabPay 台帳は動かない。
 - **📝 原稿チェック依頼** (#/manuscript-reviews) : v1282 追加。 PDF 原稿を渡して、指定した人 (複数可) に **pr.nkmr.io** で 音声 + 手書き 校閲 してもらう。 依頼者が PDF + タイトル + チェッカー複数 + ひとこと を 起票 → 各チェッカーに 通知 + Slack → 各自「▶ pr で校閲」で pr へ handoff (302、 15分 pull TTL、 6 時間 cb TTL、 HMAC 署名) → pr で 保存すると 結果 URL (https://pr.nkmr.io/{uuid}) が LabPay に戻る → その チェッカー行 が 「校閲完了」+ 結果 URL 保持 → 依頼者・チェッカー双方 が 結果 を 開ける。 全チェッカー完了 で 親 status=done。 LabPay 台帳 は 動かない (連絡ボード設計)。
 - **🏫 明日、研究室に一緒に行こう** (#/tomorrow-lab) : 「明日行く」宣言 + 罰金設定、翌日 checkin データから精算 (行かなかった人 → 行った人へポイント)

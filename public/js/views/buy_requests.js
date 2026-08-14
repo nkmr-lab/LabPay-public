@@ -14,6 +14,9 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, navigate, resetFsInnerNav } from '../router.js';
 import { state, toast } from '../app.js';
+// v1317 fund.nkmr.io 直叩き
+import { fundBudgets, fundItemAdd, isFundUnauthError, FUND_HOME_URL } from '../fund_api.js';
+import { openModal } from '../modal.js';
 
 const STATUS_LABEL = {
   open:      { emoji: '📤', label: '依頼中',   color: '#059669', bg: '#f0fdf4' },
@@ -136,11 +139,19 @@ function renderCard(r, isAdmin) {
   const canReopen = isAdmin && (r.status === 'bought' || r.status === 'declined' || r.status === 'cancelled');
   // v1082 中村さん「もう一度お願いするボタン」→ 依頼者本人だけ、 closed 状態のときに表示
   const canReask = r.is_mine && (r.status === 'bought' || r.status === 'declined' || r.status === 'cancelled');
+  // v1317 admin のみ、 bought かつ 未転送 の 場合 に fund 転送 button 表示
+  const canPushFund = isAdmin && r.status === 'bought' && !r.fund_pushed_at;
+  const fundBadge = (r.status === 'bought' && isAdmin)
+    ? (r.fund_pushed_at
+        ? `<span style="background:#dcfce7; color:#166534; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:600; margin-left:4px">💰 fund 転送済 ${fmtTime(r.fund_pushed_at)}</span>`
+        : `<span style="background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:600; margin-left:4px">💰 fund 未転送</span>`)
+    : '';
   return `
     <div class="card" id="br-card-${r.id}" data-br-row-id="${r.id}" style="border-left:4px solid ${meta.color}; background:${meta.bg}44">
       <div class="row" style="align-items:center; gap:8px; flex-wrap:wrap">
         <span style="font-size:11px; padding:2px 8px; border-radius:4px; background:${meta.color}; color:#fff; font-weight:600">${meta.emoji} ${meta.label}</span>
         ${urgMark}
+        ${fundBadge}
         <div class="hint-sm" style="color:#6b7280; margin-left:auto">${escapeHtml(r.requester_name)} · ${fmtTime(r.created_at)}</div>
       </div>
       <div style="font-weight:600; margin-top:6px; font-size:15px">${escapeHtml(r.title)}${qtyLine}</div>
@@ -156,6 +167,7 @@ function renderCard(r, isAdmin) {
         ${canCancel ? `<button class="btn" data-br-act="cancel" data-br-id="${r.id}" data-br-title="${escapeHtml(r.title)}">🚫 取消</button>` : ''}
         ${canReask ? `<button class="btn primary" data-br-act="reask" data-br-id="${r.id}" data-br-title="${escapeHtml(r.title)}">🔁 もう一度お願いする</button>` : ''}
         ${canReopen ? `<button class="btn" data-br-act="reopen" data-br-id="${r.id}">🔄 open に戻す</button>` : ''}
+        ${canPushFund ? `<button class="btn" style="background:#fef3c7; color:#92400e" data-br-act="fund-push" data-br-id="${r.id}">💰 fund に転送</button>` : ''}
       </div>
     </div>
   `;
@@ -213,8 +225,114 @@ function wireList(isAdmin) {
         navigate('#/buy-requests/' + id + '/edit');
         return;
       }
+      if (act === 'fund-push') return openFundPushModal(id);
     });
   });
+}
+
+// v1317 fund.nkmr.io に 支払アイテム を 転送 する modal。
+//   admin (中村さん) が bought 済 の 買物 を fund の 支払記録 に 反映 する。
+//   1) fund.nkmr.io/api.php?action=budgets で 予算一覧 取得 → pulldown
+//   2) type (default 消耗品費) / item = title / amount = actual_price を フォーム化
+//   3) fundItemAdd で 直接 fund.nkmr.io に POST (nkmr-SSO 共有 cookie で 認証)
+//   4) 成功 で PATCH /api/buy-requests/{id}/fund-pushed で LabPay 側 も マーク
+async function openFundPushModal(id) {
+  // 対象 の buy_request を 一覧 から 拾う (再 fetch で 最新 に)
+  let r;
+  try {
+    const d = await get('/api/buy-requests/' + id);
+    r = d.item || d;
+  } catch (e) { toast('取得失敗: ' + (e?.message || e)); return; }
+  if (r.status !== 'bought') { toast('bought の 依頼 だけ 転送 できます'); return; }
+  if (r.fund_pushed_at) { toast('すでに 転送済 です'); return; }
+  const amount = r.actual_price ?? r.price_estimate ?? 0;
+  const fy = fiscalYearOf(new Date());
+  const today = todayYmd();
+
+  // budgets 取得 (fund.nkmr.io 直叩き、 未ログイン なら fund へ 誘導)
+  let budgetOptions = '<option value="">読み込み中…</option>';
+  let bud = null;
+  try {
+    bud = await fundBudgets({ fiscal_year: fy });
+    const items = (bud?.items || []).map(b =>
+      `<option value="${escapeHtml(b.name)}">${escapeHtml(b.name)}${b.remain != null ? ' (残 ' + Number(b.remain).toLocaleString() + '円)' : ''}</option>`
+    ).join('');
+    budgetOptions = items || '<option value="">この年度の予算がありません</option>';
+  } catch (e) {
+    if (isFundUnauthError(e)) {
+      toast('fund.nkmr.io に SSO ログインしていません');
+      window.open(FUND_HOME_URL, '_blank');
+      return;
+    }
+    budgetOptions = `<option value="">取得失敗: ${escapeHtml(e.message)}</option>`;
+  }
+
+  const m = openModal({
+    title: '💰 fund.nkmr.io に 転送',
+    bodyHtml: `
+      <div class="hint-sm" style="font-size:12px; color:#666; margin-bottom:8px">
+        buy_request #${id} を fund.nkmr.io の 支払アイテム として 追加します。
+      </div>
+      <div class="field"><span class="lbl">年度</span>
+        <input type="number" id="fp-fy" value="${fy}" min="2020" max="2099"></div>
+      <div class="field"><span class="lbl">予算</span>
+        <select id="fp-fund">${budgetOptions}</select></div>
+      <div class="field"><span class="lbl">科目 (type)</span>
+        <input type="text" id="fp-type" value="消耗品費" maxlength="40"></div>
+      <div class="field"><span class="lbl">品名 (item)</span>
+        <input type="text" id="fp-item" value="${escapeHtml(r.title)}" maxlength="200"></div>
+      <div class="field"><span class="lbl">金額</span>
+        <input type="number" id="fp-amount" value="${amount}" min="0"></div>
+      <div class="field"><span class="lbl">支払日</span>
+        <input type="date" id="fp-date" value="${today}"></div>
+      <div class="field"><span class="lbl">状態</span>
+        <select id="fp-status"><option value="paid" selected>支払済</option><option value="pending">予定</option></select></div>
+    `,
+    buttons: [
+      { label: 'キャンセル', kind: 'btn', onClick: ({ close }) => close() },
+      { label: '💰 転送する', kind: 'primary', onClick: async ({ close, setBusy }) => {
+          const fundName = document.getElementById('fp-fund').value.trim();
+          if (!fundName) { toast('予算を選択してください'); return; }
+          const params = {
+            fiscal_year: document.getElementById('fp-fy').value,
+            fund: fundName,
+            type: document.getElementById('fp-type').value.trim() || '消耗品費',
+            item: document.getElementById('fp-item').value.trim() || r.title,
+            amount: Number(document.getElementById('fp-amount').value),
+            status: document.getElementById('fp-status').value,
+            entry_date: document.getElementById('fp-date').value,
+          };
+          if (!(params.amount > 0)) { toast('金額を入力してください'); return; }
+          setBusy(true);
+          try {
+            await fundItemAdd(params);
+            await patch('/api/buy-requests/' + id + '/fund-pushed', {});
+            toast('fund に 転送しました');
+            close();
+            renderBuyRequests({ query: parseQuery() });
+          } catch (e) {
+            setBusy(false);
+            if (isFundUnauthError(e)) {
+              toast('fund.nkmr.io に SSO ログインしていません');
+              window.open(FUND_HOME_URL, '_blank');
+            } else {
+              toast('失敗: ' + (e?.message || e));
+            }
+          }
+        } },
+    ],
+  });
+}
+
+// 会計年度 (4月始まり)。 1-3月 は 前年 の 年度。
+function fiscalYearOf(d) {
+  const y = d.getFullYear();
+  return d.getMonth() < 3 ? y - 1 : y;
+}
+function todayYmd() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function parseQuery() {

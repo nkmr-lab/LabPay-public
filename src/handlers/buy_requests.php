@@ -26,8 +26,36 @@ function route_buy_requests(PDO $pdo, array $cfg, string $method, array $seg): v
         // v1082 中村さん「もう一度お願いするボタン」→ 既存 (bought/declined/cancelled) を
         //   コピーして新規 open 依頼を作る。依頼者本人だけ。
         if ($next === 'reask'    && $method === 'POST')  { buy_requests_reask        ($pdo, $cfg, $id); return; }
+        // v1317 admin: fund.nkmr.io に 転送 完了 マーク (実 転送 は client-side が
+        //   fund.nkmr.io の API を 直叩き、 成功時 に この endpoint で 記録)。
+        if ($next === 'fund-pushed' && $method === 'PATCH') { buy_requests_mark_fund_pushed($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no buy-requests route for $method $sub", 404);
+}
+
+// v1317 admin が fund.nkmr.io への 転送 に 成功 した 際 に buy_requests.fund_pushed_at を セット。
+// 実際 の fund POST は client-side (nkmr-SSO 共有 cookie で fund.nkmr.io を 直叩き) 済 の 前提。
+// この endpoint は 「うちの 記録 でも 転送済 と マーク」の 補助 のみ。
+function buy_requests_mark_fund_pushed(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    if (($u['role'] ?? '') !== 'admin') {
+        throw new ApiException('forbidden', 'admin のみ', 403);
+    }
+    $st = $pdo->prepare("SELECT id, status, fund_pushed_at FROM buy_requests WHERE id=?");
+    $st->execute([$id]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r) throw new ApiException('not_found', 'buy_request が 見つかりません', 404);
+    if ($r['status'] !== 'bought') {
+        throw new ApiException('conflict', 'bought の 依頼 だけ fund 転送 済 に できます', 409);
+    }
+    if ($r['fund_pushed_at']) {
+        json_response(['ok' => true, 'unchanged' => true, 'fund_pushed_at' => $r['fund_pushed_at']]);
+        return;
+    }
+    $pdo->prepare("UPDATE buy_requests SET fund_pushed_at=NOW() WHERE id=?")->execute([$id]);
+    $st2 = $pdo->prepare("SELECT fund_pushed_at FROM buy_requests WHERE id=?");
+    $st2->execute([$id]);
+    json_response(['ok' => true, 'fund_pushed_at' => $st2->fetchColumn()]);
 }
 
 // ─── LIST ────────────────────────────────────────────────────
@@ -51,7 +79,7 @@ function buy_requests_list(PDO $pdo, array $cfg): void {
     }
     $sql = "SELECT b.id, b.url, b.title, b.reason, b.quantity, b.price_estimate,
                    b.urgency, b.status, b.actual_price, b.fulfiller_note,
-                   b.bought_at, b.created_at, b.updated_at,
+                   b.bought_at, b.created_at, b.updated_at, b.fund_pushed_at,
                    b.requester_user_id, ur.display_name AS requester_name, ur.avatar_url AS requester_avatar,
                    b.fulfiller_user_id, uf.display_name AS fulfiller_name
               FROM buy_requests b
