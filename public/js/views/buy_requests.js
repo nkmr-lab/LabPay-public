@@ -286,18 +286,14 @@ async function openFundPushModal(id) {
         <select id="fp-fund">${budgetOptions}</select></div>
       <div class="field"><span class="lbl">科目 (type)</span>
         <select id="fp-type-sel">
-          <option value="消耗品費">消耗品費</option>
-          <option value="図書費">図書費</option>
+          <!-- v1322 my_fund.js と 同じ fund 側 正式 種別 に 差し替え。 「物品」等 が これ で 出る。 -->
+          <option value="物品">物品</option>
+          <option value="人件費">人件費</option>
           <option value="旅費">旅費</option>
-          <option value="謝金">謝金</option>
-          <option value="印刷製本費">印刷製本費</option>
-          <option value="通信運搬費">通信運搬費</option>
-          <option value="会議費">会議費</option>
-          <option value="賃金">賃金</option>
-          <option value="設備備品費">設備備品費</option>
-          <option value="__other__">その他 (下欄に入力)</option>
-        </select>
-        <input type="text" id="fp-type-other" placeholder="科目名を入力" maxlength="40" hidden style="margin-top:4px"></div>
+          <option value="サブスク">サブスク</option>
+          <option value="ドクター">ドクター</option>
+          <option value="その他">その他</option>
+        </select></div>
       <div class="field"><span class="lbl">品名 (item)</span>
         <input type="text" id="fp-item" value="${escapeHtml(r.title)}" maxlength="200"></div>
       <div class="field"><span class="lbl">金額</span>
@@ -312,12 +308,9 @@ async function openFundPushModal(id) {
       { label: '💰 転送する', kind: 'primary', onClick: async ({ close, setBusy }) => {
           const fundName = document.getElementById('fp-fund').value.trim();
           if (!fundName) { toast('予算を選択してください'); return; }
-          // v1321 科目は select 選択、 「その他」なら 下欄 の 手入力 を 採用
-          const typeSel = document.getElementById('fp-type-sel').value;
-          const typeVal = typeSel === '__other__'
-            ? (document.getElementById('fp-type-other').value.trim() || '')
-            : typeSel;
-          if (!typeVal) { toast('科目 (その他 の場合 は 名前) を入力してください'); return; }
+          // v1322 科目は select で fund 側 正式 種別 (物品/人件費/旅費/サブスク/ドクター/その他) から 選択
+          const typeVal = document.getElementById('fp-type-sel').value;
+          if (!typeVal) { toast('科目を選択してください'); return; }
           const params = {
             fiscal_year: document.getElementById('fp-fy').value,
             fund: fundName,
@@ -347,15 +340,6 @@ async function openFundPushModal(id) {
         } },
     ],
   });
-  // v1321 「その他」選択時 だけ 自由入力 input を 出す
-  const sel = document.getElementById('fp-type-sel');
-  const other = document.getElementById('fp-type-other');
-  if (sel && other) {
-    sel.addEventListener('change', () => {
-      other.hidden = sel.value !== '__other__';
-      if (!other.hidden) other.focus();
-    });
-  }
 }
 
 // 会計年度 (4月始まり)。 1-3月 は 前年 の 年度。
