@@ -840,12 +840,15 @@ function isPublicGatewayHash(hash) {
   //   FAB (💬 バブル = 「この結果 について AI と 話す」導線) も止める。
   //   setAiContext / clearAiContext は各 view から呼ばれ続けるが、FAB DOM が
   //   存在しないので実質 no-op になる (関数側で getElementById → null で早期 return)。
-  // Periodic unread refresh — 1 分間隔。タブが裏 (visibility hidden) の時は
-  // スキップして、表に戻った瞬間に即 1 回叩く。これでスマホをロックしてた
-  // 間にバッテリーを使わず、戻ってきた直後にバッジが正しく出る。
+  // Periodic unread refresh — 1 分間隔。
+  // v1326 中村さん指摘「見に行った時に初めて通知が来る」対策 で hidden 中 の skip を
+  //   撤廃。 browser は hidden タブ の setInterval を throttle (最大 1 分/回) する ので、
+  //   60000 ms 間隔 なら 実効頻度 は 変わらず、 バッテリ 影響 も 軽微。 これで タブ 開き直す
+  //   前 に 未読数 バッジ が 最新 に なり、 通知 センター 開いた 瞬間 の 遅延 感 が 減る。
+  //   visibility 復帰 時 の 即 1 回発火 は 継続 (完全遅延 ゼロ 化)。
   if (state.me) {
     refreshUnread();
-    setInterval(() => { if (!document.hidden) refreshUnread(); }, 60000);
+    setInterval(refreshUnread, 60000);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) refreshUnread();
     });
