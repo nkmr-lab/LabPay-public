@@ -456,6 +456,18 @@ function activity_log_write(PDO $pdo, array $cfg, string $method, string $path,
 // Wrapper around Notifier::notify that catches any exception. Use this when a
 // notification is a "nice-to-have" — never let an email/template failure tank
 // the underlying ledger transaction the caller just committed.
+// v1327 内部 CLI (bin/ai_watchdog.php 等) が localhost の API を 叩く 時 に 使う 認証。
+//   通常 の Auth::requireUser (session cookie) を skip して 「行 の 所有者 として 実行」する
+//   ため、 X-Internal-Auth: {$CFG['internal']['secret']} を timing-safe 比較 で 判定。
+//   config.local.php に internal.secret を セット して いない 場合 は 常に false (安全側)。
+function has_internal_auth(array $cfg): bool {
+    $secret = (string)($cfg['internal']['secret'] ?? '');
+    if ($secret === '' || strlen($secret) < 16) return false; // 未設定 or 弱い
+    $hdr = (string)($_SERVER['HTTP_X_INTERNAL_AUTH'] ?? '');
+    if ($hdr === '') return false;
+    return hash_equals($secret, $hdr);
+}
+
 function notify_safely(PDO $pdo, array $cfg, int $userId, string $type,
                        string $body, ?string $refType = null, ?int $refId = null): void {
     try { Notifier::notify($pdo, $cfg, $userId, $type, $body, $refType, $refId); }

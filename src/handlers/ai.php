@@ -4437,19 +4437,30 @@ function ai_paper_full_translate(PDO $pdo, array $cfg): void {
 // v806 エラー row を同 row で再投入 (新規課金 / 新規 row なし)。 v810 #_stuck status=error のもの
 // に加え、 status=processing で 30 分以上進まないものも「stale = 詰まっている」と見なし再投入可。
 function ai_paper_full_translate_retry(PDO $pdo, array $cfg, int $id): void {
-    $u = Auth::requireUser($pdo, $cfg);
-    $uid = (int)$u['id'];
+    // v1327 internal 認証 (watchdog cron) 時 は row の user_id で 実行、 「本人のみ / 30分」制限 を skip
+    $isInternal = has_internal_auth($cfg);
+    if ($isInternal) {
+        $st0 = $pdo->prepare("SELECT user_id FROM paper_full_translations WHERE id=?");
+        $st0->execute([$id]);
+        $ownerUid = (int)($st0->fetchColumn() ?: 0);
+        if (!$ownerUid) throw new ApiException('not_found', 'not found', 404);
+        $uid = $ownerUid;
+    } else {
+        $u = Auth::requireUser($pdo, $cfg);
+        $uid = (int)$u['id'];
+    }
     ai_assert_configured($cfg);
     $st = $pdo->prepare("SELECT * FROM paper_full_translations WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
-    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ再実施可', 403);
+    if (!$isInternal && (int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ再実施可', 403);
     $okError = $row['status'] === 'error';
     $okStaleProc = $row['status'] === 'processing'
         && (int)(strtotime((string)$row['created_at']) ?: 0) > 0
         && (time() - strtotime((string)$row['created_at'])) >= 1800;
-    if (!$okError && !$okStaleProc) {
+    // internal (watchdog) 経由 は 15 分 で 呼ぶ ので 常時 OK
+    if (!$isInternal && !$okError && !$okStaleProc) {
         throw new ApiException('bad_request', '再実施はエラー / 30 分以上経過した処理中のみ (現 status: ' . $row['status'] . ')', 400);
     }
     if (empty($row['pdf_path'])) {
@@ -4483,19 +4494,29 @@ function ai_paper_full_translate_retry(PDO $pdo, array $cfg, int $id): void {
 // v806 paper_translate (要約) のエラー row を同 row で再投入 (新規課金なし)。
 // v810 #_stuck status=processing で 30 分以上進まない stale row も再投入可。
 function ai_paper_translate_retry(PDO $pdo, array $cfg, int $id): void {
-    $u = Auth::requireUser($pdo, $cfg);
-    $uid = (int)$u['id'];
+    // v1327 internal 認証 (watchdog cron) 対応 (ai_paper_full_translate_retry と 同型)
+    $isInternal = has_internal_auth($cfg);
+    if ($isInternal) {
+        $st0 = $pdo->prepare("SELECT user_id FROM paper_translates WHERE id=?");
+        $st0->execute([$id]);
+        $ownerUid = (int)($st0->fetchColumn() ?: 0);
+        if (!$ownerUid) throw new ApiException('not_found', 'not found', 404);
+        $uid = $ownerUid;
+    } else {
+        $u = Auth::requireUser($pdo, $cfg);
+        $uid = (int)$u['id'];
+    }
     ai_assert_configured($cfg);
     $st = $pdo->prepare("SELECT * FROM paper_translates WHERE id=?");
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     if (!$row) throw new ApiException('not_found', 'not found', 404);
-    if ((int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ再実施可', 403);
+    if (!$isInternal && (int)$row['user_id'] !== $uid) throw new ApiException('forbidden', '本人のみ再実施可', 403);
     $okError = $row['status'] === 'error';
     $okStaleProc = $row['status'] === 'processing'
         && (int)(strtotime((string)$row['created_at']) ?: 0) > 0
         && (time() - strtotime((string)$row['created_at'])) >= 1800;
-    if (!$okError && !$okStaleProc) {
+    if (!$isInternal && !$okError && !$okStaleProc) {
         throw new ApiException('bad_request', '再実施はエラー / 30 分以上経過した処理中のみ (現 status: ' . $row['status'] . ')', 400);
     }
     if (empty($row['pdf_path'])) {
