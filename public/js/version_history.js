@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v1316', d: '2026-08-14', s: '📷🎰 らぼったー投稿 で photo.nkmr.io/photo/{id} を 画像展開 + ビンゴ過去週 表示 分かりやすく (中村さん要望 2件)。 (1) posts.js renderBodyHtml に photo.nkmr.io/photo/{数字} の リンク を 画像プレビュー化 する 追加処理。 テキストリンク は 残しつつ 下に medium サイズ のimg (photo.nkmr.io/media.php?id={id}&size=medium) を 添付、 max-height:400px で 折り畳み、 loading=lazy、 img タップ で photo 詳細 へ 新タブ。 nkmr-SSO の .nkmr.io 共有 cookie で img fetch は 認証 通る。 (2) bingo.js の 過去週 リンク 表示 を 「YYYY-MM-DD ・N/25 ・N 本」→「YYYY-MM-DD（N/25・N本）」に、 括弧内 に 数値 を まとめて 日付 と の 誤解 を 防ぐ。sw.js v1316 bump。' },
   { v: 'v1315', d: '2026-08-13', s: '📐 Rankings カード 並び 微調整 (中村さん指示 2 件)。 (1) peak_sale (最高売上) を purchases_amount の 直後 に 移動 で peak_sale/peak_buy が 隣接、 販売2種→購入2種→peak系2種→財布系 の 並び に。 (2) roulette_won を 末尾 に 移動 (娯楽/その他 の 位置)。sw.js v1315 bump。' },
   { v: 'v1314', d: '2026-08-13', s: '📐 最長ラボ滞在 の 位置 を 徹夜 の 右 (直後) に 移動 (中村さん指示)。 従来: CARDS 配列 末尾 (7F滞在日数 の 後)。 変更: all_nighter の 直後 に 移動 で 「日/滞在時間 系」の 塊 に 集約。sw.js v1314 bump。' },
   { v: 'v1313', d: '2026-08-13', s: '⭐ Rankings で 自分の行をハイライト (中村さん要望)。 renderRow で state.me.id === r.user_id を 判定、 該当行 は 薄い黄背景 (#fff9db) + 左に3pxのアクセントborder (#f59e0b) + 名前を太字 + 「(あなた)」オレンジタグ。 25 カード 全部 に 効く。sw.js v1313 bump。' },

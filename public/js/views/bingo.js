@@ -120,7 +120,7 @@ export async function renderBingo(ctx) {
         ${hist.items.filter(it => it.week_start !== d.week_start).map(it => `
           <a class="btn" href="#/bingo?week=${escapeHtml(it.week_start)}"
              style="font-size:12px; padding:4px 8px; ${it.bingo_lines > 0 ? 'background:#fef3c7; color:#946d00' : ''}">
-            ${escapeHtml(it.week_start)} ・${it.completed_count}/25 ・${it.bingo_lines} 本
+            ${escapeHtml(it.week_start)}（${it.completed_count}/25・${it.bingo_lines}本）
           </a>
         `).join('')}
       </div>

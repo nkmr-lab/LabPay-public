@@ -223,6 +223,18 @@ function renderBodyHtml(body) {
   //   された後なので純粋な /#/ or #/ で始まる URL のみマッチ。
   s = s.replace(/(^|[\s])(\/?#\/[A-Za-z0-9_\-\/:?=&%\.]+)/g, (_, pre, url) =>
     `${pre}<a href="${url.replace(/^\//, '')}" style="color:var(--primary); font-weight:600">${url}</a>`);
+  // v1316 photo.nkmr.io/photo/{id} の リンク を 画像プレビュー付き に (テキストリンクも残す)。
+  //   画像 URL は photo.nkmr.io/media.php?id={id}&size=medium。 nkmr-SSO の cookie は
+  //   .nkmr.io 配下 で 共有 されて いる ので img fetch は 認証 通る (未ログイン user は
+  //   broken image に なる が その 場合 は リンク タップ で photo に 遷移 可)。
+  s = s.replace(
+    /<a href="https:\/\/photo\.nkmr\.io\/photo\/(\d+)"([^>]*)>(https:\/\/photo\.nkmr\.io\/photo\/\d+)<\/a>/g,
+    (_, id, attrs, orig) => `<a href="https://photo.nkmr.io/photo/${id}"${attrs}>${orig}</a>` +
+      `<a href="https://photo.nkmr.io/photo/${id}" target="_blank" rel="noopener" style="display:block; margin-top:6px">` +
+      `<img src="https://photo.nkmr.io/media.php?id=${id}&size=medium" alt="photo #${id}" loading="lazy" ` +
+      `style="max-width:100%; max-height:400px; border-radius:8px; display:block; background:#eee">` +
+      `</a>`
+  );
   return s.replace(/\n/g, '<br>');
 }
 
