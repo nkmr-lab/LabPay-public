@@ -285,7 +285,12 @@ async function openFundPushModal(id) {
       <div class="field"><span class="lbl">予算</span>
         <select id="fp-fund">${budgetOptions}</select></div>
       <div class="field"><span class="lbl">科目 (type)</span>
-        <input type="text" id="fp-type" value="消耗品費" maxlength="40"></div>
+        <input type="text" id="fp-type" list="fp-type-list" value="消耗品費" maxlength="40">
+        <datalist id="fp-type-list">
+          <option value="消耗品費"><option value="図書費"><option value="旅費"><option value="謝金">
+          <option value="印刷製本費"><option value="通信運搬費"><option value="会議費"><option value="賃金">
+          <option value="設備備品費"><option value="その他">
+        </datalist></div>
       <div class="field"><span class="lbl">品名 (item)</span>
         <input type="text" id="fp-item" value="${escapeHtml(r.title)}" maxlength="200"></div>
       <div class="field"><span class="lbl">金額</span>
