@@ -287,9 +287,16 @@ async function openFundPushModal(id) {
       <div class="field"><span class="lbl">科目 (type)</span>
         <input type="text" id="fp-type" list="fp-type-list" value="消耗品費" maxlength="40">
         <datalist id="fp-type-list">
-          <option value="消耗品費"><option value="図書費"><option value="旅費"><option value="謝金">
-          <option value="印刷製本費"><option value="通信運搬費"><option value="会議費"><option value="賃金">
-          <option value="設備備品費"><option value="その他">
+          <option value="消耗品費"></option>
+          <option value="図書費"></option>
+          <option value="旅費"></option>
+          <option value="謝金"></option>
+          <option value="印刷製本費"></option>
+          <option value="通信運搬費"></option>
+          <option value="会議費"></option>
+          <option value="賃金"></option>
+          <option value="設備備品費"></option>
+          <option value="その他"></option>
         </datalist></div>
       <div class="field"><span class="lbl">品名 (item)</span>
         <input type="text" id="fp-item" value="${escapeHtml(r.title)}" maxlength="200"></div>
