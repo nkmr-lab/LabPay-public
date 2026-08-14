@@ -1474,6 +1474,7 @@ function paintDetail(id, d) {
         <div class="bold" style="font-size:14px; color:#5b21b6">🤖 この論文を LabPay AI にかける</div>
       </div>
       <div class="row" style="gap:6px; flex-wrap:wrap">
+        <button id="rf-ai-both"     class="btn primary" style="font-size:12px; padding:4px 10px; background:#7c3aed">✨ 要約 + 全訳 (一気に)</button>
         <button id="rf-ai-summary"  class="btn primary" style="font-size:12px; padding:4px 10px">📑 要約する</button>
         <button id="rf-ai-fulltrans" class="btn primary" style="font-size:12px; padding:4px 10px">📑 全訳する</button>
         <button id="rf-ai-review"   class="btn primary" style="font-size:12px; padding:4px 10px">📄 査読する</button>
@@ -1815,6 +1816,40 @@ function paintDetail(id, d) {
   document.getElementById('rf-ai-summary')?.addEventListener('click', async () => {
     if (!confirm('要約を開始します。モデルは gpt-5 (共有で 25pt / 非共有で 50pt)。続行?')) return;
     await runAiPost('/api/ai/paper_translate', { model: 'gpt-5', auto_share: '1' });
+  });
+  // v1323 中村さん要望「要約+全訳を一気に」。 confirm 1 回 で 2 種 (要約 + 英→日全訳) を
+  //   直列 (要約 開始 完了 待ってから 全訳 も POST、 各処理 自体 は バックグラウンド 実行) で キック。
+  //   PDF blob は 1 回 だけ fetch して 使い回し。 gpt-5 / 共有 で 合計 55pt。
+  document.getElementById('rf-ai-both')?.addEventListener('click', async () => {
+    if (!confirm('要約 + 英→日全訳 を 一気に開始します。 モデルは gpt-5 (共有で 要約25pt + 全訳30pt = 合計55pt)。続行?')) return;
+    const btn = document.getElementById('rf-ai-both');
+    const oldTxt = btn.textContent;
+    btn.disabled = true; btn.textContent = '⏳ 準備中…';
+    const postFd = async (endpoint, file, extra) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      for (const [k, v] of Object.entries(extra)) fd.append(k, v);
+      const r = await fetch(endpoint, {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'labpay' },
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error?.message || j?.error || ('HTTP ' + r.status));
+      return j;
+    };
+    try {
+      const blob = await fetchPdfBlob();
+      const file = new File([blob], pdfName(), { type: 'application/pdf' });
+      btn.textContent = '⏳ 要約 開始中…';
+      await postFd('/api/ai/paper_translate',      file, { model: 'gpt-5', auto_share: '1' });
+      btn.textContent = '⏳ 全訳 開始中…';
+      await postFd('/api/ai/paper_full_translate', file, { direction: 'en2ja', model: 'gpt-5', auto_share: '1' });
+      toast('要約 と 全訳 を 開始しました (完了通知 が 届きます)');
+      renderRefsDetail({ params: { id } });
+    } catch (e) {
+      toast('失敗: ' + e.message);
+      btn.disabled = false; btn.textContent = oldTxt;
+    }
   });
   document.getElementById('rf-ai-fulltrans')?.addEventListener('click', async () => {
     const dir = confirm('英→日で全訳しますか? [OK=英→日 / キャンセル=別のモデルで]') ? 'en2ja' : null;

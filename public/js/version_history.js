@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v1323', d: '2026-08-14', s: '✨ 文献管理 (refs) 詳細 の 🤖 LabPay AI カード に 「✨ 要約+全訳 (一気に)」ボタン を 追加 (中村さん要望)。 4 種 の 個別 button (要約/全訳/査読/関連論文) の 先頭 に 目立つ 紫 button を 配置、 confirm 1 回 で PDF blob を 1 度 だけ fetch → 要約 (paper_translate) + 英→日 全訳 (paper_full_translate) を 直列 POST、 各処理 は バックグラウンド 実行 で 完了通知 待ち。 gpt-5 / 共有 で 合計 55pt (要約25 + 全訳30)。 残り 2 件 (AI 失敗時 の 自動リトライ + 通知遅延 の 修正) は 実装 大 なので v1324〜 で 段階的 に。sw.js v1323 bump。' },
   { v: 'v1322', d: '2026-08-14', s: '🏷 fund 転送 の 科目 を fund 側 正式種別 に 差し替え (中村さん指摘「物品がなかった」)。 my_fund.js の 支払い項目追加フォーム で 既に fund 側 の 6 種類 (物品/人件費/旅費/サブスク/ドクター/その他) が hard-coded されて いた のを 発見、 buy_requests.js の fund 転送 modal も 同じ 選択肢 に。 v1319-v1321 の 一般的 な 会計費目 (消耗品費/図書費/…) と 「その他 の 自由入力」 は 廃止 (fund 側 で 使わない)。sw.js v1322 bump。' },
   { v: 'v1321', d: '2026-08-14', s: '🐛 fund 転送 の 科目 を select+その他 に 変更 (中村さん報告 「やっぱ選べない」)。 datalist は input の 補完型 で 「既に value に消耗品費が入って いる せい で 補完 が それ だけ に フィルタ される」 現象 (Chrome の 挙動)。 明示的 に 選択 できる 純 select に 変更、 「その他」選択 時 だけ 下 の 手入力 input が 表示 される 2 段構え。 送信時 の type 決定 も select値 or 手入力値 の 分岐 に。sw.js v1321 bump。' },
   { v: 'v1320', d: '2026-08-14', s: '🐛 fund 転送 の 科目datalist で 消耗品費しか 選べない バグ 修正 (中村さん報告)。 root cause: v1319 で <option> を 閉じタグ 省略 で 連続配置 して いた ため 一部browser (Chrome) が 「入れ子」と 誤解釈 して 最初 の 1 個 だけ 認識。 各 <option> を 明示的 に </option> で 閉じる 形 に。sw.js v1320 bump。' },
