@@ -249,14 +249,21 @@ async function openFundPushModal(id) {
   const fy = fiscalYearOf(new Date());
   const today = todayYmd();
 
-  // budgets 取得 (fund.nkmr.io 直叩き、 未ログイン なら fund へ 誘導)
+  // v1318 budgets 取得 (fund.nkmr.io 直叩き、 未ログイン なら fund へ 誘導)。
+  //   fundBudgets(fiscalYear) は fiscalYear 単体 を 引数 に とる (v1089)、 v1317 で
+  //   object を 渡して いた ため 内部で {fiscal_year: {fiscal_year: 2026}} と 誤エンコード
+  //   され 「この年度の予算がありません」に なって いた。
+  //   応答 の item 構造: {fiscal_year, fund, label, plan, work1, work2, remain, ...}
+  //   value は fund (fund 側 の 予算識別子)、 表示 は label があれば label、 なければ fund。
   let budgetOptions = '<option value="">読み込み中…</option>';
-  let bud = null;
   try {
-    bud = await fundBudgets({ fiscal_year: fy });
-    const items = (bud?.items || []).map(b =>
-      `<option value="${escapeHtml(b.name)}">${escapeHtml(b.name)}${b.remain != null ? ' (残 ' + Number(b.remain).toLocaleString() + '円)' : ''}</option>`
-    ).join('');
+    const bud = await fundBudgets(fy);
+    const items = bud.map(b => {
+      const v = b.fund || b.name || '';
+      const lbl = b.label || b.fund || b.name || '(名前なし)';
+      const remain = (b.remain != null) ? ` (残 ${Number(b.remain).toLocaleString()}円)` : '';
+      return `<option value="${escapeHtml(v)}">${escapeHtml(lbl)}${remain}</option>`;
+    }).join('');
     budgetOptions = items || '<option value="">この年度の予算がありません</option>';
   } catch (e) {
     if (isFundUnauthError(e)) {
