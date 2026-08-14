@@ -439,16 +439,36 @@ function refs_list(PDO $pdo, array $cfg): void {
     // v930 fulltext 検索
     $ftQ = trim((string)($_GET['fulltext_q'] ?? ''));
 
+    // v1324 中村さん要望「文献一覧 で 要約/全訳 の 有無 を 表示」
+    //   pdf_sha256 が 一致する paper_translates/paper_full_translations の
+    //   自分 or 共有 分 の done / 進行中 の カウント を 添える。
     $sql = "SELECT r.id, r.doi, r.arxiv_id, r.title, r.authors_json, r.year, r.venue,
                    r.url, r.pdf_path, r.tags_json, r.added_by_user_id, r.created_at, r.deleted_at,
-                   r.citation_count,
+                   r.citation_count, r.pdf_sha256,
                    u.display_name AS added_by_name, u.avatar_url AS added_by_avatar,
-                   n.status AS my_status, n.note AS my_note
+                   n.status AS my_status, n.note AS my_note,
+                   (SELECT COUNT(*) FROM paper_translates pt
+                     WHERE pt.pdf_sha256 = r.pdf_sha256
+                       AND (pt.user_id = ? OR pt.is_shared = 1)
+                       AND pt.status = 'done') AS summary_done_count,
+                   (SELECT COUNT(*) FROM paper_translates pt
+                     WHERE pt.pdf_sha256 = r.pdf_sha256
+                       AND (pt.user_id = ? OR pt.is_shared = 1)
+                       AND pt.status IN ('pending','processing')) AS summary_running_count,
+                   (SELECT COUNT(*) FROM paper_full_translations pft
+                     WHERE pft.pdf_sha256 = r.pdf_sha256
+                       AND (pft.user_id = ? OR pft.is_shared = 1)
+                       AND pft.status = 'done') AS fulltrans_done_count,
+                   (SELECT COUNT(*) FROM paper_full_translations pft
+                     WHERE pft.pdf_sha256 = r.pdf_sha256
+                       AND (pft.user_id = ? OR pft.is_shared = 1)
+                       AND pft.status IN ('pending','processing')) AS fulltrans_running_count
               FROM refs r
               LEFT JOIN users u ON u.id = r.added_by_user_id
               LEFT JOIN ref_notes n ON n.ref_id = r.id AND n.user_id = ?
              WHERE 1=1";
-    $args = [$uid];
+    // v1324 pt subquery 4 個 + note join 1 個 = args 先頭 に uid を 5 回
+    $args = [$uid, $uid, $uid, $uid, $uid];
     if ($trash)  $sql .= " AND r.deleted_at IS NOT NULL";
     else         $sql .= " AND r.deleted_at IS NULL";
     if ($ftQ !== '' && mb_strlen($ftQ) <= 200) {
@@ -491,6 +511,11 @@ function refs_list(PDO $pdo, array $cfg): void {
         $r['added_by_user_id'] = (int)$r['added_by_user_id'];
         $r['my_status']       = $r['my_status'] ?: 'unread';
         $r['citation_count']  = isset($r['citation_count']) && $r['citation_count'] !== null ? (int)$r['citation_count'] : null;
+        // v1324 要約/全訳 の 集計 を int 化
+        $r['summary_done_count']     = (int)($r['summary_done_count'] ?? 0);
+        $r['summary_running_count']  = (int)($r['summary_running_count'] ?? 0);
+        $r['fulltrans_done_count']   = (int)($r['fulltrans_done_count'] ?? 0);
+        $r['fulltrans_running_count']= (int)($r['fulltrans_running_count'] ?? 0);
         return $r;
     }, $st->fetchAll(PDO::FETCH_ASSOC));
 

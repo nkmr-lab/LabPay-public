@@ -450,10 +450,17 @@ function renderTile(it) {
   if (it.pdf_path) idBadges.push('📄 PDF');
   if (it.citation_count != null) idBadges.push(`🔗 ${it.citation_count}`);
   const idHtml = idBadges.length ? `<span class="hint-sm" style="font-size:10px; margin-left:6px">${idBadges.join(' · ')}</span>` : '';
+  // v1324 中村さん要望: 要約/全訳 の 有無 を バッジ で 一目で 分かる ように
+  const aiBadges = [];
+  if (it.summary_done_count > 0)      aiBadges.push(`<span style="background:#dcfce7; color:#166534; font-size:10px; padding:1px 6px; border-radius:6px">📑要約${it.summary_done_count > 1 ? '×' + it.summary_done_count : ''}</span>`);
+  else if (it.summary_running_count > 0) aiBadges.push('<span style="background:#fef3c7; color:#78350f; font-size:10px; padding:1px 6px; border-radius:6px">📑要約⏳</span>');
+  if (it.fulltrans_done_count > 0)    aiBadges.push(`<span style="background:#dcfce7; color:#166534; font-size:10px; padding:1px 6px; border-radius:6px">📄全訳${it.fulltrans_done_count > 1 ? '×' + it.fulltrans_done_count : ''}</span>`);
+  else if (it.fulltrans_running_count > 0) aiBadges.push('<span style="background:#fef3c7; color:#78350f; font-size:10px; padding:1px 6px; border-radius:6px">📄全訳⏳</span>');
+  const aiBadgeHtml = aiBadges.length ? ' ' + aiBadges.join(' ') : '';
   return `
     <a class="list-item" href="#/refs/${it.id}" style="display:block; padding:10px 12px; border-bottom:1px solid #f3f4f6; text-decoration:none; color:inherit">
       <div class="bold" style="font-size:14px; line-height:1.4">
-        ${escapeHtml(it.title)} ${idHtml}
+        ${escapeHtml(it.title)} ${idHtml}${aiBadgeHtml}
       </div>
       <div class="hint-sm" style="font-size:12px; color:#6b7280; margin-top:2px">
         ${escapeHtml(authorsShort(it.authors))}${it.year ? ' · ' + it.year : ''}${it.venue ? ' · ' + escapeHtml(it.venue) : ''}
