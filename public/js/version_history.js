@@ -2,6 +2,7 @@
 //   新しいバージョンを ship したら先頭に追記してください。
 
 export const VERSION_HISTORY = [
+  { v: 'v1321', d: '2026-08-14', s: '🐛 fund 転送 の 科目 を select+その他 に 変更 (中村さん報告 「やっぱ選べない」)。 datalist は input の 補完型 で 「既に value に消耗品費が入って いる せい で 補完 が それ だけ に フィルタ される」 現象 (Chrome の 挙動)。 明示的 に 選択 できる 純 select に 変更、 「その他」選択 時 だけ 下 の 手入力 input が 表示 される 2 段構え。 送信時 の type 決定 も select値 or 手入力値 の 分岐 に。sw.js v1321 bump。' },
   { v: 'v1320', d: '2026-08-14', s: '🐛 fund 転送 の 科目datalist で 消耗品費しか 選べない バグ 修正 (中村さん報告)。 root cause: v1319 で <option> を 閉じタグ 省略 で 連続配置 して いた ため 一部browser (Chrome) が 「入れ子」と 誤解釈 して 最初 の 1 個 だけ 認識。 各 <option> を 明示的 に </option> で 閉じる 形 に。sw.js v1320 bump。' },
   { v: 'v1319', d: '2026-08-14', s: '🏷 fund 転送 modal の 科目(type) を datalist 候補付き に (中村さん指摘「科目タイプがリストから選べない」)。 fund.nkmr.io に 種別 取得 API が 見つからなかった (action=types も 302 認証 redirect) ため hard-coded の 定番費目 (消耗品費/図書費/旅費/謝金/印刷製本費/通信運搬費/会議費/賃金/設備備品費/その他) を <datalist> で 添付、 自由入力 も 引き続き 可能。 fund 側 で 別 の 名称 を 使って いる 場合 は 手動 入力 でも 通る。sw.js v1319 bump。' },
   { v: 'v1318', d: '2026-08-14', s: '🐛 fund 転送 modal で 「この年度の予算がありません」 バグ 修正 (中村さん報告)。 root cause: fundBudgets の 引数 が 「fiscalYear 単体 (数値)」の 仕様 なのに v1317 で {fiscal_year: fy} と object を 渡して しまい、 内部 で {fiscal_year: {fiscal_year: 2026}} と 誤エンコード されて fund 側 は fiscal_year=[object Object] で 0 件 応答。 修正: fundBudgets(fy) に。 併せて 応答の item は {fund, label, ...} 構造 なので pulldown の value/表示 も b.fund/b.label を 参照 (以前 は b.name で 空 に なる 危険)。sw.js v1318 bump。' },
