@@ -1449,6 +1449,30 @@ function renderAll() {
       openColorPop(parseInt(el.dataset.colorId, 10), el);
     });
   });
+  // v1328 fb#512 文字サイズ 手動指定 (prompt で 数値 入力、 空欄 で 自動 に 戻す)
+  notesRoot.querySelectorAll('[data-fontsize-id]').forEach(el => {
+    el.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const nid = parseInt(el.dataset.fontsizeId, 10);
+      const n = NOTE_MAP[nid];
+      if (!n) return;
+      const cur = n.font_size ? String(n.font_size) : '';
+      const s = prompt('文字サイズ (px、 8〜128)。 空欄で自動に戻す。', cur);
+      if (s === null) return; // キャンセル
+      let payload;
+      if (s.trim() === '') {
+        payload = { font_size: null };
+      } else {
+        const v = Number(s);
+        if (!Number.isFinite(v) || v < 8 || v > 128) { toast('8〜128 の 数字 で 入力して ください'); return; }
+        payload = { font_size: Math.round(v) };
+      }
+      try {
+        const res = await patch(`/api/board/notes/${nid}`, payload);
+        if (res && res.note) { NOTE_MAP[nid] = res.note; renderNotes(); }
+      } catch (err) { toast('失敗: ' + (err?.message || err)); }
+    });
+  });
   notesRoot.querySelectorAll('[data-del-id]').forEach(el => {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1495,8 +1519,9 @@ function noteHtml(n) {
     header = `<div style="display:flex; gap:4px; align-items:center; font-size:11px; color:#4b5563">
        ${badge}
        <span style="margin-left:auto"></span>
-       <button data-color-id="${n.id}"  style="${btnStyle}" title="色を変える">🎨</button>
-       <button data-genimg-id="${n.id}" style="${btnStyle}" title="AI 画像を生成">🖼</button>
+       <button data-fontsize-id="${n.id}" style="${btnStyle}" title="文字サイズを変える">🔤</button>
+       <button data-color-id="${n.id}"    style="${btnStyle}" title="色を変える">🎨</button>
+       <button data-genimg-id="${n.id}"   style="${btnStyle}" title="AI 画像を生成">🖼</button>
        ${n.front_image_url ? `<button data-clearimg-id="${n.id}" style="${btnStyle}" title="画像を消す">🚫</button>` : ''}
        ${flipBtn}
        <button data-del-id="${n.id}" style="${btnDanger}" title="削除">🗑</button>
@@ -1513,7 +1538,10 @@ function noteHtml(n) {
   } else {
     const img = n.front_image_url;
     const imgBlock = img ? `<img src="${escapeHtml(img)}" style="max-width:100%; max-height:70%; object-fit:contain; border-radius:4px; margin-bottom:4px" alt="">` : '';
-    const fpx = dynamicFontSize(n.front_text || '', n.width, n.height);
+    // v1328 fb#512: 手動指定 (n.font_size) が あれば それ を 優先、 NULL なら 従来 の 自動計算
+    const fpx = (n.font_size && n.font_size > 0)
+      ? n.font_size
+      : dynamicFontSize(n.front_text || '', n.width, n.height);
     body = `<div class="bnote-body" style="flex:1; overflow:hidden; white-space:pre-wrap; word-break:break-word; padding-top:4px; display:flex; flex-direction:column">
               ${imgBlock}
               <div class="bnote-text" style="font-size:${fpx}px; line-height:1.25; text-align:center; display:flex; align-items:center; justify-content:center; flex:1">${escapeHtml(n.front_text || '')}</div>

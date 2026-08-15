@@ -132,6 +132,8 @@ function _board_note_shape(array $r, int $requesterId): array {
         'height'            => (float)$r['height'],
         'rotation'          => (float)$r['rotation'],
         'color'             => (string)$r['color'],
+        // v1328 font_size (px) — NULL は 自動計算 (client 側 dynamicFontSize) を 使う 目印
+        'font_size'         => isset($r['font_size']) && $r['font_size'] !== null ? (int)$r['font_size'] : null,
         // 他人に見えない (hidden) 時は text / image を配信しない (漏洩防止)
         'front_text'        => $hiddenForMe ? '' : (string)($r['front_text'] ?? ''),
         'front_image_url'   => $hiddenForMe ? null : ($r['front_image_url'] ?: null),
@@ -809,6 +811,16 @@ function board_note_patch(PDO $pdo, array $cfg, int $id): void {
     }
     if (array_key_exists('color', $body)) {
         $sets[] = 'color = ?'; $params[] = _board_norm_color((string)$body['color']);
+    }
+    // v1328 fb#512: font_size を 手動指定 (null で 自動 に 戻す)
+    if (array_key_exists('font_size', $body)) {
+        $fs = $body['font_size'];
+        if ($fs === null || $fs === '' || $fs === 0) {
+            $sets[] = 'font_size = ?'; $params[] = null;
+        } else {
+            $fsInt = max(8, min(128, (int)$fs));
+            $sets[] = 'font_size = ?'; $params[] = $fsInt;
+        }
     }
     foreach (['front_text','back_text'] as $k) {
         if (array_key_exists($k, $body)) {
