@@ -644,9 +644,8 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'test' && $method === 'POST') {
             $body = read_json_body();
             $u = Auth::requireAdmin($pdo, $cfg);
-            $st = $pdo->prepare("SELECT slack_member_id FROM users WHERE id=?");
-            $st->execute([(int)$u['id']]);
-            $slackId = (string)$st->fetchColumn();
+            // 自分の Slack Member ID は auth.nkmr.io の profile store から (本人セッション経由)。
+            $slackId = (string)(AuthProfile::selfSlackMemberId($cfg) ?? '');
             if ($slackId === '') {
                 throw new ApiException('bad_request',
                     '自分の slack_member_id が未設定。設定 → プロフィールの Slack member ID を埋めてください。', 400);

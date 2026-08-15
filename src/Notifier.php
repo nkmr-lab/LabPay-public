@@ -179,10 +179,10 @@ class Notifier {
         try {
             if (!empty($cfg['slack']['bot_token'])
                 && self::isSlackEnabledForCategory($pdo, $userId, self::categoryFor($type))) {
-                $u = $pdo->prepare('SELECT slack_member_id FROM users WHERE id=?');
-                $u->execute([$userId]);
-                $sid = (string)($u->fetchColumn() ?: '');
-                if ($sid !== '') {
+                // slack_member_id は auth.nkmr.io の profile store から (LabPay 列 は使わない)。
+                // 送信対象は「他人」なので、 サービス鍵経由の lookup (本人セッション不要) が要る。
+                $sid = AuthProfile::slackMemberId($pdo, $cfg, (int)$userId);
+                if (!empty($sid)) {
                     // v656 通知がどのページに対応するかを URL で末尾に付ける
                     // (Slack 上からすぐ飛べるように)。 unfurl は引き続き off のまま。
                     $slackText = '[LabPay] ' . $body;

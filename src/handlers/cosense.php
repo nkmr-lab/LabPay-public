@@ -67,10 +67,10 @@ function cosense_project(array $cfg): string {
     return (string)($cfg['cosense']['project'] ?? 'nkmr-lab');
 }
 function cosense_user_pat(PDO $pdo, int $uid): ?string {
-    $st = $pdo->prepare("SELECT cosense_pat FROM users WHERE id=?");
-    $st->execute([$uid]);
-    $c = trim((string)($st->fetchColumn() ?: ''));
-    return $c !== '' ? $c : null;
+    // Cosense PAT は auth.nkmr.io の暗号化 profile store に集約。 常に「本人セッション経由」で参照する
+    // (cron 等バックグラウンドで他人分を引く用途は存在しない = 本人が Cosense を叩く時だけ必要)。
+    global $CFG;
+    return AuthProfile::cosensePat($CFG);
 }
 // v825 Cosense page 名に使う handle。優先順:
 //   1) users.cosense_page_handle (個別設定、例: 「中村聡史」)
@@ -759,7 +759,12 @@ function cosense_me_set_pat(PDO $pdo, array $cfg, int $uid): void {
     } else {
         $p = null;
     }
-    $pdo->prepare("UPDATE users SET cosense_pat=? WHERE id=?")->execute([$p, $uid]);
+    // Cosense PAT は auth.nkmr.io の暗号化 profile store に集約。 LabPay users.cosense_pat 列 は書かない。
+    $r = AuthProfile::patchSelf($cfg, ['cosense_pat' => $p ?? '']);
+    if (!$r['ok']) {
+        throw new ApiException('server_error',
+            'Cosense PAT を auth.nkmr.io に保存できませんでした (http ' . $r['http'] . ')', 502);
+    }
 
     // v829 #418 保存と同時に「実際に Cosense で読み取りできるか」をテスト。
     //   貼り付け後すぐ入力欄が空になるので、 toast に結果を出して安心感を与える。

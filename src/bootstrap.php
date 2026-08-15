@@ -36,6 +36,7 @@ require_once __DIR__ . '/Ledger.php';
 require_once __DIR__ . '/Notifier.php';
 require_once __DIR__ . '/ProductInfo.php';
 require_once __DIR__ . '/Auth.php';
+require_once __DIR__ . '/AuthProfile.php';
 require_once __DIR__ . '/Calendar.php';
 require_once __DIR__ . '/GoogleCalendar.php';
 require_once __DIR__ . '/Zoom.php';

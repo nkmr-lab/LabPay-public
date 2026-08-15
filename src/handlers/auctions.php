@@ -136,9 +136,9 @@ function auctions_detail(PDO $pdo, array $cfg, int $id): void {
     auctions_maybe_settle($pdo, $cfg, $id);
     $st = $pdo->prepare("
         SELECT a.*, us.display_name AS seller_name, us.avatar_url AS seller_avatar_url,
-               us.slack_member_id AS seller_slack, us.phone_number AS seller_phone,
+               us.phone_number AS seller_phone,
                uw.display_name AS winner_name, uw.avatar_url AS winner_avatar_url,
-               uw.slack_member_id AS winner_slack, uw.phone_number AS winner_phone
+               uw.phone_number AS winner_phone
           FROM auctions a
           JOIN users us ON us.id = a.seller_user_id
           LEFT JOIN users uw ON uw.id = a.winner_user_id
@@ -146,6 +146,11 @@ function auctions_detail(PDO $pdo, array $cfg, int $id): void {
     $st->execute([$id]);
     $a = $st->fetch(PDO::FETCH_ASSOC);
     if (!$a) throw new ApiException('not_found', 'オークション無し', 404);
+    // slack_member_id は auth.nkmr.io に集約済み。 露出可否は下で expose 条件でガード。
+    $a['seller_slack'] = AuthProfile::slackMemberId($pdo, $cfg, (int)$a['seller_user_id']);
+    $a['winner_slack'] = !empty($a['winner_user_id'])
+        ? AuthProfile::slackMemberId($pdo, $cfg, (int)$a['winner_user_id'])
+        : null;
     $stB = $pdo->prepare("SELECT b.id, b.bidder_user_id, b.amount, b.created_at,
                                  ub.display_name AS bidder_name, ub.avatar_url AS bidder_avatar_url
                             FROM auction_bids b

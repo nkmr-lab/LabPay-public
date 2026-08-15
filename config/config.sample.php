@@ -28,6 +28,13 @@ return [
     'dev_login_enabled'    => false,
     // Bootstrap admin: auto-added to allowlist with role=admin on first request.
     'bootstrap_admin_email' => 'you@example.com',
+    // auth.nkmr.io ホストされた profile store。 Slack Member ID / Cosense PAT 等の
+    // 「アプリ横断で共有したいユーザ設定」を LabPay ではなく auth.nkmr.io 側に集約する。
+    //   base_url    : auth サービスの URL (通常 https://auth.nkmr.io)
+    //   service_key : auth 側 /etc/nkmrauth/profile_services.php で 'labpay' に紐づけた共有シークレット
+    //                 → 未設定なら AuthProfile 経由の呼び出しは 401/403 で失敗する。
+    'base_url'    => 'https://auth.nkmr.io',
+    'service_key' => '',
   ],
 
   'mail' => [

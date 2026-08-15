@@ -21,14 +21,15 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
         if (!is_streak_ongoing($pdo, $streak['last_checkin_date'], (int)$streak['current_streak'], $weekdayOnly, $tz)) {
             $streak['current_streak'] = 0;
         }
-        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, slack_member_id, hobbies, favorites, paypay_id, bank_info, birthday_md, birthday_year, birth_place FROM users WHERE id=?');
+        $av = $pdo->prepare('SELECT avatar_url, scrapbox_username, grade, phone_number, hobbies, favorites, paypay_id, bank_info, birthday_md, birthday_year, birth_place FROM users WHERE id=?');
         $av->execute([$u['id']]);
         $row = $av->fetch();
         $u['avatar_url']        = $row['avatar_url']        ?? null;
         $u['scrapbox_username'] = $row['scrapbox_username'] ?? null;
         $u['grade']             = $row['grade']             ?? null;
         $u['phone_number']      = $row['phone_number']      ?? null;
-        $u['slack_member_id']   = $row['slack_member_id']   ?? null;
+        // slack_member_id は auth.nkmr.io に集約済み。 本人セッション経由で AuthProfile から引く。
+        $u['slack_member_id']   = AuthProfile::selfSlackMemberId($cfg);
         $u['hobbies']           = $row['hobbies']           ?? null;
         $u['favorites']         = $row['favorites']         ?? null;
         $u['paypay_id']         = $row['paypay_id']         ?? null;
@@ -86,17 +87,22 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 $sets[] = 'avatar_url = ?'; $params[] = $url;
             }
         }
+        // slack_member_id は auth.nkmr.io の profile store に集約。 LabPay users.slack_member_id 列 は書かない。
+        // 検証だけ ここで 行い (400 を すぐ返せる)、 保存は AuthProfile::patchSelf 経由。
         if (array_key_exists('slack_member_id', $body)) {
             $sid = $body['slack_member_id'];
             if ($sid === null || trim((string)$sid) === '') {
-                $sets[] = 'slack_member_id = NULL';
+                $newSid = '';
             } else {
-                $sid = trim((string)$sid);
-                // Slack member ID は U + 英数字。 W (Enterprise Grid) も許容。
-                if (!preg_match('/^[UW][A-Z0-9]{6,30}$/', $sid)) {
+                $newSid = trim((string)$sid);
+                if (!preg_match('/^[UW][A-Z0-9]{6,30}$/', $newSid)) {
                     throw new ApiException('bad_request', 'slack_member_id は U/W で始まる Slack member ID (例: U01ABCD2345)', 400);
                 }
-                $sets[] = 'slack_member_id = ?'; $params[] = $sid;
+            }
+            $r = AuthProfile::patchSelf($cfg, ['slack_member_id' => $newSid]);
+            if (!$r['ok']) {
+                throw new ApiException('server_error',
+                    'Slack member ID を auth.nkmr.io に保存できませんでした (http ' . $r['http'] . ')', 502);
             }
         }
         if (array_key_exists('phone_number', $body)) {
@@ -1031,7 +1037,7 @@ function route_me(PDO $pdo, array $cfg, string $method, array $seg): void {
                 foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                     $icon = $r['urgency'] === 'urgent' ? '🚨' : '🛒';
                     $fee = $r['price_estimate'] !== null
-                        ? '想定 ' . number_format((int)$r['price_estimate']) . '円'
+                        ? '想定' . number_format((int)$r['price_estimate']) . '円'
                         : '';
                     $items[] = ['cat' => 'work', 'tag' => 'request', 'icon' => $icon, 'kind' => 'buy-request',
                                 'title' => '購入依頼: ' . mb_substr((string)$r['title'], 0, 26),
