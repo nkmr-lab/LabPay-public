@@ -27,6 +27,15 @@ if (!is_file($cfgPath)) {
 }
 $CFG = require $cfgPath;
 
+// v1332 config.local.php を追加 override として読む (存在すれば)。
+//   config.php は素直な `return [...];` の 配列返し なので、 config.local.php 側 で
+//   `$CFG['internal']['secret'] = '...';` 等 の 追記/上書き を 書ける (git 管理外、 サーバ固有 の secret 用)。
+//   v1327 で internal.secret、 v1329 で auth.service_key を config.local.php に置いたが
+//   ここで include されて い なかった ため 全く 適用 されて い なかった (watchdog retry と AuthProfile が
+//   silent に 失敗)。 config.local.php は $CFG が スコープに 見える 前提 で 書かれて いる。
+$cfgLocal = __DIR__ . '/../config/config.local.php';
+if (is_file($cfgLocal)) { require $cfgLocal; }
+
 date_default_timezone_set($CFG['app']['timezone'] ?? 'Asia/Tokyo');
 
 // ---------------- Includes ----------------

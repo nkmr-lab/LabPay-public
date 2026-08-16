@@ -37,9 +37,15 @@ function invoke_retry_endpoint(string $sub, int $id, string $secret): array {
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 30,
         CURLOPT_CONNECTTIMEOUT => 5,
+        // v1332 vhost が HTTP→HTTPS 301 リダイレクトを 出す ので、 follow + POST を 維持
+        //   (デフォルト の 301 follow は GET に 落ちる → POST を 維持 して retry endpoint に 渡す)。
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_POSTREDIR      => 7,  // 301/302/303 全部 で POST を 維持
+        CURLOPT_MAXREDIRS      => 3,
         CURLOPT_HTTPHEADER     => [
             'Content-Type: application/json',
             'X-Internal-Auth: ' . $secret,
+            'X-Requested-With: labpay',   // v1332 API 側 CSRF check を通す
             'Host: pay.nkmr.io',
         ],
     ]);
@@ -54,10 +60,14 @@ $now = date('Y-m-d H:i:s');
 $handled = 0;
 
 foreach ($tables as $t) {
-    // COALESCE(last_attempt_at, created_at) で 判定 (last_attempt_at 未設定 = 初回)
+    // v1332 processing だけでなく pending も対象。 一度 pending 戻し された row が
+    //   AI 側 で 走り 出さ ず 放置 される ケース (v1329 auth.service_key 未 適用 で
+    //   自動 retry 失敗 → pending 戻し → 誰も 動かさ ず 20 時間 stuck 事案) を 拾う。
+    //   COALESCE(last_attempt_at, created_at) で gate が 効く の で 無限 loop に なら ない
+    //   (pending 戻し 直後 は last_attempt_at=NOW() が set されて いる の で 15 分 待つ)。
     $sql = "SELECT id, user_id, retry_count, error_msg
               FROM {$t['tbl']}
-             WHERE status='processing'
+             WHERE status IN ('processing','pending')
                AND COALESCE(last_attempt_at, created_at) < NOW() - INTERVAL ? MINUTE";
     $st = $pdo->prepare($sql);
     $st->execute([WD_STUCK_MIN]);
