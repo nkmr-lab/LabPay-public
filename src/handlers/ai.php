@@ -4473,15 +4473,15 @@ function ai_paper_full_translate_retry(PDO $pdo, array $cfg, int $id): void {
     $fileId = ai_openai_upload_pdf($pdfAbs, $row['pdf_name'] ?: 'paper.pdf', $apiKey);
 
     // row リセット (新規課金なし)
-    // v1333 last_attempt_at=NOW() + retry_count=0 を 追加。 これ が 無い と 直後 の
-    //   watchdog cron が 「created_at 20時間前 + retry_count=3」 と 判定 して 即 gave-up し、
-    //   手動/自動 の 再投入 が 効か なく なる (2026-08-16 の stuck 4 件 事案)。 手動 retry は
-    //   「新規 の 試行」 と 見なして OK な の で retry_count も 0 に。
+    // v1333 last_attempt_at=NOW() を追加 (watchdog の 15分 gate を 効かせる)。
+    // v1334 retry_count=0 は 本人 手動 (!isInternal) の 時 だけ。 watchdog 経由 (isInternal)
+    //   では 累積 を 尊重 して 3 回 で 諦め が 効く よう に する (無限 loop + 通知乱発 事案対策)。
+    $resetRetryCount = $isInternal ? "" : ", retry_count=0";
     $pdo->prepare("UPDATE paper_full_translations
                       SET status='processing', progress_text='再投入中…',
                           openai_response_id=NULL, error_msg=NULL, result_json=NULL,
                           usage_json=NULL, finished_at=NULL,
-                          last_attempt_at=NOW(), retry_count=0
+                          last_attempt_at=NOW()" . $resetRetryCount . "
                     WHERE id=?")->execute([$id]);
 
     json_response_no_exit([
@@ -4555,10 +4555,12 @@ function ai_paper_translate_retry(PDO $pdo, array $cfg, int $id): void {
     $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
 
     // row リセット
-    // v1333 last_attempt_at=NOW() + retry_count=0 を 追加 (ai_paper_full_translate_retry と 同 理由)。
+    // v1333 last_attempt_at=NOW() を 追加 (ai_paper_full_translate_retry と 同 理由)。
+    // v1334 retry_count=0 は 本人 手動 (!isInternal) の 時 だけ (watchdog 累積 を 尊重)。
+    $resetRetryCount = $isInternal ? "" : ", retry_count=0";
     $pdo->prepare("UPDATE paper_translates
                       SET status='processing', error_msg=NULL, result_json='null', finished_at=NULL,
-                          last_attempt_at=NOW(), retry_count=0
+                          last_attempt_at=NOW()" . $resetRetryCount . "
                     WHERE id=?")->execute([$id]);
 
     json_response_no_exit([
