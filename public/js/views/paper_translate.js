@@ -716,6 +716,7 @@ async function paintResult(d, token) {
             ${isShared ? '🌐 公開中 (タップで非公開)' : '🔒 非公開 (タップで公開)'}
           </button>` : ''}
         ${isOwner && d.pdf_path ? `<button class="btn" id="pt-redo" title="保存された PDF で同じモデルで再処理 (v1022 以降課金なし)" style="font-size:12px; padding:3px 10px">🔁 やりなおす (${escapeHtml(d.model || 'gpt-4o')})</button>` : ''}
+        ${isOwner ? `<button class="btn" id="pt-delete" title="この要約を削除 (PDF・ページ画像ごと)" style="font-size:12px; padding:3px 10px; background:#fee2e2; color:#991b1b; border:1px solid #fca5a5">🗑 削除</button>` : ''}
         ${isShared && !isOwner ? '<span class="tag ok" style="font-size:11px">🌐 公開要約</span>' : ''}
       </div>
       <div id="pt-ask-ai-mount" style="margin-top:8px"></div>
@@ -790,6 +791,18 @@ async function paintResult(d, token) {
       toast('再処理を開始しました (' + (r.model || '') + ')');
       // status=pending になったので polling 状態を表示し直す
       await refreshShared(token, document.getElementById('app'));
+    } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = old; }
+  });
+  // v1331 fb#514 詳細から その場で 削除 (PDF・ページ画像 も 一緒 に)。 削除後 は 履歴一覧 に 戻る。
+  document.getElementById('pt-delete')?.addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    if (!confirm('この要約を完全に削除しますか?\n(PDF とページ画像も一緒に削除、復元不可)')) return;
+    btn.disabled = true; const old = btn.textContent; btn.textContent = '🗑 削除中…';
+    try {
+      await del('/api/ai/paper_translate/' + d.id);
+      toast('削除しました');
+      // 履歴一覧 (自分の履歴タブ) に 戻る
+      location.hash = '#/paper-summary?tab=mine';
     } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = old; }
   });
   // v756 #372 公開 ON/OFF toggle (本人のみ)

@@ -571,6 +571,7 @@ async function refresh(token) {
           <button class="btn primary" id="pft-share-dialog" style="font-size:12px; padding:3px 10px">📤 共有</button>
           ${d.pdf_path ? `<a class="btn" href="${escapeHtml(d.pdf_path)}" target="_blank" rel="noopener" style="font-size:12px; padding:3px 10px">📄 元の PDF を開く</a>` : ''}
           ${shareButton}
+          ${isOwner ? `<button class="btn" id="pft-delete" title="この全訳を削除 (PDF ごと)" style="font-size:12px; padding:3px 10px; background:#fee2e2; color:#991b1b; border:1px solid #fca5a5">🗑 削除</button>` : ''}
         </div>
       </div>
       <!-- v1214/v1223 中村さん要望「タブ は 著者情報 の 下 に」→ 著者カード + キーワード の あと に 独立 配置 (paintResult 内 で 差し込む)。 -->
@@ -659,6 +660,17 @@ async function refresh(token) {
         toast(!wasOn ? '公開しました' : '非公開にしました');
         refresh(token);
       } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; }
+    });
+    // v1331 fb#514 詳細から その場で 削除 (PDF ごと)。 削除後 は 履歴一覧 に 戻る。
+    document.getElementById('pft-delete')?.addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget;
+      if (!confirm('この全訳を完全に削除しますか?\n(PDF も 一緒 に 削除、復元不可)')) return;
+      btn.disabled = true; const old = btn.textContent; btn.textContent = '🗑 削除中…';
+      try {
+        await del('/api/ai/paper_full_translate/' + d.id);
+        toast('削除しました');
+        location.hash = '#/paper-translate-full?tab=mine';
+      } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = old; }
     });
     paint(d);
   } catch (e) {
