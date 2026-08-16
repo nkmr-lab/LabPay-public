@@ -4,7 +4,7 @@
 //   全体を重ね合わせてまとめる。結果は share_token で URL 共有可能。
 
 import { get, patch, post, del } from '../api.js';
-import { escapeHtml, avatarHtml, resetFsInnerNav } from '../router.js';
+import { escapeHtml, avatarHtml } from '../router.js';
 import { renderAuthorAvatar, mountAuthorAvatars, initLabUsersCache } from '../author_avatar.js';
 import { state, toast, setAiContext } from '../app.js';
 import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
@@ -593,9 +593,10 @@ async function loadSharedList(q) {
 
 // /#/paper-summary/r/:token  個別結果ページ。
 export async function renderPaperTranslateShared() {
-  // v1227 中村さん指摘「✕ で なかなか 戻らない」→ tab で 全訳 ↔ 要約 を 何度 か 切り替える と
-  //   fsInnerNavCount が 積み上がる ので、 detail 入場 で 常に 0 リセット。 ✕ 一発 で 元 の 場所 (papers-recent) へ。
-  resetFsInnerNav();
+  // v1330 fb#516: v1227 の resetFsInnerNav() を撤去。 v1228 で router の applyFullscreenMode
+  //   が 「兄弟 アプリ 間 の 遷移 (別 top-part) は count しない、 同一 アプリ 内 nav (例: 要約一覧 → 要約詳細)
+  //   だけ count する」 に なった 以上、 detail 側 で count を 0 に すると 「一覧 → 詳細 → ✕」 の 深さ が
+  //   消えて しまい ✕ で 一覧 では なく entry (研究 アプリ 一覧) に 飛んで しまう。 router 側 の 対策 に 任せる。
   const token = decodeURIComponent(location.hash.split('/').pop() || '');
   const app = document.getElementById('app');
   if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }

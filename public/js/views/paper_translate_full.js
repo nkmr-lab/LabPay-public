@@ -5,7 +5,7 @@
 //     ja2en: 日本語論文 → 英語 (5x、 em-dash 等 GPT-isms 除去まで含む)
 
 import { get, post, del, patch } from '../api.js';
-import { escapeHtml, avatarHtml, resetFsInnerNav } from '../router.js';
+import { escapeHtml, avatarHtml } from '../router.js';
 import { renderAuthorAvatar, mountAuthorAvatars, initLabUsersCache } from '../author_avatar.js';
 import { state, toast, setAiContext } from '../app.js';
 import { starButtonHtml, bindStarButtons, bookmarkButtonHtml, bindBookmarkButtons, viewControlsHtml, bindViewControls, setFormOpen } from '../ui_ai_stars.js';
@@ -512,8 +512,8 @@ async function go() {
 
 let pollTimer = null;
 export async function renderPaperTranslateFullShared({ params }) {
-  // v1227 中村さん指摘「✕ で なかなか 戻らない」→ tab 切替 で 積み上がった fsInnerNavCount を 0 に、 ✕ 一発 で 戻れる
-  resetFsInnerNav();
+  // v1330 fb#515: v1227 の resetFsInnerNav() を撤去 (paper_translate.js と 同じ 理由)。
+  //   一覧 → 詳細 の 深さ を router 側 で count させて、 ✕ 一発 で 一覧 に 戻す。
   const token = params.token;
   const app = document.getElementById('app');
   app.innerHTML = '<div class="card"><div class="muted">読み込み中…</div></div>';
