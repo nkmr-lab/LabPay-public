@@ -331,7 +331,7 @@ function timer_fmt_short(int $sec): string {
 // 学会タイマーは public OK と割り切る (参加者 / アバター等個人情報は返さない)。
 function timers_public_detail(PDO $pdo, array $cfg, int $id): void {
     timers_autoclose($pdo);
-    $st = $pdo->prepare("SELECT id, title, duration_seconds, remaining_seconds,
+    $st = $pdo->prepare("SELECT id, title, image_url, duration_seconds, remaining_seconds,
                                 bell1_seconds, bell2_seconds, bell3_seconds, end_bell_index,
                                 repeat_max, repeat_idx, started_at, ends_at, status
                            FROM timers

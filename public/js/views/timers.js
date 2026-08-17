@@ -359,6 +359,8 @@ export async function renderTimerDetail({ params }) {
         <button id="tmd-test-bell" class="btn" style="font-size:11px; padding:2px 8px" title="チーン (端末で鳴るか確認)">🔊 試聴</button>
         <button id="tmd-fs" class="btn" style="font-size:11px; padding:2px 8px" title="フルスクリーン (発表者に時間を見せる)">🖥 フル</button>
         <button id="tmd-public" class="btn" style="font-size:11px; padding:2px 8px" title="認証不要の公開 URL をコピー (タブレットに開いて演台に置く)">🔗 公開 URL</button>
+        <!-- v1337 公開 URL の QR コード。 中村さん要望「自分のスマホとかで見れるように、押すと画面の右側にでも QR を出す」 -->
+        <button id="tmd-qr" class="btn" style="font-size:11px; padding:2px 8px" title="公開 URL の QR コード (スマホでスキャンして開ける)">🔳 公開 QR</button>
       </div>
       <button id="tmd-fs-exit" type="button">✕ 終了</button>
       <div id="tmd-title-fs" class="hint-sm" hidden></div>
@@ -378,6 +380,11 @@ export async function renderTimerDetail({ params }) {
         <input type="file" id="tmd-image-file" accept="image/*" hidden>
         <button id="tmd-image-change" class="btn" style="font-size:11px; padding:2px 8px">🖼 画像 追加/変更</button>
         <button id="tmd-image-remove" class="btn" style="font-size:11px; padding:2px 8px; color:#c00" hidden>🗑 削除</button>
+      </div>
+      <!-- v1337 公開 URL の QR コード 表示 area (toggle) -->
+      <div id="tmd-qr-wrap" hidden style="margin-top:14px; display:flex; flex-direction:column; align-items:center; gap:6px">
+        <div id="tmd-qr-svg" style="background:#fff; padding:12px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1)"></div>
+        <div class="hint-sm" style="text-align:center">スマホの カメラ で スキャン → 公開タイマー</div>
       </div>
     </div>
     <details class="card">
@@ -448,6 +455,43 @@ export async function renderTimerDetail({ params }) {
       prompt('この URL をコピーしてタブレットで開いてください:', url);
     }
   });
+  // v1337 公開 URL の QR コード (toggle 表示、 スマホ で スキャン して 開く)
+  document.getElementById('tmd-qr')?.addEventListener('click', async () => {
+    const wrap = document.getElementById('tmd-qr-wrap');
+    const svgHost = document.getElementById('tmd-qr-svg');
+    if (!wrap.hidden) { wrap.hidden = true; return; }
+    svgHost.innerHTML = '<div class="hint-sm">QR 生成中…</div>';
+    wrap.hidden = false;
+    try {
+      const q = await loadQrLib();
+      const url = location.origin + '/#/public-timer/' + id;
+      const qr = q(0, 'M');
+      qr.addData(url);
+      qr.make();
+      svgHost.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 10, scalable: true });
+      const svg = svgHost.querySelector('svg');
+      if (svg) { svg.style.width = '220px'; svg.style.height = '220px'; svg.style.display = 'block'; }
+    } catch (e) {
+      svgHost.innerHTML = '<div class="hint-sm" style="color:#c00">QR 生成失敗: ' + escapeHtml(e.message) + '</div>';
+    }
+  });
+}
+
+// v1337 QR ライブラリ の 遅延 ロード (公開 QR button を 押した 時 のみ vendor/qrcode-generator.min.js を fetch)。
+//   MIT license 、 純 JS 、 依存 なし 、 ~20KB。 window.qrcode を 露出 する UMD/plain script。
+let _qrLibPromise = null;
+function loadQrLib() {
+  if (_qrLibPromise) return _qrLibPromise;
+  _qrLibPromise = new Promise((resolve, reject) => {
+    if (window.qrcode) return resolve(window.qrcode);
+    const s = document.createElement('script');
+    s.src = '/vendor/qrcode-generator.min.js';
+    s.async = true;
+    s.onload = () => window.qrcode ? resolve(window.qrcode) : reject(new Error('qrcode global not found'));
+    s.onerror = () => { _qrLibPromise = null; reject(new Error('lib load failed')); };
+    document.head.appendChild(s);
+  });
+  return _qrLibPromise;
 }
 
 // v455 真のフルスクリーン (Fullscreen API + CSS フォールバック)。
