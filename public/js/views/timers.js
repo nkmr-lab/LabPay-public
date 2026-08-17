@@ -7,6 +7,7 @@
 import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
+import { uploadImage } from '../upload.js';   // v1335 タイマー画像
 import { tag, participantPill } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
 import { acquireWakeLock, releaseWakeLock } from '../wakelock.js';
@@ -156,6 +157,14 @@ export async function renderTimerNew({ query } = {}) {
           <span class="muted" style="font-size:11px">(0 = 1 回きり)</span>
         </div>
       </details>
+      <!-- v1335 タイマー画像 (ハッカソン 等 で 「今 何 を やっている か」 を 参加者 が 目視 で 分かる ように) -->
+      <div class="field" style="margin-top:10px">
+        <span class="lbl">画像 (任意・タップで撮影 or アルバム選択)</span>
+        <input type="file" id="tmn-image-file" accept="image/*">
+        <input type="hidden" id="tmn-image-url" value="">
+        <img id="tmn-image-preview" alt="" hidden style="max-width:180px; max-height:180px; margin-top:6px; border-radius:8px; object-fit:contain; display:block">
+        <div id="tmn-image-status" class="hint-sm"></div>
+      </div>
       <div class="field" style="margin-top:10px">
         <span class="lbl">参加者${lockMembers ? ' (グループ内)' : ''}</span>
         <details id="tmn-picker-details" open style="margin-top:4px">
@@ -225,6 +234,23 @@ export async function renderTimerNew({ query } = {}) {
     document.getElementById('tmn-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
 
+  // v1335 タイマー画像 の アップロード hook
+  document.getElementById('tmn-image-file').addEventListener('change', async (ev) => {
+    const f = ev.target.files?.[0];
+    if (!f) return;
+    const status = document.getElementById('tmn-image-status');
+    status.textContent = 'アップロード中…';
+    try {
+      const data = await uploadImage(f);
+      document.getElementById('tmn-image-url').value = data.url;
+      const prev = document.getElementById('tmn-image-preview');
+      prev.src = data.url; prev.hidden = false;
+      status.textContent = 'アップロードしました';
+    } catch (e) {
+      status.textContent = '失敗: ' + e.message;
+    }
+  });
+
   document.getElementById('tmn-save').addEventListener('click', async () => {
     const btn = document.getElementById('tmn-save');
     let title = document.getElementById('tmn-title').value.trim();
@@ -264,9 +290,11 @@ export async function renderTimerNew({ query } = {}) {
     }
     btn.textContent = '＋ 作成中…';
     const repeatMax = Math.max(0, Math.min(100, parseInt(document.getElementById('tmn-repeat').value, 10) || 0));
+    const imageUrl = document.getElementById('tmn-image-url').value || null;   // v1335
     try {
       const r = await post('/api/timers', {
         title,
+        image_url: imageUrl,
         participant_ids: picker ? [...picker.getSelected()] : [],
         bell1_seconds: bell1,
         bell2_seconds: bell2,
@@ -342,6 +370,15 @@ export async function renderTimerDetail({ params }) {
         <div id="tmd-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.4s linear"></div>
       </div>
       <div id="tmd-status" style="margin-top:14px; font-weight:700"></div>
+      <!-- v1335 タイマー画像 (ハッカソン 等 で 「今 何 を やっている か」 表示)。 fullscreen mode でも 一緒 に 大きく 表示 される。 -->
+      <div id="tmd-image-wrap" hidden style="margin-top:14px">
+        <img id="tmd-image" src="" alt="" style="max-width:100%; max-height:40vh; border-radius:8px; object-fit:contain">
+      </div>
+      <div id="tmd-image-ctrl" class="row no-print" style="gap:6px; justify-content:center; margin-top:6px" hidden>
+        <input type="file" id="tmd-image-file" accept="image/*" hidden>
+        <button id="tmd-image-change" class="btn" style="font-size:11px; padding:2px 8px">🖼 画像 追加/変更</button>
+        <button id="tmd-image-remove" class="btn" style="font-size:11px; padding:2px 8px; color:#c00" hidden>🗑 削除</button>
+      </div>
     </div>
     <details class="card">
       <summary style="cursor:pointer; font-weight:700; user-select:none">参加者 (<span id="tmd-pcount">0</span>)</summary>
@@ -535,6 +572,43 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
           try { await del('/api/timers/' + id); toast('削除しました'); navigate('#/timers'); }
           catch (e) { toast('失敗: ' + e.message); }
         });
+        // v1335 画像 の 追加/変更/削除 (作成者 のみ)。 change → 実 file input を発火。
+        document.getElementById('tmd-image-ctrl').hidden = false;
+        const fileInput = document.getElementById('tmd-image-file');
+        document.getElementById('tmd-image-change').addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', async (ev) => {
+          const f = ev.target.files?.[0];
+          if (!f) return;
+          try {
+            const up = await uploadImage(f);
+            await patch(`/api/timers/${id}/image`, { image_url: up.url });
+            toast('画像を設定しました');
+            await loadTimerDetail(id, { isResync: true });
+          } catch (e) { toast('失敗: ' + e.message); }
+        });
+        document.getElementById('tmd-image-remove').addEventListener('click', async () => {
+          if (!confirm('画像を削除しますか?')) return;
+          try {
+            await patch(`/api/timers/${id}/image`, { image_url: null });
+            toast('画像を削除しました');
+            await loadTimerDetail(id, { isResync: true });
+          } catch (e) { toast('失敗: ' + e.message); }
+        });
+      }
+      // v1335 画像 URL の 反映 (作成者 でなくても 表示 だけ は 全参加者)。
+      const imgWrap = document.getElementById('tmd-image-wrap');
+      const imgEl   = document.getElementById('tmd-image');
+      const rmBtn   = document.getElementById('tmd-image-remove');
+      const chBtn   = document.getElementById('tmd-image-change');
+      if (d.timer.image_url) {
+        imgEl.src = d.timer.image_url;
+        imgWrap.hidden = false;
+        if (rmBtn) rmBtn.hidden = false;
+        if (chBtn) chBtn.textContent = '🖼 画像 変更';
+      } else {
+        imgWrap.hidden = true;
+        if (rmBtn) rmBtn.hidden = true;
+        if (chBtn) chBtn.textContent = '🖼 画像 追加';
       }
     }
     // v446 ボタン表示の出し分けは resync でも走らせる (status 変化を反映)。

@@ -23,8 +23,45 @@ function route_timers(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'reset'  && $method === 'PATCH')  { timers_reset($pdo, $cfg, $id); return; }
         // v1183 中村さん要望「タイマーから離脱する機能が欲しい」→ 自分だけを participants から抜く
         if ($next === 'leave'  && $method === 'DELETE') { timers_leave($pdo, $cfg, $id); return; }
+            // v1335 タイマー添付画像 の 更新 (作成者 or admin のみ)。 null / '' で 削除。
+        if ($next === 'image'  && $method === 'PATCH')  { timers_set_image($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no timers route for $method $sub", 404);
+}
+
+// v1335 image_url を検証 (avatar_url と 同 pattern: /uploads/<file>.<ext> or 自 origin HTTP)。
+function timers_validate_image_url($url, array $cfg): ?string {
+    if ($url === null || trim((string)$url) === '') return null;
+    $url = (string)$url;
+    $isLocal = (bool)preg_match('#^/uploads/[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)?\.[A-Za-z0-9]{1,8}$#', $url);
+    $isHttp = false;
+    if (filter_var($url, FILTER_VALIDATE_URL) && (str_starts_with($url, 'http://') || str_starts_with($url, 'https://'))) {
+        $baseUrl = rtrim((string)($cfg['app']['base_url'] ?? ''), '/');
+        if ($baseUrl !== '' && str_starts_with($url, $baseUrl . '/uploads/')) {
+            $rel = substr($url, strlen($baseUrl));
+            $isHttp = (bool)preg_match('#^/uploads/[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)?\.[A-Za-z0-9]{1,8}$#', $rel);
+        }
+    }
+    if (!$isHttp && !$isLocal) {
+        throw new ApiException('bad_request', 'image_url は /uploads/<file>.<ext> か 自 origin の HTTP のみ', 400);
+    }
+    return $url;
+}
+
+function timers_set_image(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $body = read_json_body();
+    $st = $pdo->prepare("SELECT creator_user_id FROM timers WHERE id=? AND deleted_at IS NULL");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'タイマーが見つかりません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$row['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '起案者または admin のみ画像変更可', 403);
+    }
+    $url = timers_validate_image_url($body['image_url'] ?? null, $cfg);
+    $pdo->prepare("UPDATE timers SET image_url=? WHERE id=?")->execute([$url, $id]);
+    json_response(['ok' => true, 'image_url' => $url]);
 }
 
 // v1183 タイマー離脱 (自分を participants から外す)。 creator も抜けられる (通知面倒だが起案者フラグは維持)。
@@ -79,7 +116,7 @@ function timers_list(PDO $pdo, array $cfg): void {
     // v446 remaining_seconds (paused 用) を含めて返す。並び順は
     // running → paused → done → cancelled で、同 status 内は created_at 新しい順。
     $st = $pdo->prepare("
-        SELECT t.id, t.title, t.duration_seconds, t.remaining_seconds,
+        SELECT t.id, t.title, t.image_url, t.duration_seconds, t.remaining_seconds,
                t.started_at, t.ends_at, t.status,
                t.creator_user_id, u.display_name AS creator_name,
                EXISTS(SELECT 1 FROM timer_participants tp WHERE tp.timer_id=t.id AND tp.user_id=?) AS is_participant
@@ -134,6 +171,8 @@ function timers_create(PDO $pdo, array $cfg): void {
     if ($title === '' || mb_strlen($title) > 200) {
         throw new ApiException('bad_request', 'title 1..200', 400);
     }
+    // v1335 作成時に image_url を任意で渡せる (中村さん要望「タイマーに 画像 貼れる ように」)。
+    $imageUrl = timers_validate_image_url($body['image_url'] ?? null, $cfg);
     // v449 ベル (1/2/3) — 各 1..86400 秒、順不同。端数 NULL OK。
     $bells = [];
     foreach (['bell1','bell2','bell3'] as $k) {
@@ -193,14 +232,14 @@ function timers_create(PDO $pdo, array $cfg): void {
     // v446 paused-default model: 作成時は paused から始まる。 started_at / ends_at
     // は NULL、 remaining_seconds = duration_seconds。 ▶ 開始で running に。
     $tid = 0;
-    db_tx($pdo, function () use ($pdo, $u, $title, $dur, $participantIds, $bells, $endBellIdx, $repeatMax, &$tid) {
+    db_tx($pdo, function () use ($pdo, $u, $title, $imageUrl, $dur, $participantIds, $bells, $endBellIdx, $repeatMax, &$tid) {
         $ins = $pdo->prepare("INSERT INTO timers
-            (title, creator_user_id, duration_seconds, remaining_seconds,
+            (title, image_url, creator_user_id, duration_seconds, remaining_seconds,
              bell1_seconds, bell2_seconds, bell3_seconds, end_bell_index,
              repeat_max, repeat_idx,
              started_at, ends_at, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, 'paused', NOW())");
-        $ins->execute([$title, (int)$u['id'], $dur, $dur,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, 'paused', NOW())");
+        $ins->execute([$title, $imageUrl, (int)$u['id'], $dur, $dur,
             $bells[0], $bells[1], $bells[2], $endBellIdx, $repeatMax]);
         $tid = (int)$pdo->lastInsertId();
         $stP = $pdo->prepare("INSERT INTO timer_participants (timer_id, user_id) VALUES (?, ?)");
@@ -305,6 +344,7 @@ function timers_public_detail(PDO $pdo, array $cfg, int $id): void {
         'timer' => [
             'id'                => (int)$t['id'],
             'title'             => $t['title'],
+            'image_url'         => $t['image_url'] ?? null,   // v1335
             'duration_seconds'  => (int)$t['duration_seconds'],
             'remaining_seconds' => isset($t['remaining_seconds']) ? (int)$t['remaining_seconds'] : null,
             'bell1_seconds'     => isset($t['bell1_seconds']) ? (int)$t['bell1_seconds'] : null,
@@ -352,6 +392,7 @@ function timers_detail(PDO $pdo, array $cfg, int $id): void {
         'timer' => [
             'id'                => (int)$t['id'],
             'title'             => $t['title'],
+            'image_url'         => $t['image_url'] ?? null,   // v1335
             'creator_user_id'   => (int)$t['creator_user_id'],
             'creator_name'      => $t['creator_name'],
             'duration_seconds'  => (int)$t['duration_seconds'],

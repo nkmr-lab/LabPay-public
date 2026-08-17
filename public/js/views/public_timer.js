@@ -66,6 +66,13 @@ export async function renderPublicTimer({ params }) {
       #pt-bar-bg { width:80vw; max-width:1100px; height:clamp(10px, 1.6vw, 22px);
                    margin:18px 0 4px; border-radius:8px; overflow:hidden; position:relative; background:#222 }
       #pt-bar-fill { height:100%; width:0%; transition:width 0.4s linear; background:#3b82f6 }
+      /* v1335 タイマー画像 (ハッカソン 等 で 「今 何 を やっている か」 の 表示)。
+         画面 幅 に 応じて time の 下 (狭い) or right area で 大きく (広い) 表示 したい が、
+         MVP は time の 下 に 中央 揃え で 出す (中村さん 「下 とか 右 とか スペース の ある ところ」)。
+         画像 有り の 時 は time サイズ を 少し 抑えて 縦 に 収める。 */
+      #pt-image-wrap { display:flex; justify-content:center; margin:14px 0 0; width:100vw }
+      #pt-image { max-width:min(80vw, 1000px); max-height:35vh; border-radius:10px; object-fit:contain; box-shadow:0 4px 20px rgba(0,0,0,0.4) }
+      body.pt-has-image #pt-time { font-size:min(20vw, 55vh) }
     </style>
     <div id="pt-wrap">
       <div id="pt-title">読み込み中…</div>
@@ -73,6 +80,7 @@ export async function renderPublicTimer({ params }) {
       <div id="pt-status"></div>
       <div id="pt-bar-bg"><div id="pt-bar-fill"></div></div>
       <div class="bell-row" id="pt-bells"></div>
+      <div id="pt-image-wrap" hidden><img id="pt-image" src="" alt=""></div>
     </div>
   `;
   // v683 #266 タブレットを演台に置く想定なので常時 wake lock を取得
@@ -124,6 +132,17 @@ function render() {
   if (!_state) return;
   const t = _state;
   document.getElementById('pt-title').textContent = t.title || '🛎 タイマー';
+  // v1335 タイマー画像 (ハッカソン 等 で 「今 何 を やっている か」 の 参加者 向け 表示)
+  const imgWrap = document.getElementById('pt-image-wrap');
+  const imgEl   = document.getElementById('pt-image');
+  if (t.image_url) {
+    if (imgEl.src !== t.image_url) imgEl.src = t.image_url;
+    imgWrap.hidden = false;
+    document.body.classList.add('pt-has-image');
+  } else {
+    imgWrap.hidden = true;
+    document.body.classList.remove('pt-has-image');
+  }
 
   // v684 #267 3 フェーズ表示:
   //   ① 発表終了 (= end_bell) まで: カウントダウン
