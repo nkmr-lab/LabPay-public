@@ -467,10 +467,32 @@ function group_items_add(PDO $pdo, array $cfg, int $id): void {
         if (!$dt) throw new ApiException('bad_request', 'scheduled_at must be Y-m-d H:i', 400);
         $when = $dt->format('Y-m-d H:i:s');
     }
+    // v1336 画像添付 (全 kind 共通 で 1 枚)。 timers と 同 pattern の URL 検証。
+    $imageUrl = null;
+    if (isset($body['image_url']) && trim((string)$body['image_url']) !== '') {
+        $raw = (string)$body['image_url'];
+        $isLocal = (bool)preg_match('#^/uploads/[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)?\.[A-Za-z0-9]{1,8}$#', $raw);
+        $isHttp = false;
+        if (filter_var($raw, FILTER_VALIDATE_URL) && (str_starts_with($raw, 'http://') || str_starts_with($raw, 'https://'))) {
+            $baseUrl = rtrim((string)($cfg['app']['base_url'] ?? ''), '/');
+            if ($baseUrl !== '' && str_starts_with($raw, $baseUrl . '/uploads/')) {
+                $rel = substr($raw, strlen($baseUrl));
+                $isHttp = (bool)preg_match('#^/uploads/[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)?\.[A-Za-z0-9]{1,8}$#', $rel);
+            }
+        }
+        if (!$isHttp && !$isLocal) {
+            throw new ApiException('bad_request', 'image_url は /uploads/<file>.<ext> か 自 origin の HTTP のみ', 400);
+        }
+        $imageUrl = $raw;
+    }
+    // memo だけ で body が 空 でも 画像 が あれば 投稿可 (画像のみ の 投稿 を 許容)。
+    if ($kind === 'memo' && ($text === null || trim($text) === '') && $imageUrl === null) {
+        throw new ApiException('bad_request', 'メモか画像 の いずれか を 入れて ください', 400);
+    }
     $st = $pdo->prepare("INSERT INTO adhoc_group_items
-        (group_id, kind, body, url, scheduled_at, created_by_user_id)
-        VALUES (?,?,?,?,?,?)");
-    $st->execute([$id, $kind, $text, $url, $when, $u['id']]);
+        (group_id, kind, body, url, image_url, scheduled_at, created_by_user_id)
+        VALUES (?,?,?,?,?,?,?)");
+    $st->execute([$id, $kind, $text, $url, $imageUrl, $when, $u['id']]);
     json_response(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
 }
 

@@ -479,6 +479,17 @@ export async function renderGroupDetail({ params }) {
             <button data-kind="time" class="btn">🕒 時間</button>
           </div>
           <div id="gd-post-fields"></div>
+          <!-- v1336 画像 は kind (memo/url/time) 切替 で 消え ない よう に post-fields の 外 に -->
+          <div id="gd-post-image-row" style="margin-top:6px">
+            <label class="btn" style="font-size:12px; padding:3px 10px; cursor:pointer">
+              🖼 画像 添付
+              <input type="file" id="gd-post-image-file" accept="image/*" hidden>
+            </label>
+            <input type="hidden" id="gd-post-image-url" value="">
+            <button id="gd-post-image-clear" class="btn" hidden style="font-size:11px; padding:3px 10px; margin-left:6px; color:#c00">✕ 画像削除</button>
+            <div><img id="gd-post-image-preview" alt="" hidden style="max-width:180px; max-height:180px; margin-top:6px; border-radius:8px; object-fit:contain; display:block"></div>
+            <div id="gd-post-image-status" class="hint-sm"></div>
+          </div>
           <button id="gd-post" class="primary" style="margin-top:6px">投稿</button>
         </div>
       </details>
@@ -613,6 +624,29 @@ export async function renderGroupDetail({ params }) {
   // Default kind: memo.
   switchKind(document.querySelector('[data-kind="memo"]'));
   document.getElementById('gd-post').addEventListener('click', () => onPost(id));
+  // v1336 フィード投稿 に 画像 添付 (全 kind 共通、 kind 切替 でも 選択 は 消え ない)
+  document.getElementById('gd-post-image-file').addEventListener('change', async (ev) => {
+    const f = ev.target.files?.[0];
+    if (!f) return;
+    const status = document.getElementById('gd-post-image-status');
+    status.textContent = 'アップロード中…';
+    try {
+      const data = await uploadImage(f);
+      document.getElementById('gd-post-image-url').value = data.url;
+      const prev = document.getElementById('gd-post-image-preview');
+      prev.src = data.url; prev.hidden = false;
+      document.getElementById('gd-post-image-clear').hidden = false;
+      status.textContent = 'アップロードしました';
+    } catch (e) { status.textContent = '失敗: ' + e.message; }
+  });
+  document.getElementById('gd-post-image-clear').addEventListener('click', () => {
+    document.getElementById('gd-post-image-url').value = '';
+    document.getElementById('gd-post-image-file').value = '';
+    const prev = document.getElementById('gd-post-image-preview');
+    prev.hidden = true; prev.src = '';
+    document.getElementById('gd-post-image-clear').hidden = true;
+    document.getElementById('gd-post-image-status').textContent = '';
+  });
   // 精算ボタンは card header に常設 (支払いがゼロの時は openSettleModal 側で toast)。
   document.getElementById('gd-settle')?.addEventListener('click', () => openSettleModal(id));
   // v491 #91 gd-snap-expense は loadDetail で gd-head に注入されるので、ここで
@@ -1198,6 +1232,10 @@ function renderItem(it, gid) {
   } else if (it.body) {
     middle = `<div style="white-space:pre-wrap">${escapeHtml(it.body)}</div>`;
   }
+  // v1336 画像 添付 (全 kind 共通)。 タップ で 拡大 (新規タブ で 原画像)。
+  const imageBlock = it.image_url
+    ? `<div style="margin-top:6px"><a href="${escapeHtml(it.image_url)}" target="_blank" rel="noopener"><img src="${escapeHtml(it.image_url)}" alt="" style="max-width:100%; max-height:320px; border-radius:8px; object-fit:contain; display:block"></a></div>`
+    : '';
   // 「アバター: 投稿内容 / 日付」形式。投稿者名は冗長なので出さない (タップ
   // すれば avatar の title 属性で確認できる)。
   return `
@@ -1205,6 +1243,7 @@ function renderItem(it, gid) {
       <span title="${escapeHtml(it.author_name)}">${avatarHtml(it.author_name, it.author_avatar_url, 'sm')}</span>
       <div class="grow">
         <div>${middle}</div>
+        ${imageBlock}
         ${when}
         <div class="meta" style="margin-top:4px">${escapeHtml(it.created_at)}</div>
       </div>
@@ -2087,10 +2126,13 @@ async function onPost(gid) {
   const body = document.getElementById('gd-body')?.value.trim() || null;
   const url  = document.getElementById('gd-url')?.value.trim() || null;
   const time = document.getElementById('gd-time')?.value || null;
+  const imageUrl = document.getElementById('gd-post-image-url')?.value || null;   // v1336
   const payload = { kind: currentKind, body };
   if (currentKind === 'url')  payload.url = url;
   if (currentKind === 'time') payload.scheduled_at = time;
-  if (currentKind === 'memo' && !body)               { toast('メモを入力してください'); return; }
+  if (imageUrl) payload.image_url = imageUrl;
+  // memo は 画像 だけ でも 投稿可 (画像 のみ の 投稿 を 許容)。 url/time は 従来 通り 必須。
+  if (currentKind === 'memo' && !body && !imageUrl) { toast('メモか画像 の いずれか を 入れて ください'); return; }
   if (currentKind === 'url'  && !url)                { toast('URL を入力してください'); return; }
   if (currentKind === 'time' && !time)               { toast('時間を入力してください'); return; }
   try {
@@ -2098,6 +2140,8 @@ async function onPost(gid) {
     if (document.getElementById('gd-body'))  document.getElementById('gd-body').value = '';
     if (document.getElementById('gd-url'))   document.getElementById('gd-url').value  = '';
     if (document.getElementById('gd-time'))  document.getElementById('gd-time').value = '';
+    // v1336 画像 も 投稿後 に クリア
+    document.getElementById('gd-post-image-clear')?.click();
     toast('投稿しました');
     await loadDetail(gid);
   } catch (e) { toast('失敗: ' + e.message); }
