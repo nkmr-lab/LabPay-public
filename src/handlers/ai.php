@@ -910,7 +910,10 @@ PROMPT;
             'model' => $model,
             'messages' => $messages,
             'response_format' => ['type' => 'json_object'],
-            'max_completion_tokens' => 3000,
+            // v1338 fb#519 の 「OpenAI 応答が空」 事案 対策: gpt-5 系 は reasoning に token を 消費
+            //   する ため、 3000 だと 「reasoning に 使い切って content=空」 に なる。 output 用 に
+            //   十分 な 余裕 を 確保 (paper_translate と 同 の 24000 に 揃える)。
+            'max_completion_tokens' => 24000,
         ];
         if (!preg_match('/^(gpt-5|o1|o3)/', $model)) $payloadArr['temperature'] = 0.3;
         $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
@@ -923,7 +926,7 @@ PROMPT;
                 'Authorization: Bearer ' . $apiKey,
                 'Content-Type: application/json',
             ],
-            CURLOPT_TIMEOUT        => 120,
+            CURLOPT_TIMEOUT        => 300,   // v1338 24k token の 生成 は 数分 かかる 場合 が ある
         ]);
         $resp = curl_exec($ch);
         $err  = curl_error($ch);
@@ -933,7 +936,11 @@ PROMPT;
         if ($code !== 200) throw new RuntimeException("OpenAI HTTP $code: " . substr($resp, 0, 500));
         $data = json_decode($resp, true);
         $content = $data['choices'][0]['message']['content'] ?? '';
-        if ($content === '') throw new RuntimeException('OpenAI 応答が空');
+        $finishReason = (string)($data['choices'][0]['finish_reason'] ?? '');
+        if ($content === '') {
+            // v1338 finish_reason を error_msg に 含める と 原因 判別 が 楽 (中村さん fb#519 追跡 対応)
+            throw new RuntimeException('OpenAI 応答が空 (finish_reason=' . $finishReason . ', model=' . $model . ')');
+        }
         $result = json_decode($content, true);
         if (!is_array($result)) throw new RuntimeException('JSON parse 失敗');
         $pdo->prepare("UPDATE resume_checks SET result_json = ?, status='done', finished_at=NOW() WHERE id = ?")
