@@ -245,6 +245,15 @@ function renderChrome() {
     tabs.hidden = true;
     return;
   }
+  // v1339 中村さん指摘「ログイン した 状態 で 公開タイマー を 開く と ヘッダ が 出て
+  //   タブ (らぼったー/売買/依頼/研究/共有/運営/娯楽/全て) まで 見えて カッコ悪い」。
+  //   public_timer.js が hidden=true にした のを ここで false に 戻して しまって いた。
+  //   /#/public-timer/ に居る 間は 未ログイン と 同 挙動 に。
+  if (location.hash.startsWith('#/public-timer/')) {
+    top.hidden = true;
+    tabs.hidden = true;
+    return;
+  }
   top.hidden = false;
   tabs.hidden = false;
   const isAdmin = state.me.role === 'admin';
