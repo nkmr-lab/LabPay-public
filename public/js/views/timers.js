@@ -58,7 +58,57 @@ export async function renderTimers() {
       </div>
     </div>
     <div id="tm-list" class="list"><div class="muted">読み込み中…</div></div>
+    <!-- v1340 fb#520 削除履歴 の 折り畳み。 開いた 時 に 別 fetch (?deleted=1) して 一覧表示、 復元ボタン付き。 -->
+    <details class="card" id="tm-deleted-details" style="margin-top:12px">
+      <summary style="cursor:pointer; color:#555; font-size:13px">🗑 削除した タイマー を 見る</summary>
+      <div id="tm-deleted-list" class="list" style="margin-top:8px"><div class="muted">タップで 読み込み</div></div>
+    </details>
   `;
+  document.getElementById('tm-deleted-details').addEventListener('toggle', async (ev) => {
+    if (!ev.target.open) return;
+    const root = document.getElementById('tm-deleted-list');
+    // 既 に 中身 が あれ ば 再 fetch し ない (復元 直後 は 別 途 refresh される)
+    if (root.dataset.loaded === '1') return;
+    root.innerHTML = '<div class="muted">読み込み中…</div>';
+    try {
+      const dd = await get('/api/timers', { deleted: 1 });
+      const items = dd.items || [];
+      if (!items.length) {
+        root.innerHTML = '<div class="empty" style="padding:8px">削除したタイマーはありません</div>';
+      } else {
+        root.innerHTML = items.map(t => {
+          const isMine = Number(t.creator_user_id) === Number(state.me?.id);
+          const isAdmin = state.me?.role === 'admin';
+          const canRestore = isMine || isAdmin;
+          const delAt = String(t.deleted_at || '').slice(0, 16).replace('T', ' ');
+          return `
+            <div class="list-item" style="gap:8px; align-items:flex-start">
+              <div class="grow" style="min-width:0">
+                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#666">${escapeHtml(t.title)}</div>
+                <div class="meta" style="font-size:11px">🗑 ${escapeHtml(delAt)} · ${fmtDuration(t.duration_seconds)} · 起案 ${escapeHtml(t.creator_name)}${isMine ? ' (自分)' : ''}</div>
+              </div>
+              ${canRestore ? `<button data-restore-id="${t.id}" class="btn" style="font-size:11px; padding:2px 8px">🔄 復元</button>` : ''}
+            </div>`;
+        }).join('');
+        root.querySelectorAll('[data-restore-id]').forEach(b => {
+          b.addEventListener('click', async (ev2) => {
+            ev2.preventDefault(); ev2.stopPropagation();
+            const id = b.dataset.restoreId;
+            b.disabled = true; const old = b.textContent; b.textContent = '🔄 復元中…';
+            try {
+              await patch('/api/timers/' + id + '/restore', {});
+              toast('復元しました');
+              root.dataset.loaded = '';   // 削除履歴 リスト の 再 fetch を 許可
+              await renderTimers();       // 一覧 も 再描画
+            } catch (e) { toast('失敗: ' + e.message); b.disabled = false; b.textContent = old; }
+          });
+        });
+      }
+      root.dataset.loaded = '1';
+    } catch (e) {
+      root.innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
+    }
+  });
   try {
     const d = await get('/api/timers');
     const items = d.items || [];

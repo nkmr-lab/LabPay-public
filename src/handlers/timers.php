@@ -25,6 +25,8 @@ function route_timers(PDO $pdo, array $cfg, string $method, array $seg): void {
         if ($next === 'leave'  && $method === 'DELETE') { timers_leave($pdo, $cfg, $id); return; }
             // v1335 タイマー添付画像 の 更新 (作成者 or admin のみ)。 null / '' で 削除。
         if ($next === 'image'  && $method === 'PATCH')  { timers_set_image($pdo, $cfg, $id); return; }
+        // v1340 削除 済 タイマー の 復元 (作成者 or admin のみ)。 fb#520 「履歴 で 確認 できる ように」
+        if ($next === 'restore' && $method === 'PATCH') { timers_restore($pdo, $cfg, $id); return; }
     }
     json_error('not_found', "no timers route for $method $sub", 404);
 }
@@ -46,6 +48,25 @@ function timers_validate_image_url($url, array $cfg): ?string {
         throw new ApiException('bad_request', 'image_url は /uploads/<file>.<ext> か 自 origin の HTTP のみ', 400);
     }
     return $url;
+}
+
+// v1340 fb#520 削除 済 タイマー の 復元 (作成者 or admin のみ)。 deleted_at を NULL に戻す。
+function timers_restore(PDO $pdo, array $cfg, int $id): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    $st = $pdo->prepare("SELECT creator_user_id, deleted_at, title FROM timers WHERE id=?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) throw new ApiException('not_found', 'タイマーが見つかりません', 404);
+    $isAdmin = (string)($u['role'] ?? '') === 'admin';
+    if ((int)$row['creator_user_id'] !== (int)$u['id'] && !$isAdmin) {
+        throw new ApiException('forbidden', '起案者または admin のみ復元可', 403);
+    }
+    if ($row['deleted_at'] === null) {
+        // 冪等: 既 に active な ら 200 で 素直 に 返す
+        json_response(['ok' => true, 'already' => 'active']); return;
+    }
+    $pdo->prepare("UPDATE timers SET deleted_at=NULL WHERE id=?")->execute([$id]);
+    json_response(['ok' => true, 'restored' => (int)$id, 'title' => $row['title']]);
 }
 
 function timers_set_image(PDO $pdo, array $cfg, int $id): void {
@@ -113,20 +134,26 @@ function timers_list(PDO $pdo, array $cfg): void {
     $u = Auth::requireUser($pdo, $cfg);
     timers_autoclose($pdo);
     $uid = (int)$u['id'];
+    // v1340 fb#520 「削除 したもの を 履歴 で 確認 できる ように」: ?deleted=1 で 削除済 一覧 を 返す。
+    $deleted = isset($_GET['deleted']) && $_GET['deleted'] !== '' && $_GET['deleted'] !== '0';
+    $whereDel = $deleted ? 't.deleted_at IS NOT NULL' : 't.deleted_at IS NULL';
     // v446 remaining_seconds (paused 用) を含めて返す。並び順は
     // running → paused → done → cancelled で、同 status 内は created_at 新しい順。
+    // 削除済 view は deleted_at 新しい順。
+    $orderBy = $deleted
+        ? 't.deleted_at DESC, t.id DESC'
+        : "FIELD(t.status,'running','paused','done','cancelled'), t.created_at DESC, t.id DESC";
     $st = $pdo->prepare("
         SELECT t.id, t.title, t.image_url, t.duration_seconds, t.remaining_seconds,
-               t.started_at, t.ends_at, t.status,
+               t.started_at, t.ends_at, t.status, t.deleted_at,
                t.creator_user_id, u.display_name AS creator_name,
                EXISTS(SELECT 1 FROM timer_participants tp WHERE tp.timer_id=t.id AND tp.user_id=?) AS is_participant
           FROM timers t
           JOIN users u ON u.id = t.creator_user_id
-         WHERE t.deleted_at IS NULL
+         WHERE {$whereDel}
            AND (t.creator_user_id = ?
             OR EXISTS(SELECT 1 FROM timer_participants tp2 WHERE tp2.timer_id=t.id AND tp2.user_id=?))
-         ORDER BY FIELD(t.status,'running','paused','done','cancelled'),
-                  t.created_at DESC, t.id DESC
+         ORDER BY {$orderBy}
          LIMIT 100");
     $st->execute([$uid, $uid, $uid]);
     $items = $st->fetchAll(PDO::FETCH_ASSOC);
