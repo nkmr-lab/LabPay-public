@@ -1820,15 +1820,23 @@ function paintDetail(id, d) {
     }
   };
 
+  // v1342 サブスク中 は confirm 文言 を 「無料」 に
+  const aiSubMsg = () => !!state.me?.ai_sub_active;
   document.getElementById('rf-ai-summary')?.addEventListener('click', async () => {
-    if (!confirm('要約を開始します。モデルは gpt-5 (共有で 25pt / 非共有で 50pt)。続行?')) return;
+    const msg = aiSubMsg()
+      ? '要約を開始します。モデルは gpt-5 (AIサブスク中につき無料)。続行?'
+      : '要約を開始します。モデルは gpt-5 (共有で 25pt / 非共有で 50pt)。続行?';
+    if (!confirm(msg)) return;
     await runAiPost('/api/ai/paper_translate', { model: 'gpt-5', auto_share: '1' });
   });
   // v1323 中村さん要望「要約+全訳を一気に」。 confirm 1 回 で 2 種 (要約 + 英→日全訳) を
   //   直列 (要約 開始 完了 待ってから 全訳 も POST、 各処理 自体 は バックグラウンド 実行) で キック。
   //   PDF blob は 1 回 だけ fetch して 使い回し。 gpt-5 / 共有 で 合計 55pt。
   document.getElementById('rf-ai-both')?.addEventListener('click', async () => {
-    if (!confirm('要約 + 英→日全訳 を 一気に開始します。 モデルは gpt-5 (共有で 要約25pt + 全訳30pt = 合計55pt)。続行?')) return;
+    const msg = aiSubMsg()
+      ? '要約 + 英→日全訳 を 一気に開始します。 モデルは gpt-5 (AIサブスク中につき無料)。続行?'
+      : '要約 + 英→日全訳 を 一気に開始します。 モデルは gpt-5 (共有で 要約25pt + 全訳30pt = 合計55pt)。続行?';
+    if (!confirm(msg)) return;
     const btn = document.getElementById('rf-ai-both');
     const oldTxt = btn.textContent;
     btn.disabled = true; btn.textContent = '⏳ 準備中…';

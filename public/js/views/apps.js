@@ -8,6 +8,7 @@
 // AI → 受動。「届くタイプ」と「黙って使うタイプ」が一目で分かるように。
 
 import { escapeHtml } from '../router.js';
+import { state } from '../app.js';   // v1342 state.me.ai_sub_active 参照 用
 
 // 通知軸カテゴリ。並び順 = 表示順。
 export const APP_CATEGORIES = [
@@ -155,7 +156,7 @@ export const APPS = [
   { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的タスクボード。列 (Backlog/Doing/Done 等) + カードを D&D。カードは担当者 / ラベル / 期限 / チェックリスト / Markdown 説明 + コメント。アサインとコメントで通知、履歴も残る。', defaultVisible: true },
   // v1300 中村さん指示「ランキングは娯楽のみんなで共有にいれとくと良い」
   { id: 'rankings', cat: 'shared', url: '#/rankings', title: '🏆 Ranking',
-    desc: 'ラボ全体 の top 10 を 7 種 (最長連続ラボイン / 累計ラボイン / オープナー / クローザー / 早起き / 夜間ラボ族 / 徹夜) を 1 ページ に カード 並び。 実績ページ の 対応バッジ と 同じ 意味論。 ホーム の 🏆 アイコン から も 開ける。', defaultVisible: true },
+    desc: 'ラボ全体のtop10を13種 (最長連続/累計ラボイン/オープナー/クローザー/早起き/夜間/徹夜/受けたリアクション/したリアクション/販売数/販売額/購入数/購入額) の カード並び。実績ページの対応バッジと同じ意味論。ホームの🏆アイコンからも開ける。', defaultVisible: true },
   { id: 'exp-recruits', cat: 'research', url: '#/exp-recruits', title: '🧪 実験協力者募集', desc: '実験の被験者を早い者順で募集。 枠 (時間帯や日程) と定員を並べて公開、 メンバーは空いてる枠に自分でエントリー。 実施者は代理追加も可能。 参加者は自分の枠を後から確認できる。', defaultVisible: false },
   { id: 'bokete', cat: 'game', url: '#/bokete', title: '😆 ぼけて (bokete)', desc: '画像大喜利。 お題 (画像 + 任意の一言) を出して、みんなでボケ (面白い一言) を書く → ⭐ で評価 → ⭐ 数で ランキング。 bokete.jp 的、 無料。', defaultVisible: true },
   { id: 'setlog', cat: 'game', url: '#/setlog', title: '📸 setlog (LabPay 版 Vlog)', desc: '1 日を短いクリップ (写真 + キャプション) で断片記録するラボ内 Vlog (BeReal 的)。写真を随時ポスト → 日別・ユーザ別に時系列でまとまる。今日のみんなのフィードもある。', defaultVisible: true },
@@ -301,16 +302,31 @@ export async function renderApps(ctx = {}) {
   const filteredCats = filterCat
     ? APP_CATEGORIES.filter(c => c.id === filterCat)
     : APP_CATEGORIES;
+  // v1342 AI サブスク が 覆う 機能 の 一覧 (ai.php ai_actual_charged の $aiTypes と 対応)。
+  //   契約中 は カード に 緑背景 + 「AIサブスク中につき無料」 バッジ を 付ける。
+  const AI_SUB_COVERED = new Set([
+    'paper-summary', 'paper-translate-full', 'resume-check', 'paper-review',
+    'exp-plan', 'rewriter', 'deep-research',
+  ]);
+  const aiSubActive = !!state.me?.ai_sub_active;
   // v960 外部URL (https://…) は別タブで開くよう target=_blank + rel、
   //   タイトル末尾に ↗ を付けて見分けがつくように。 SPA 内リンクは従来通り。
   const renderItemRow = (a) => {
     const isExternal = /^https?:\/\//.test(a.url);
     const attr = isExternal ? ' target="_blank" rel="noopener noreferrer"' : '';
     const arrow = isExternal ? '↗' : '→';
+    // v1342 AI サブスク 契約中 かつ カバー 対象 なら 緑背景 + バッジ を 添える
+    const aiCovered = aiSubActive && AI_SUB_COVERED.has(a.id);
+    const bgStyle = aiCovered ? ' style="background:#ecfdf5; border-left:3px solid #10b981"' : '';
+    const freeBadge = aiCovered
+      ? ' <span class="tag" style="background:#10b981; color:#fff; font-size:10px; padding:1px 6px; border-radius:6px; margin-left:4px">AIサブスク中につき無料</span>'
+      : '';
+    // v1342 Cosense (research-notes) だけ は 2col grid でも 1 行 全幅 で 出す (中村さん要望「チャットと同じで」)
+    const fullRow = a.id === 'research-notes' ? ' full-row' : '';
     return `
-    <a class="list-item" href="${a.url}"${attr}>
+    <a class="list-item${fullRow}" href="${a.url}"${attr}${bgStyle}>
       <div class="grow">
-        <div class="bold">${escapeHtml(a.title)} ${arrow}</div>
+        <div class="bold">${escapeHtml(a.title)} ${arrow}${freeBadge}</div>
         <div class="meta">${escapeHtml(a.desc)}</div>
       </div>
     </a>`;

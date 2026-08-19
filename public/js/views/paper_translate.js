@@ -253,21 +253,32 @@ function updateModelInfo(d) {
   if (!sel || !info) return;
   const models = d.models || { 'gpt-4o': 20 };
   const def = d.default_model || 'gpt-4o';
+  // v1342 AI サブスク 契約中 は 「無料」表示 に (state.me.ai_sub_active)
+  const aiSubActive = !!state.me?.ai_sub_active;
   // v916 選択肢に「共有なら Xpt」を明記 (画面で見えるまま比較できるように)
-  sel.innerHTML = Object.entries(models).map(([m, pt]) =>
-    `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)</option>`
-  ).join('');
+  sel.innerHTML = Object.entries(models).map(([m, pt]) => {
+    const label = aiSubActive
+      ? `${m} — AIサブスク中につき無料`
+      : `${m} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)`;
+    return `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+  }).join('');
   const autoShare = document.getElementById('pt-auto-share');
   const refresh = () => {
     const m = sel.value;
     const base = models[m] || 20;
     const shared = !!autoShare?.checked;
     const pt = shared ? Math.floor(base / 2) : base;  // v914 共有は半額割引
-    info.innerHTML = `選択中: ${escapeHtml(m)} ・ 1 回 ${pt}pt` +
-      (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
-              : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
+    if (aiSubActive) {
+      info.innerHTML = `選択中: ${escapeHtml(m)} ・ <span style="color:#059669; font-weight:600">AIサブスク中につき無料</span>`;
+    } else {
+      info.innerHTML = `選択中: ${escapeHtml(m)} ・ 1 回 ${pt}pt` +
+        (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
+                : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
+    }
     const btn = document.getElementById('pt-go');
-    if (btn) btn.textContent = `📑 要約を作る (${pt}pt)`;
+    if (btn) btn.textContent = aiSubActive
+      ? `📑 要約を作る (AIサブスク中につき無料)`
+      : `📑 要約を作る (${pt}pt)`;
   };
   sel.addEventListener('change', refresh);
   autoShare?.addEventListener('change', refresh);
@@ -307,12 +318,19 @@ async function setupAlsoFullTranslate() {
     if (toggle.checked) { _ftLoadPromise = loadAndBuild(); await _ftLoadPromise; }
     else refreshTopCombinedCost();
   });
+  // v1342 AI サブスク 契約中 は 「無料」 表記 に
+  const aiSubActive = () => !!state.me?.ai_sub_active;
   function rebuildFtModels() {
     if (!ftSettingsCache) return;
     const models = dirSel.value === 'ja2en' ? ftSettingsCache.models_ja2en : ftSettingsCache.models_en2ja;
     const def = ftSettingsCache.default_model || Object.keys(models)[0];
-    modSel.innerHTML = Object.entries(models).map(([m, pt]) =>
-      `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)</option>`).join('');
+    const sub = aiSubActive();
+    modSel.innerHTML = Object.entries(models).map(([m, pt]) => {
+      const label = sub
+        ? `${m} — AIサブスク中につき無料`
+        : `${m} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)`;
+      return `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
     refreshCost();
   }
   function refreshCost() {
@@ -322,9 +340,13 @@ async function setupAlsoFullTranslate() {
     const base = models[m] || 0;
     const shared = !!document.getElementById('pt-auto-share')?.checked;
     const pt = shared ? Math.floor(base / 2) : base;
-    info.innerHTML = `全訳 ${pt}pt` +
-      (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
-              : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
+    if (aiSubActive()) {
+      info.innerHTML = `全訳 <span style="color:#059669; font-weight:600">AIサブスク中につき無料</span>`;
+    } else {
+      info.innerHTML = `全訳 ${pt}pt` +
+        (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
+                : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
+    }
     refreshTopCombinedCost();
   }
   dirSel.addEventListener('change', rebuildFtModels);
@@ -354,14 +376,26 @@ function refreshTopCombinedCost() {
     ftBase = models[document.getElementById('pt-ft-model')?.value] || 0;
   }
   const ftPt = shared ? Math.floor(ftBase / 2) : ftBase;
+  // v1342 AI サブスク 契約中 は 「無料」 表記 に (ptは 0 相当、 実 課金 は ai_charge_or_cover で スキップ)
+  const aiSubActive = !!state.me?.ai_sub_active;
   if (alsoFull && ftBase > 0) {
-    info.innerHTML = `要約 ${sumPt}pt + 全訳 ${ftPt}pt = <b style="color:#4a106d">合計 ${sumPt + ftPt}pt</b>` +
-      (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : '');
-    if (goBtn) goBtn.textContent = `📑 要約 ＆ 全訳 を 作る (${sumPt + ftPt}pt)`;
+    if (aiSubActive) {
+      info.innerHTML = `要約 + 全訳 <span style="color:#059669; font-weight:600">AIサブスク中につき無料</span>`;
+      if (goBtn) goBtn.textContent = `📑 要約 ＆ 全訳 を 作る (AIサブスク中につき無料)`;
+    } else {
+      info.innerHTML = `要約 ${sumPt}pt + 全訳 ${ftPt}pt = <b style="color:#4a106d">合計 ${sumPt + ftPt}pt</b>` +
+        (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : '');
+      if (goBtn) goBtn.textContent = `📑 要約 ＆ 全訳 を 作る (${sumPt + ftPt}pt)`;
+    }
   } else {
-    info.innerHTML = `要約 ${sumPt}pt` +
-      (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : ' <span style="color:#6b7280">(基本額)</span>');
-    if (goBtn) goBtn.textContent = `📑 要約 を 作る (${sumPt}pt)`;
+    if (aiSubActive) {
+      info.innerHTML = `要約 <span style="color:#059669; font-weight:600">AIサブスク中につき無料</span>`;
+      if (goBtn) goBtn.textContent = `📑 要約 を 作る (AIサブスク中につき無料)`;
+    } else {
+      info.innerHTML = `要約 ${sumPt}pt` +
+        (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : ' <span style="color:#6b7280">(基本額)</span>');
+      if (goBtn) goBtn.textContent = `📑 要約 を 作る (${sumPt}pt)`;
+    }
   }
 }
 // 要約 モデル の 基本額 は loadHistory で option に 埋め込まれる。 select 側 の 値 だけ から は 引けない ので

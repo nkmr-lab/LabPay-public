@@ -226,13 +226,20 @@ function bindEvents() {
     status.innerHTML = `<span style="color:#15803d">✓ ${escapeHtml(f.name)} (${(f.size/1048576).toFixed(1)} MB)</span>`;
     btn.disabled = false;
   });
+  // v1342 AI サブスク 契約中 は 「無料」 表記 に (state.me.ai_sub_active)
+  const aiSubActive = () => !!state.me?.ai_sub_active;
   function rebuildModelOptions() {
     if (!settings) return;
     const models = dir.value === 'ja2en' ? settings.models_ja2en : settings.models_en2ja;
     const def = settings.default_model || Object.keys(models)[0];
-    // v916 選択肢に「共有なら Xpt」を明記
-    sel.innerHTML = Object.entries(models).map(([m, pt]) =>
-      `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)</option>`).join('');
+    const sub = aiSubActive();
+    // v916 選択肢に「共有なら Xpt」を明記 (v1342 サブスク中は「無料」)
+    sel.innerHTML = Object.entries(models).map(([m, pt]) => {
+      const label = sub
+        ? `${m} — AIサブスク中につき無料`
+        : `${m} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)`;
+      return `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
     refreshCost();
   }
   function refreshCost() {
@@ -250,9 +257,13 @@ function bindEvents() {
       const sBase = sModels[document.getElementById('pft-sum-model')?.value] || 0;
       sumPt = shared ? Math.floor(sBase / 2) : sBase;
     }
+    const sub = aiSubActive();
     if (info) {
       const dirLabel = dir.value === 'ja2en' ? '日本語→英語' : '英語→日本語';
-      if (alsoSum && sumPt > 0) {
+      if (sub) {
+        info.innerHTML = (alsoSum ? '全訳 + 要約' : `選択中: ${escapeHtml(m)}`) +
+          ` <span style="color:#059669; font-weight:600">AIサブスク中につき無料</span> (${dirLabel})`;
+      } else if (alsoSum && sumPt > 0) {
         info.innerHTML = `全訳 ${pt}pt + 要約 ${sumPt}pt = <b style="color:#4a106d">合計 ${pt + sumPt}pt</b> (${dirLabel})` +
           (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : '');
       } else {
@@ -261,7 +272,11 @@ function bindEvents() {
                   : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
       }
     }
-    btn.textContent = alsoSum && sumPt > 0 ? `📑 全訳+要約 開始 (${pt + sumPt}pt)` : `📑 全訳開始 (${pt}pt)`;
+    if (sub) {
+      btn.textContent = alsoSum ? `📑 全訳+要約 開始 (AIサブスク中につき無料)` : `📑 全訳開始 (AIサブスク中につき無料)`;
+    } else {
+      btn.textContent = alsoSum && sumPt > 0 ? `📑 全訳+要約 開始 (${pt + sumPt}pt)` : `📑 全訳開始 (${pt}pt)`;
+    }
   }
   dir?.addEventListener('change', rebuildModelOptions);
   sel?.addEventListener('change', refreshCost);
@@ -293,12 +308,19 @@ async function setupAlsoSummary(onCostChange) {
     if (toggle.checked) await loadAndBuild();
     else if (typeof onCostChange === 'function') onCostChange();
   });
+  // v1342 サブスク中 は 「無料」 表記 に
+  const aiSubActive2 = () => !!state.me?.ai_sub_active;
   function rebuildSummaryModels() {
     if (!summarySettingsCache) return;
     const models = summarySettingsCache.models || {};
     const def = summarySettingsCache.default_model || Object.keys(models)[0];
-    modSel.innerHTML = Object.entries(models).map(([m, pt]) =>
-      `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(m)} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)</option>`).join('');
+    const sub = aiSubActive2();
+    modSel.innerHTML = Object.entries(models).map(([m, pt]) => {
+      const label = sub
+        ? `${m} — AIサブスク中につき無料`
+        : `${m} — ${pt}pt (🎁 共有なら ${Math.floor(pt / 2)}pt)`;
+      return `<option value="${escapeHtml(m)}" ${m === def ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
     refreshCost();
   }
   function refreshCost() {
@@ -308,9 +330,13 @@ async function setupAlsoSummary(onCostChange) {
     const base = models[m] || 0;
     const shared = !!document.getElementById('pft-auto-share')?.checked;
     const pt = shared ? Math.floor(base / 2) : base;
-    info.innerHTML = `要約 ${pt}pt` +
-      (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
-              : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
+    if (aiSubActive2()) {
+      info.innerHTML = `要約 <span style="color:#059669; font-weight:600">AIサブスク中につき無料</span>`;
+    } else {
+      info.innerHTML = `要約 ${pt}pt` +
+        (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
+                : ` <span style="color:#6b7280">(非公開、基本額)</span>`);
+    }
     if (typeof onCostChange === 'function') onCostChange();
   }
   modSel.addEventListener('change', refreshCost);

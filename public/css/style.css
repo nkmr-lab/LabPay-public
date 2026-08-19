@@ -402,6 +402,9 @@ input[type=file]::file-selector-button {
 /* v1278 中村さん要望「アプリケーションとかそこら辺は 1 列だけど 2 列にしてしまう方が良い」
    → apps.js の 各カテゴリ list を 2 列 (画面狭ければ 1 列に自動 fallback) に。 */
 .list.apps-grid-2col { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+/* v1342 中村さん要望「研究ノート (Cosense) だけ チャット と 同じ で 横幅 しっかり 取りたい」→
+ * 2col grid の 中 で 該当 item だけ 1 行 全幅 に。 */
+.list.apps-grid-2col > .list-item.full-row { grid-column: 1 / -1; }
 .list-item {
   background: white; border: 1px solid var(--line); border-radius: var(--radius);
   padding: var(--space-3); display: flex; justify-content: space-between; gap: 10px;
