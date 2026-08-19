@@ -402,9 +402,12 @@ input[type=file]::file-selector-button {
 /* v1278 中村さん要望「アプリケーションとかそこら辺は 1 列だけど 2 列にしてしまう方が良い」
    → apps.js の 各カテゴリ list を 2 列 (画面狭ければ 1 列に自動 fallback) に。 */
 .list.apps-grid-2col { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-/* v1342 中村さん要望「研究ノート (Cosense) だけ チャット と 同じ で 横幅 しっかり 取りたい」→
- * 2col grid の 中 で 該当 item だけ 1 行 全幅 に。 */
-.list.apps-grid-2col > .list-item.full-row { grid-column: 1 / -1; }
+/* v1343 中村さん要望「チャット と 同じ で 横幅 しっかり 取りたい」は 研究ノート カード の
+ * 見栄え で は なく、 Cosense アプリ を 開いた 時 の view 側 の 横幅 の 話 だった。
+ * v1342 の カード 全幅 化 は 撤回 (rule 削除)、 代わり に fullscreen 時 の
+ * main#app > * に かかる max-width:1400px を research-notes だけ 解除。
+ * (チャット は cr-shell が position:fixed で ビューポート 全幅、 それ に 準ずる) */
+body.app-fullscreen[data-view="research-notes"] main#app > * { max-width: none; }
 .list-item {
   background: white; border: 1px solid var(--line); border-radius: var(--radius);
   padding: var(--space-3); display: flex; justify-content: space-between; gap: 10px;

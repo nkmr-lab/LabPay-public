@@ -321,10 +321,9 @@ export async function renderApps(ctx = {}) {
     const freeBadge = aiCovered
       ? ' <span class="tag" style="background:#10b981; color:#fff; font-size:10px; padding:1px 6px; border-radius:6px; margin-left:4px">AIサブスク中につき無料</span>'
       : '';
-    // v1342 Cosense (research-notes) だけ は 2col grid でも 1 行 全幅 で 出す (中村さん要望「チャットと同じで」)
-    const fullRow = a.id === 'research-notes' ? ' full-row' : '';
+    // v1343 v1342 で研究ノート カード だけ full-row (全幅) に した の は 中村さん要望 の 誤解釈 (「チャットと同じ」= カード では なく Cosense アプリ 起動時 の 横幅 の こと) だった の で 削除、 通常 カード に 戻す。
     return `
-    <a class="list-item${fullRow}" href="${a.url}"${attr}${bgStyle}>
+    <a class="list-item" href="${a.url}"${attr}${bgStyle}>
       <div class="grow">
         <div class="bold">${escapeHtml(a.title)} ${arrow}${freeBadge}</div>
         <div class="meta">${escapeHtml(a.desc)}</div>
