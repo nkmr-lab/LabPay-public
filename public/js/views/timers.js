@@ -8,6 +8,7 @@ import { get, post, patch, del } from '../api.js';
 import { escapeHtml, avatarHtml, navigate } from '../router.js';
 import { state, toast } from '../app.js';
 import { uploadImage } from '../upload.js';   // v1335 タイマー画像
+import { attachLiveImage } from '../lib/live_image.js';   // v1341 cast 5秒自動更新
 import { tag, participantPill } from '../format.js';
 import { createMemberPicker } from '../member_picker.js';
 import { acquireWakeLock, releaseWakeLock } from '../wakelock.js';
@@ -208,12 +209,17 @@ export async function renderTimerNew({ query } = {}) {
         </div>
       </details>
       <!-- v1335 タイマー画像 (ハッカソン 等 で 「今 何 を やっている か」 を 参加者 が 目視 で 分かる ように) -->
+      <!-- v1341 cast (cast.nkmr.io) の 「最新の1枚 の 画像URL」 を 直接 入力 できる ように -->
       <div class="field" style="margin-top:10px">
-        <span class="lbl">画像 (任意・タップで撮影 or アルバム選択)</span>
-        <input type="file" id="tmn-image-file" accept="image/*">
+        <span class="lbl">画像 (任意)</span>
+        <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
+          <input type="file" id="tmn-image-file" accept="image/*" style="flex:1 1 200px; min-width:0">
+          <button type="button" id="tmn-image-url-btn" class="btn" style="font-size:11px; padding:3px 10px">🔗 URL で 指定</button>
+        </div>
         <input type="hidden" id="tmn-image-url" value="">
         <img id="tmn-image-preview" alt="" hidden style="max-width:180px; max-height:180px; margin-top:6px; border-radius:8px; object-fit:contain; display:block">
         <div id="tmn-image-status" class="hint-sm"></div>
+        <div class="hint-sm" style="margin-top:4px">💡 <a href="https://cast.nkmr.io/" target="_blank" rel="noopener" style="color:var(--primary)">cast.nkmr.io</a> の 「最新の1枚 の 画像URL」 を 「URL で 指定」 に 貼る と、 発表者 の 画面 が 5秒 毎 に 更新 されます</div>
       </div>
       <div class="field" style="margin-top:10px">
         <span class="lbl">参加者${lockMembers ? ' (グループ内)' : ''}</span>
@@ -300,6 +306,18 @@ export async function renderTimerNew({ query } = {}) {
       status.textContent = '失敗: ' + e.message;
     }
   });
+  // v1341 URL 直接 入力 (cast の shot URL でも OK)
+  document.getElementById('tmn-image-url-btn').addEventListener('click', () => {
+    const cur = document.getElementById('tmn-image-url').value || '';
+    const url = prompt('画像 URL (cast の shot URL でも OK、 5秒毎 に 自動更新):', cur);
+    if (url === null) return;
+    const v = url.trim();
+    document.getElementById('tmn-image-url').value = v;
+    const prev = document.getElementById('tmn-image-preview');
+    if (v) { prev.src = v; prev.hidden = false; }
+    else   { prev.hidden = true; prev.removeAttribute('src'); }
+    document.getElementById('tmn-image-status').textContent = v ? 'URL を セット しました' : '(未設定)';
+  });
 
   document.getElementById('tmn-save').addEventListener('click', async () => {
     const btn = document.getElementById('tmn-save');
@@ -363,6 +381,8 @@ export async function renderTimerNew({ query } = {}) {
 
 let tmTickTimer = null;
 let tmSyncTimer = null;
+let tmLiveImg = null;      // v1341 cast の 5秒 自動更新 ハンドル (詳細 view 用、 view 離脱 で stop)
+let tmLiveImgUrl = null;
 let tmVisHandler = null;  // v915 タブ 可視化 時に 即 sync する リスナ の 参照 (剥がす 用)
 // v408 「ちょうど 0 になった瞬間」を 1 回だけ鳴らすためのフラグ。
 // resync で復活してしまうので必要。リピートでサーバが次サイクルに
@@ -392,6 +412,8 @@ function stopTimerLoops() {
   if (tmSyncTimer) { clearTimeout(tmSyncTimer); tmSyncTimer = null; }
   // v915 visibilitychange リスナ を 剥がす (別ページ に 遷移した時 の 漏れ 防止)。
   if (tmVisHandler) { document.removeEventListener('visibilitychange', tmVisHandler); tmVisHandler = null; }
+  // v1341 cast の 自動更新 も 停止 (二重 setInterval 防止)
+  if (tmLiveImg) { tmLiveImg.stop(); tmLiveImg = null; tmLiveImgUrl = null; }
   // v405 wake lock release
   releaseWakeLock('timer');
 }
@@ -426,10 +448,14 @@ export async function renderTimerDetail({ params }) {
       <div id="tmd-image-wrap" hidden style="margin-top:14px">
         <img id="tmd-image" src="" alt="" style="max-width:100%; max-height:40vh; border-radius:8px; object-fit:contain">
       </div>
-      <div id="tmd-image-ctrl" class="row no-print" style="gap:6px; justify-content:center; margin-top:6px" hidden>
-        <input type="file" id="tmd-image-file" accept="image/*" hidden>
-        <button id="tmd-image-change" class="btn" style="font-size:11px; padding:2px 8px">🖼 画像 追加/変更</button>
-        <button id="tmd-image-remove" class="btn" style="font-size:11px; padding:2px 8px; color:#c00" hidden>🗑 削除</button>
+      <div id="tmd-image-ctrl" class="no-print" style="margin-top:6px" hidden>
+        <div class="row" style="gap:6px; justify-content:center">
+          <input type="file" id="tmd-image-file" accept="image/*" hidden>
+          <button id="tmd-image-change" class="btn" style="font-size:11px; padding:2px 8px">🖼 画像 追加/変更</button>
+          <button id="tmd-image-url-btn" class="btn" style="font-size:11px; padding:2px 8px" title="cast の画像URL 等 を 直接 入力 (5秒毎 に 自動更新)">🔗 URL で 指定</button>
+          <button id="tmd-image-remove" class="btn" style="font-size:11px; padding:2px 8px; color:#c00" hidden>🗑 削除</button>
+        </div>
+        <div class="hint-sm" style="margin-top:4px; text-align:center">💡 <a href="https://cast.nkmr.io/" target="_blank" rel="noopener" style="color:var(--primary)">cast.nkmr.io</a> の 「最新の1枚の画像URL」 を 貼る と 発表者 の 画面 が 5秒 毎 に 更新 されます</div>
       </div>
       <!-- v1337 公開 URL の QR コード 表示 area (toggle) -->
       <div id="tmd-qr-wrap" hidden style="margin-top:14px; display:flex; flex-direction:column; align-items:center; gap:6px">
@@ -688,18 +714,35 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
             await loadTimerDetail(id, { isResync: true });
           } catch (e) { toast('失敗: ' + e.message); }
         });
+        // v1341 URL 直接 入力 (cast 連携 の 本命)。 prompt で URL を 受けて PATCH。
+        document.getElementById('tmd-image-url-btn').addEventListener('click', async () => {
+          const cur = d.timer.image_url || '';
+          const url = prompt('画像 URL を 入力 (cast の shot URL でも OK、 5秒毎 に 自動更新)\n空欄 で 削除:', cur);
+          if (url === null) return;
+          try {
+            await patch(`/api/timers/${id}/image`, { image_url: url.trim() || null });
+            toast(url.trim() ? '設定しました' : '削除しました');
+            await loadTimerDetail(id, { isResync: true });
+          } catch (e) { toast('失敗: ' + e.message); }
+        });
       }
       // v1335 画像 URL の 反映 (作成者 でなくても 表示 だけ は 全参加者)。
+      // v1341 cast の URL の 場合 は 5秒毎 に 自動更新 (live_image.js 経由)
       const imgWrap = document.getElementById('tmd-image-wrap');
       const imgEl   = document.getElementById('tmd-image');
       const rmBtn   = document.getElementById('tmd-image-remove');
       const chBtn   = document.getElementById('tmd-image-change');
       if (d.timer.image_url) {
-        imgEl.src = d.timer.image_url;
+        if (tmLiveImgUrl !== d.timer.image_url) {
+          if (tmLiveImg) tmLiveImg.stop();
+          tmLiveImg    = attachLiveImage(imgEl, d.timer.image_url);
+          tmLiveImgUrl = d.timer.image_url;
+        }
         imgWrap.hidden = false;
         if (rmBtn) rmBtn.hidden = false;
         if (chBtn) chBtn.textContent = '🖼 画像 変更';
       } else {
+        if (tmLiveImg) { tmLiveImg.stop(); tmLiveImg = null; tmLiveImgUrl = null; }
         imgWrap.hidden = true;
         if (rmBtn) rmBtn.hidden = true;
         if (chBtn) chBtn.textContent = '🖼 画像 追加';

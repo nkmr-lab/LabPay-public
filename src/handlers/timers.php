@@ -32,6 +32,8 @@ function route_timers(PDO $pdo, array $cfg, string $method, array $seg): void {
 }
 
 // v1335 image_url を検証 (avatar_url と 同 pattern: /uploads/<file>.<ext> or 自 origin HTTP)。
+// v1341 cast (cast.nkmr.io/shot/<token>.jpg) の URL も 許可 — パス形 まで 固定 して 通す
+//   (docs/CAST_INTEGRATION.md #0 の 通り、 全面 開放 は しない ため 明示 許可 だけ に する)。
 function timers_validate_image_url($url, array $cfg): ?string {
     if ($url === null || trim((string)$url) === '') return null;
     $url = (string)$url;
@@ -44,8 +46,10 @@ function timers_validate_image_url($url, array $cfg): ?string {
             $isHttp = (bool)preg_match('#^/uploads/[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)?\.[A-Za-z0-9]{1,8}$#', $rel);
         }
     }
-    if (!$isHttp && !$isLocal) {
-        throw new ApiException('bad_request', 'image_url は /uploads/<file>.<ext> か 自 origin の HTTP のみ', 400);
+    // v1341 cast の 「最新の1枚」 URL (推測 不能 な トークン、 パス形 固定) だけ を 通す。
+    $isCast = (bool)preg_match('#^https://cast\.nkmr\.io/shot/[A-Za-z0-9_\-]{16,64}\.jpg$#', $url);
+    if (!$isHttp && !$isLocal && !$isCast) {
+        throw new ApiException('bad_request', 'image_url は /uploads/<file>.<ext>、自 origin の HTTP、cast の画像URL のみ', 400);
     }
     return $url;
 }

@@ -3,15 +3,19 @@
 
 import { escapeHtml } from '../router.js';
 import { acquireWakeLock, releaseWakeLock } from '../wakelock.js';
+import { attachLiveImage, isCastShotUrl } from '../lib/live_image.js';   // v1341
 
 let _tickTimer = null;
 let _pollTimer = null;
 let _state = null;
 let _serverOffsetMs = 0;
+let _liveImg = null;   // v1341 cast の 自動更新 ハンドル (stop 用)
+let _liveImgUrl = null;
 
 function stopAll() {
   if (_tickTimer) { clearInterval(_tickTimer); _tickTimer = null; }
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  if (_liveImg)   { _liveImg.stop(); _liveImg = null; _liveImgUrl = null; }   // v1341
 }
 
 function fmt(sec) {
@@ -133,13 +137,19 @@ function render() {
   const t = _state;
   document.getElementById('pt-title').textContent = t.title || '🛎 タイマー';
   // v1335 タイマー画像 (ハッカソン 等 で 「今 何 を やっている か」 の 参加者 向け 表示)
+  // v1341 cast (cast.nkmr.io/shot/<token>.jpg) の 場合 は 5秒毎 に 自動更新 (live_image.js)
   const imgWrap = document.getElementById('pt-image-wrap');
   const imgEl   = document.getElementById('pt-image');
   if (t.image_url) {
-    if (imgEl.src !== t.image_url) imgEl.src = t.image_url;
+    if (_liveImgUrl !== t.image_url) {
+      if (_liveImg) _liveImg.stop();
+      _liveImg    = attachLiveImage(imgEl, t.image_url);
+      _liveImgUrl = t.image_url;
+    }
     imgWrap.hidden = false;
     document.body.classList.add('pt-has-image');
   } else {
+    if (_liveImg) { _liveImg.stop(); _liveImg = null; _liveImgUrl = null; }
     imgWrap.hidden = true;
     document.body.classList.remove('pt-has-image');
   }
