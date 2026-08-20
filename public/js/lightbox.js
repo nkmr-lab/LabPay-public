@@ -5,11 +5,11 @@
 // 使い方:
 //   単発:   openImageLightbox(src)
 //   複数:   openImageLightbox(src, { images: [url1, url2, ...], index: 0 }) — v1149
-//     - 左右矢印 ← → ボタン + キーボード ArrowLeft/ArrowRight + タッチ swipe で 次/前 の画像
-//     - カウンター「3 / 7」を 右下 に表示
+//     - 左右矢印 ← → ボタン + キーボード ArrowLeft/ArrowRight + タッチ swipe で次/前の画像
+//     - カウンター「3 / 7」を右下に表示
 //   閉じる: × ボタン / 背景タップ / 画像タップ / Esc / ブラウザ戻る
 //   回転:   opts.onRotate: (degrees, index) => Promise を渡すと 🔄 ボタン表示
-//           (複数画像時は 1 枚目 index=0 のときだけ回転可、 それ以外 では 非表示)
+//           (複数画像時は 1 枚目 index=0 のときだけ回転可、それ以外では非表示)
 
 export function openImageLightbox(src, opts = {}) {
   const onRotate = typeof opts.onRotate === 'function' ? opts.onRotate : null;
@@ -56,6 +56,26 @@ export function openImageLightbox(src, opts = {}) {
     if (imgEl.src && imgEl.src.startsWith('blob:')) URL.revokeObjectURL(imgEl.src);
     imgEl.style.visibility = 'hidden';
     if (pctEl) pctEl.textContent = '読み込み中…';
+    // v1349 fb 中村さん報告「今日のラボフォトから写真を選択して表示しようとすると読み込み失敗」。
+    //   原因: 別 origin (photo.nkmr.io) の画像を XHR で blob 取得すると withCredentials=false の
+    //   ため SSO cookie が送られず、認証切れ画面 HTML が返って画像として表示できない (blob は
+    //   200 で来るが img.onload しないので表示されず「読み込み失敗」表示)。 img タグ経由なら
+    //   cross-origin でも SameSite=Lax cookie が送られて認証は通る。 progress は諦める代わりに
+    //   確実に表示できる方を取る。
+    try {
+      const u = new URL(url, location.href);
+      if (u.origin !== location.origin) {
+        imgEl.onload = () => {
+          if (loadEl?.parentNode) loadEl.parentNode.removeChild(loadEl);
+          imgEl.style.visibility = 'visible';
+          if (pctEl) pctEl.textContent = '';
+        };
+        imgEl.onerror = () => { if (pctEl) pctEl.textContent = '読み込み失敗'; };
+        imgEl.src = url;
+        return;
+      }
+    } catch (_) {}
+    // 同 origin は従来通り XHR で progress を出しつつ blob 化
     const xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
     xhr.responseType = 'blob';
@@ -149,7 +169,7 @@ export function openImageLightbox(src, opts = {}) {
   if (prevBtn) prevBtn.addEventListener('click', (ev) => { ev.stopPropagation(); go(index - 1); });
   if (nextBtn) nextBtn.addEventListener('click', (ev) => { ev.stopPropagation(); go(index + 1); });
 
-  // v1149 touch swipe (左右 40px 以上 で ±1、 縦スワイプは 閉じない)
+  // v1149 touch swipe (左右 40px 以上で ±1、縦スワイプは閉じない)
   if (isMulti) {
     let sx = 0, sy = 0, swiping = false;
     box.addEventListener('touchstart', (ev) => {
