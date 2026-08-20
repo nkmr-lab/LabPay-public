@@ -285,6 +285,31 @@ function showPreview(prefix, src) {
   img.hidden = false;
 }
 
+// v1345 商品画像 の 90° 回転 (時計回り)。 URL → Image → canvas に 描き直し → jpg blob → File。
+//   /uploads/ 画像 は 同一 origin な の で crossOrigin は 不要 (指定 すると 逆 に taint 化 する 環境 も ある)。
+async function rotateImage90(url) {
+  const img = new Image();
+  img.decoding = 'async';
+  await new Promise((resolve, reject) => {
+    img.onload  = () => resolve();
+    img.onerror = () => reject(new Error('画像 の 読み込み に 失敗'));
+    img.src = url;
+  });
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = h;  // 90° で 縦横 入れ替え
+  canvas.height = w;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(h / 2, w / 2);
+  ctx.rotate(Math.PI / 2);   // 時計回り 90°
+  ctx.drawImage(img, -w / 2, -h / 2);
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(b => b ? resolve(b) : reject(new Error('canvas.toBlob 失敗')), 'image/jpeg', 0.92);
+  });
+  return new File([blob], 'rotated.jpg', { type: 'image/jpeg' });
+}
+
 // Unified submit for both JAN and no-JAN flows. `kind` is 'jan' or 'no_jan'.
 // JAN flow: register the product under the scanned JAN, then list it.
 // no-JAN flow: ask the server to mint a synthetic JAN, then list under it.
@@ -502,6 +527,28 @@ async function loadMyListings() {
         } catch (e) { toast('失敗: ' + e.message); }
       });
     });
+    // v1345 画像 90° 回転 (中村さん要望「販売で出品した商品 の 画像 を 回転させたい」)。
+    //   client 側 で canvas に 描き直して 再 upload → PATCH。 4 回 押せば 元 に 戻る。
+    root.querySelectorAll('[data-img-rotate]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const jan = btn.dataset.jan;
+        const src = btn.dataset.src;
+        btn.disabled = true;
+        const oldTxt = btn.textContent;
+        btn.textContent = '⏳';
+        try {
+          const rotated = await rotateImage90(src);
+          const upData  = await uploadImage(rotated);
+          await patch('/api/products/' + encodeURIComponent(jan), { image_url: upData.url });
+          toast('画像を 90° 回転しました');
+          await loadMyListings();
+        } catch (e) {
+          toast('回転失敗: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = oldTxt;
+        }
+      });
+    });
   } catch (e) {
     document.getElementById('my-list').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
@@ -529,8 +576,14 @@ function renderSummaryRow(l) {
   const priceLine = l.is_gift
     ? `<div class="meta">JAN <span class="mono">${escapeHtml(l.jan)}</span> · 🎁 無料配布 · 在庫 ${l.qty}</div>`
     : `<div class="meta">JAN <span class="mono">${escapeHtml(l.jan)}</span> · 価格 ${l.price.toLocaleString()}pt · 在庫 ${l.qty}</div>`;
+  // v1345 中村さん要望「販売で出品した商品 の 画像 を 回転させたい」→
+  // サマリ 行 の thumb 右下 に ↻ button、 押すと 90° 回転 → 再アップ → PATCH。
   const thumb = l.image_url
-    ? `<img src="${escapeHtml(l.image_url)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; flex:0 0 auto">`
+    ? `<div style="position:relative; width:48px; height:48px; flex:0 0 auto">
+         <img src="${escapeHtml(l.image_url)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; display:block">
+         <button data-img-rotate="${l.id}" data-jan="${escapeHtml(l.jan)}" data-src="${escapeHtml(l.image_url)}" title="画像を90°回転"
+                 style="position:absolute; bottom:-6px; right:-6px; width:22px; height:22px; border-radius:50%; padding:0; font-size:12px; line-height:1; background:#fff; border:1px solid var(--line); box-shadow:0 1px 2px rgba(0,0,0,0.15); cursor:pointer">↻</button>
+       </div>`
     : `<div style="width:48px; height:48px; border-radius:6px; background:#f1f1f4; flex:0 0 auto"></div>`;
   const actions = l.status === 'withdrawn'
     ? `<button data-action="repost" data-id="${l.id}" class="primary">再出品</button>
@@ -625,7 +678,11 @@ function renderEditRow(l) {
           <div class="muted" style="font-size:12px; margin-bottom:6px">画像</div>
           <div style="display:flex; align-items:center; gap:8px; min-width:0">
             ${l.image_url
-              ? `<img src="${escapeHtml(l.image_url)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; flex:0 0 auto">`
+              ? `<div style="position:relative; width:48px; height:48px; flex:0 0 auto">
+                   <img src="${escapeHtml(l.image_url)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; display:block">
+                   <button data-img-rotate="${l.id}" data-jan="${escapeHtml(l.jan)}" data-src="${escapeHtml(l.image_url)}" title="画像を90°回転"
+                           style="position:absolute; bottom:-6px; right:-6px; width:22px; height:22px; border-radius:50%; padding:0; font-size:12px; line-height:1; background:#fff; border:1px solid var(--line); box-shadow:0 1px 2px rgba(0,0,0,0.15); cursor:pointer">↻</button>
+                 </div>`
               : `<div style="width:48px; height:48px; border-radius:6px; background:#f1f1f4; display:flex; align-items:center; justify-content:center; flex:0 0 auto; color:var(--muted); font-size:11px">未設定</div>`}
             <input type="file" accept="image/*" data-img-file="${l.id}" data-jan="${escapeHtml(l.jan)}" style="flex:1; min-width:0">
           </div>
