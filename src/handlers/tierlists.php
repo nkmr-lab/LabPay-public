@@ -44,7 +44,76 @@ function route_tierlists(PDO $pdo, array $cfg, string $method, array $seg): void
     if ($action === 'answer' && $method === 'PUT')  { tierlists_answer($pdo, $cfg, $uid, $tid); return; }
     if ($action === '' && $method === 'DELETE') { tierlists_delete($pdo, $uid, $tid); return; }
     if ($action === 'close' && $method === 'POST')  { tierlists_close($pdo, $uid, $tid); return; }
+    // v1346 fb#523 中村研（氏名01）要望「作成者だったら要素を追加・削除できるようになると嬉しい」
+    //   PUT で統一 (既存の answer が PUT なので client の api.js の put() をそのまま流用するため)
+    if ($action === 'items' && $method === 'PUT') { tierlists_items_patch($pdo, $uid, $tid); return; }
     json_error('not_found', "no tierlists route for $method", 404);
+}
+
+// v1346 起案者が締切前に items を追加 / 削除する。
+//   { add: [{label, image_url?}, ...], remove: [id, id, ...] }
+//   - 追加: 既存の最大 index + 1 から連番で新 id を発番 (i100 など、既存 id と衝突しない)。
+//   - 削除: items から該当 id を除き、全 answers の assignments からも該当 id を消す。
+//   - 締切後は不可、起案者のみ。
+function tierlists_items_patch(PDO $pdo, int $uid, int $tid): void {
+    $body = read_json_body();
+    $add    = is_array($body['add'] ?? null)    ? $body['add']    : [];
+    $remove = is_array($body['remove'] ?? null) ? $body['remove'] : [];
+    $st = $pdo->prepare("SELECT creator_user_id, is_closed, items_json FROM tierlists WHERE id = ?");
+    $st->execute([$tid]);
+    $t = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$t) throw new ApiException('not_found', 'tierlist not found', 404);
+    if ((int)$t['creator_user_id'] !== $uid) throw new ApiException('forbidden', '起案者のみ編集可', 403);
+    if ($t['is_closed']) throw new ApiException('bad_request', '締切済みは編集不可', 400);
+    $items = json_decode($t['items_json'] ?: '[]', true) ?: [];
+
+    // 削除: id 一致の item を items から除く
+    $removeSet = [];
+    foreach ($remove as $rid) { $removeSet[(string)$rid] = true; }
+    if ($removeSet) {
+        $items = array_values(array_filter($items, fn($it) => !isset($removeSet[(string)($it['id'] ?? '')])));
+    }
+
+    // 追加: 既存 id の数字部分の最大 + 1 から連番。 i{N} 命名を継続。
+    $maxIdx = -1;
+    foreach ($items as $it) {
+        if (preg_match('/^i(\d+)$/', (string)($it['id'] ?? ''), $m)) {
+            $maxIdx = max($maxIdx, (int)$m[1]);
+        }
+    }
+    foreach ($add as $it) {
+        $lbl = mb_substr(trim((string)($it['label'] ?? '')), 0, 80);
+        if ($lbl === '') continue;
+        $maxIdx++;
+        $items[] = [
+            'id'        => 'i' . $maxIdx,
+            'label'     => $lbl,
+            'image_url' => isset($it['image_url']) && is_string($it['image_url']) ? mb_substr($it['image_url'], 0, 500) : null,
+        ];
+    }
+    if (count($items) > 200) throw new ApiException('bad_request', '候補は 200 件まで', 400);
+    if (!$items) throw new ApiException('bad_request', '候補が0件になる変更は不可', 400);
+
+    db_tx($pdo, function () use ($pdo, $tid, $items, $removeSet) {
+        $pdo->prepare("UPDATE tierlists SET items_json = ? WHERE id = ?")
+            ->execute([json_encode($items, JSON_UNESCAPED_UNICODE), $tid]);
+        // 削除された id は全 answers の assignments からも除く (残すと集計でゴミが出る)
+        if ($removeSet) {
+            $stA = $pdo->prepare("SELECT user_id, assignments_json FROM tierlist_answers WHERE tierlist_id = ?");
+            $stA->execute([$tid]);
+            $upd = $pdo->prepare("UPDATE tierlist_answers SET assignments_json = ? WHERE tierlist_id = ? AND user_id = ?");
+            foreach ($stA->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $a = json_decode($r['assignments_json'] ?: '{}', true) ?: [];
+                if (!is_array($a)) $a = (array)$a;
+                $changed = false;
+                foreach (array_keys($a) as $k) {
+                    if (isset($removeSet[(string)$k])) { unset($a[$k]); $changed = true; }
+                }
+                if ($changed) $upd->execute([json_encode($a, JSON_UNESCAPED_UNICODE), $tid, (int)$r['user_id']]);
+            }
+        }
+    });
+    json_response(['ok' => true, 'items' => $items]);
 }
 
 function tierlists_list(PDO $pdo, int $uid): void {

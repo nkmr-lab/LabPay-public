@@ -8,14 +8,14 @@
 // AI → 受動。「届くタイプ」と「黙って使うタイプ」が一目で分かるように。
 
 import { escapeHtml } from '../router.js';
-import { state } from '../app.js';   // v1342 state.me.ai_sub_active 参照 用
+import { state } from '../app.js';   // v1342 state.me.ai_sub_active 参照用
 
 // 通知軸カテゴリ。並び順 = 表示順。
 export const APP_CATEGORIES = [
   { id: 'research',  label: '🔬 研究用',                  hint: '論文要約 / 全訳 / 査読 / 原稿チェック / リライター / Deep Researchなど、AIを使って研究を直接進めるもの。' },
   { id: 'lab-mgmt',  label: '🏢 研究室運営サポート',      hint: 'ゼミ / 研究会 / 学会サポート (タイマー・順番決め・グループ・ルーレット) + 研究室運営 (投票・請求・待ち合わせなど)。' },
   { id: 'shared',    label: '📤 共有',                    hint: 'ラボメンバーで情報や成果物を共有するもの (アルバム・ゼミ動画・チャット・ファイル送受信・締切・重要連絡・かんばんなど)。' },
-  { id: 'trade',     label: '💴 売買',                    hint: 'ラボ内での売買。 購入・販売・オークション・ラーボーイーツ・チケット・発表順オークション。' },
+  { id: 'trade',     label: '💴 売買',                    hint: 'ラボ内での売買。購入・販売・オークション・ラーボーイーツ・チケット・発表順オークション。' },
   { id: 'urgent',    label: '🔴 締切・応答が要るもの',     hint: '期限つき / 行動を要求 / 即応通知を出すジャンル。' },
   { id: 'inform',    label: '🟡 全員に届くお知らせ',       hint: '投稿や参加で全員に情報通知。締切はない / 緩い。' },
   { id: 'tool',      label: '🟢 その場で結論が出る道具',   hint: '結果は画面内で完結。通知は出さない。' },
@@ -36,7 +36,7 @@ export const APPS = [
   // v634 ⚾ ドラフト (v637 娯楽へ)
   { id: 'drafts',        cat: 'game', url: '#/drafts',        title: '⚾ ドラフト',         desc: 'プロ野球風順番指名 + くじ抽選。参加者と候補 (人 or 自由入力) を揃えて開始 → 1 位、 2 位と順番に指名、競合はくじで決着。', defaultVisible: true },
   // v1208 🎤 ラボ名言集
-  { id: 'sayings',       cat: 'game', url: '#/sayings',       title: '🎤 ラボ名言集',       desc: '誰が いつ どこで 何を 言ったか を 年度別 (4月-3月) に 登録。 ❤️ で 投票、 年度末 に 得票順 で 名言/迷言 大賞。', defaultVisible: true },
+  { id: 'sayings',       cat: 'game', url: '#/sayings',       title: '🎤 ラボ名言集',       desc: '誰がいつどこで何を言ったかを年度別 (4月-3月) に登録。 ❤️ で投票、年度末に得票順で名言/迷言大賞。', defaultVisible: true },
   // v635 📝 フリップクイズ (v637 娯楽へ)
   { id: 'quizzes',       cat: 'game', url: '#/quizzes',       title: '📝 フリップクイズ', desc: '出題者が問題を出す → 参加者はフリップに記述回答 → 一斉開示 (タップで拡大) → 出題者が ⭕❌ 採点 → ランキング集計。連続出題 OK。', defaultVisible: true },
   { id: 'polls',         cat: 'lab-mgmt', url: '#/polls',         title: '📊 投票・アンケート', desc: '対象者・締切・選択肢を指定して投票を集める。個人の票は非公開、集計の可視タイミングは選べる。', defaultVisible: true },
@@ -124,18 +124,18 @@ export const APPS = [
   // v941 合同研究会用投票 (v944 で research → lab-mgmt にカテゴリ移動)
   { id: 'joint-events', cat: 'lab-mgmt', url: '#/joint-events', title: '🎪 合同研究会投票', desc: '2ラボ以上の合同研究会でセッション別優秀発表者を投票で決める。外部参加者も4桁コード or 公開URLで匿名投票可 (LabPayログイン不要)。投票者は所属を選び、相手ラボの発表だけに投票 (クロスラボ制約)。', defaultVisible: true },
   // v961 中村研 Google Photos アルバム集 / v998 運営 → 娯楽に移動
-  // v1238 nkmr-albums (Google Photos 列挙) 撤去。 代わり に photo (LabPay 内 の photo.nkmr.io ビュー) を 使う。
-  // 過去 の #/albums route は 互換 の ため 残す (dormant)。
+  // v1238 nkmr-albums (Google Photos 列挙) 撤去。代わりに photo (LabPay 内の photo.nkmr.io ビュー) を使う。
+  // 過去の #/albums route は互換のため残す (dormant)。
   // v960 外部ツールポータル (LabPay をハブにして別アプリに飛ぶ)
   { id: 'fund-portal',    cat: 'lab-mgmt', url: 'https://fund.nkmr.io', title: '💴 研究費ポータル (fund.nkmr.io)',
-    desc: '中村研の 予算執行 DB。 科研費 / 校費 / 各種 fund の 予定 と 実績、 アルバイト代の 登録、 支払明細、 予算残高 まで。 nkmr-SSO で保護。 自分宛の 支払いだけ を LabPay 内で 見たい 時 は 💴 自分宛の研究費支払い を どうぞ。', defaultVisible: true },
-  // v1238 中村研 写真基盤 (Google Photos 脱出後の自前アルバム)
+    desc: '中村研の予算執行 DB。科研費 / 校費 / 各種 fund の予定と実績、アルバイト代の登録、支払明細、予算残高まで。 nkmr-SSO で保護。自分宛の支払いだけを LabPay 内で見たい時は 💴 自分宛の研究費支払いをどうぞ。', defaultVisible: true },
+  // v1238 中村研写真基盤 (Google Photos 脱出後の自前アルバム)
   //   v1268 中村さん指示「もう直接 photo.nkmr.io に飛ばしたほうが良い」→
-  //     LabPay 内 photo エントリは撤去 し photo-portal (外部リンク) 一本化。
-  // v1274 娯楽ミッション (中村さん要望 D、主催者 + SYSTEM 50/50 出資 の ゲリラ主催型)
+  //     LabPay 内 photo エントリは撤去し photo-portal (外部リンク) 一本化。
+  // v1274 娯楽ミッション (中村さん要望 D、主催者 + SYSTEM 50/50 出資のゲリラ主催型)
   { id: 'game-missions', cat: 'game', url: '#/game-missions', title: '🎯 娯楽ミッション',
-    desc: '「setlogに1投稿で20pt」等のゲリラミッションを主催・参加。 主催者が出したptと同額をLabPayが補助 (50/50) するので、実質2倍の賞金プールに。 参加者は対象機能を使うだけで自動で報酬支給。', defaultVisible: true },
-  // v1251 AI サブスク (共通、 chai.nkmr.io / file.nkmr.io で 使う 1 週間 500pt サブスク)
+    desc: '「setlogに1投稿で20pt」等のゲリラミッションを主催・参加。主催者が出したptと同額をLabPayが補助 (50/50) するので、実質2倍の賞金プールに。参加者は対象機能を使うだけで自動で報酬支給。', defaultVisible: true },
+  // v1251 AI サブスク (共通、 chai.nkmr.io / file.nkmr.io で使う 1 週間 500pt サブスク)
   { id: 'ai-sub',         cat: 'shared', url: '#/ai-sub', title: '🤖 AIサブスク (共通)',
     desc: '1週間500ptの自動更新サブスク。契約中は論文要約 / 全訳 / DeepResearch / 実験計画書 / 原稿 / 査読 / リライターが全部無料に。加えてchai.nkmr.io (ChatGPT/Claude風) やfile.nkmr.io (ファイルブラウザAI) 等の外部サービスでもフル機能。残高500ptを切ると自動解約。', defaultVisible: true },
   { id: 'photo-portal',   cat: 'shared', url: 'https://photo.nkmr.io', title: '📷 photo.nkmr.ioを開く',
@@ -156,11 +156,11 @@ export const APPS = [
   { id: 'kanban', cat: 'shared', url: '#/kanban', title: '📋 かんばん', desc: 'Trello 的タスクボード。列 (Backlog/Doing/Done 等) + カードを D&D。カードは担当者 / ラベル / 期限 / チェックリスト / Markdown 説明 + コメント。アサインとコメントで通知、履歴も残る。', defaultVisible: true },
   // v1300 中村さん指示「ランキングは娯楽のみんなで共有にいれとくと良い」
   { id: 'rankings', cat: 'shared', url: '#/rankings', title: '🏆 Ranking',
-    desc: 'ラボ全体のtop10を13種 (最長連続/累計ラボイン/オープナー/クローザー/早起き/夜間/徹夜/受けたリアクション/したリアクション/販売数/販売額/購入数/購入額) の カード並び。実績ページの対応バッジと同じ意味論。ホームの🏆アイコンからも開ける。', defaultVisible: true },
-  { id: 'exp-recruits', cat: 'research', url: '#/exp-recruits', title: '🧪 実験協力者募集', desc: '実験の被験者を早い者順で募集。 枠 (時間帯や日程) と定員を並べて公開、 メンバーは空いてる枠に自分でエントリー。 実施者は代理追加も可能。 参加者は自分の枠を後から確認できる。', defaultVisible: false },
-  { id: 'bokete', cat: 'game', url: '#/bokete', title: '😆 ぼけて (bokete)', desc: '画像大喜利。 お題 (画像 + 任意の一言) を出して、みんなでボケ (面白い一言) を書く → ⭐ で評価 → ⭐ 数で ランキング。 bokete.jp 的、 無料。', defaultVisible: true },
+    desc: 'ラボ全体のtop10を13種 (最長連続/累計ラボイン/オープナー/クローザー/早起き/夜間/徹夜/受けたリアクション/したリアクション/販売数/販売額/購入数/購入額) のカード並び。実績ページの対応バッジと同じ意味論。ホームの🏆アイコンからも開ける。', defaultVisible: true },
+  { id: 'exp-recruits', cat: 'research', url: '#/exp-recruits', title: '🧪 実験協力者募集', desc: '実験の被験者を早い者順で募集。枠 (時間帯や日程) と定員を並べて公開、メンバーは空いてる枠に自分でエントリー。実施者は代理追加も可能。参加者は自分の枠を後から確認できる。', defaultVisible: false },
+  { id: 'bokete', cat: 'game', url: '#/bokete', title: '😆 ぼけて (bokete)', desc: '画像大喜利。お題 (画像 + 任意の一言) を出して、みんなでボケ (面白い一言) を書く → ⭐ で評価 → ⭐ 数でランキング。 bokete.jp 的、無料。', defaultVisible: true },
   { id: 'setlog', cat: 'game', url: '#/setlog', title: '📸 setlog (LabPay 版 Vlog)', desc: '1 日を短いクリップ (写真 + キャプション) で断片記録するラボ内 Vlog (BeReal 的)。写真を随時ポスト → 日別・ユーザ別に時系列でまとまる。今日のみんなのフィードもある。', defaultVisible: true },
-  // v1344 中村さん要望「研究特化AIチャット は UI から 消して 良いな」→ カタログ から 削除 (v1263 停止済、 grandfather user 分 の view/router は 残置)。
+  // v1344 中村さん要望「研究特化AIチャットは UI から消して良いな」→ カタログから削除 (v1263 停止済、 grandfather user 分の view/router は残置)。
   { id: 'profile-book', cat: 'game', url: '#/profile-book', title: '🎀 プロフ帳 (平成デザ)', desc: '基本情報 + 心理テスト + 匿名質問。基本情報を 6 個以上埋めると +50pt reward。他人のプロフ閲覧 10pt (一度アンロックで無制限)、匿名質問投稿 10pt、質問回答 +5pt。手書き風フォント + パステル背景。', defaultVisible: true },
   { id: 'labo-eats', cat: 'trade', url: '#/labo-eats', title: '🍱 ラーボーイーツ', desc: '研究室にいる人が外にいる人に「ついで買い」を頼めるサービス。基本料 50pt + 距離 10pt/100m + 商品代 (実費)。依頼 → 引受 → 引渡 (商品代入力) → 依頼者が受取確定で全額支払。', defaultVisible: true },
   { id: 'tickets', cat: 'trade', url: '#/tickets', title: '🎫 チケット', desc: '「◯◯します」「◯◯できる権利」を pt で売買できる社内マーケット。誰でも発行 → 対象者が pt を払って使う → 発行者に pt 入る。例: 運転しますチケット / 席を選べる / 罰ゲーム回避 / 好きなお菓子選べる。発行時に対象 (全員 / 学年限定) と有効期限、発行枚数を指定。', defaultVisible: true },
@@ -203,18 +203,18 @@ export const APPS = [
   // v884 #457 実績 (アプリ一覧に入れ忘れていた)
   { id: 'achievements',  cat: 'archive', url: '#/achievements', title: '🏆 実績',           desc: 'ラボ内で達成してきた実績を一覧表示。売買/投稿/食べある記/ゲーム/筋トレ/論文要約など各種行動が記念バッジとして並び、AI が称号 (例「らぼ酒場の主」) を命名してくれる。', defaultVisible: true },
   // v1151 中村さん指摘「全てタブに入っていない機能が結構ある」→ 独立ページで動くのに apps.js 未登録だった 12 個を追加。
-  { id: 'send',          cat: 'trade',    url: '#/send',           title: '💸 個人送金',        desc: '相手を選んで pt を送る (プロフィール → 「💸 LabPay で送金」経由でも起動)。 効果音つき。', defaultVisible: true },
-  { id: 'wishlist',      cat: 'trade',    url: '#/wishlist',       title: '🛍 これ欲しい',      desc: 'ラボにあると嬉しい商品を掲示。 誰かが「出ました!」で達成扱い。 リクエスト → 出品 に つながる。', defaultVisible: true },
-  { id: 'tasks',         cat: 'lab-mgmt', url: '#/tasks',          title: '✅ タスク',           desc: '報酬付きの依頼 → 引き受け → 承認、 エスクロー預け。 時間枠分割 / 指名 / ファイル添付対応。', defaultVisible: true },
-  { id: 'invitations',   cat: 'lab-mgmt', url: '#/invitations',    title: '📢 募集',             desc: 'お昼ご飯 / ビアガーデン / ポケモン GO などカジュアル招集。 参加表明型、 6h で自動 close。', defaultVisible: true },
-  { id: 'wari',          cat: 'tools',    url: '#/wari',           title: '🧮 ワリカ (計算)',   desc: '合計金額 + 通貨 + 人数から 1 人あたりを 即算出。 多通貨 + JPY 換算、 DB 保存なしの計算機。 グループ内ワリカとは別、 その場計算用。', defaultVisible: true },
-  { id: 'my-games',      cat: 'game',     url: '#/my-games',       title: '🎮 自作ゲーム管理',   desc: 'cg2 (自作ゲーム v2 フレームワーク) 用に、 自作の 2 人対戦 JS をアップロード / 編集 / 削除。 詳細 → docs/CUSTOM_GAMES.md。', defaultVisible: true },
-  { id: 'walk-mode',     cat: 'health',   url: '#/walk-mode',      title: '🚶 散歩モード',       desc: '全画面マップ + Wake Lock + GPS 5 秒 polling で軌跡 polyline 記録 → SNS 投稿可能。 過去軌跡重ね合わせ表示。', defaultVisible: true },
-  { id: 'quotes',        cat: 'ai',       url: '#/quotes',         title: '💬 名言集',           desc: '偉人 / 漫画 / アニメの名言を日単位で 1 件。 ラボメンによる名言登録も可能。 ホームウィジェットとしても表示可 (デフォルト OFF)。', defaultVisible: true },
-  { id: 'papers-recent', cat: 'research', url: '#/papers-recent',  title: '📚 最近の論文まとめ', desc: 'ラボ内で 公開された 論文要約 / 全訳 / 査読 / Deep Research の 最近一覧。 ⭐ ブックマーク済 / いいね順 / 検索。', defaultVisible: true },
-  { id: 'news',          cat: 'shared',   url: '#/news',           title: '📰 ITニュース',  desc: '過去30日分のIT記事を初出日ごとに一覧。各記事にGPT要約 (日本語) が付いて中身を開かなくても概要が分かる。 (LabPay自体の更新履歴は右上の v番号 をタップで見られます)', defaultVisible: true },
+  { id: 'send',          cat: 'trade',    url: '#/send',           title: '💸 個人送金',        desc: '相手を選んで pt を送る (プロフィール → 「💸 LabPay で送金」経由でも起動)。効果音つき。', defaultVisible: true },
+  { id: 'wishlist',      cat: 'trade',    url: '#/wishlist',       title: '🛍 これ欲しい',      desc: 'ラボにあると嬉しい商品を掲示。誰かが「出ました!」で達成扱い。リクエスト → 出品につながる。', defaultVisible: true },
+  { id: 'tasks',         cat: 'lab-mgmt', url: '#/tasks',          title: '✅ タスク',           desc: '報酬付きの依頼 → 引き受け → 承認、エスクロー預け。時間枠分割 / 指名 / ファイル添付対応。', defaultVisible: true },
+  { id: 'invitations',   cat: 'lab-mgmt', url: '#/invitations',    title: '📢 募集',             desc: 'お昼ご飯 / ビアガーデン / ポケモン GO などカジュアル招集。参加表明型、 6h で自動 close。', defaultVisible: true },
+  { id: 'wari',          cat: 'tools',    url: '#/wari',           title: '🧮 ワリカ (計算)',   desc: '合計金額 + 通貨 + 人数から 1 人あたりを即算出。多通貨 + JPY 換算、 DB 保存なしの計算機。グループ内ワリカとは別、その場計算用。', defaultVisible: true },
+  { id: 'my-games',      cat: 'game',     url: '#/my-games',       title: '🎮 自作ゲーム管理',   desc: 'cg2 (自作ゲーム v2 フレームワーク) 用に、自作の 2 人対戦 JS をアップロード / 編集 / 削除。詳細 → docs/CUSTOM_GAMES.md。', defaultVisible: true },
+  { id: 'walk-mode',     cat: 'health',   url: '#/walk-mode',      title: '🚶 散歩モード',       desc: '全画面マップ + Wake Lock + GPS 5 秒 polling で軌跡 polyline 記録 → SNS 投稿可能。過去軌跡重ね合わせ表示。', defaultVisible: true },
+  { id: 'quotes',        cat: 'ai',       url: '#/quotes',         title: '💬 名言集',           desc: '偉人 / 漫画 / アニメの名言を日単位で 1 件。ラボメンによる名言登録も可能。ホームウィジェットとしても表示可 (デフォルト OFF)。', defaultVisible: true },
+  { id: 'papers-recent', cat: 'research', url: '#/papers-recent',  title: '📚 最近の論文まとめ', desc: 'ラボ内で公開された論文要約 / 全訳 / 査読 / Deep Research の最近一覧。 ⭐ ブックマーク済 / いいね順 / 検索。', defaultVisible: true },
+  { id: 'news',          cat: 'shared',   url: '#/news',           title: '📰 ITニュース',  desc: '過去30日分のIT記事を初出日ごとに一覧。各記事にGPT要約 (日本語) が付いて中身を開かなくても概要が分かる。 (LabPay自体の更新履歴は右上の v番号をタップで見られます)', defaultVisible: true },
   { id: 'activity',      cat: 'archive',  url: '#/activity',       title: '📊 活動ログ',         desc: 'ラボ内の最近の取引 / 投稿 / 参加 / 実績更新を時系列で一覧。', defaultVisible: true },
-  { id: 'history',       cat: 'archive',  url: '#/history',        title: '💴 個人取引履歴',     desc: '自分の 送金 / 購入 / 販売 / 実績報酬 / タスク報酬 の 履歴を時系列で。', defaultVisible: true },
+  { id: 'history',       cat: 'archive',  url: '#/history',        title: '💴 個人取引履歴',     desc: '自分の送金 / 購入 / 販売 / 実績報酬 / タスク報酬の履歴を時系列で。', defaultVisible: true },
 ];
 
 const APP_VIS_KEY = 'labpay-apps-visibility';
@@ -273,9 +273,9 @@ const CATEGORY_ORDER = {
     'file-browser',                 // 🗄 ファイルブラウザ
     'db-admin',                     // 🗃 phpMyAdmin
   ],
-  // v1001 共有タブ (中村さん指定順) / v1238 nkmr-albums 撤去 → photo + photo-portal を 最上位 に
+  // v1001 共有タブ (中村さん指定順) / v1238 nkmr-albums 撤去 → photo + photo-portal を最上位に
   'shared': [
-    'photo-portal',                 // 📷 photo.nkmr.io を 開く (外部) v1229 (v1268 で 唯一)
+    'photo-portal',                 // 📷 photo.nkmr.io を開く (外部) v1229 (v1268 で唯一)
     'ai-sub',                       // 🤖 AI サブスク v1251
     'zemi-videos',                  // 🎥 ゼミ動画
     'chat-rooms',                   // 💬 チャット
@@ -302,8 +302,8 @@ export async function renderApps(ctx = {}) {
   const filteredCats = filterCat
     ? APP_CATEGORIES.filter(c => c.id === filterCat)
     : APP_CATEGORIES;
-  // v1342 AI サブスク が 覆う 機能 の 一覧 (ai.php ai_actual_charged の $aiTypes と 対応)。
-  //   契約中 は カード に 緑背景 + 「AIサブスク中につき無料」 バッジ を 付ける。
+  // v1342 AI サブスクが覆う機能の一覧 (ai.php ai_actual_charged の $aiTypes と対応)。
+  //   契約中はカードに緑背景 + 「AIサブスク中につき無料」バッジを付ける。
   const AI_SUB_COVERED = new Set([
     'paper-summary', 'paper-translate-full', 'resume-check', 'paper-review',
     'exp-plan', 'rewriter', 'deep-research',
@@ -315,13 +315,13 @@ export async function renderApps(ctx = {}) {
     const isExternal = /^https?:\/\//.test(a.url);
     const attr = isExternal ? ' target="_blank" rel="noopener noreferrer"' : '';
     const arrow = isExternal ? '↗' : '→';
-    // v1342 AI サブスク 契約中 かつ カバー 対象 なら 緑背景 + バッジ を 添える
+    // v1342 AI サブスク契約中かつカバー対象なら緑背景 + バッジを添える
     const aiCovered = aiSubActive && AI_SUB_COVERED.has(a.id);
     const bgStyle = aiCovered ? ' style="background:#ecfdf5; border-left:3px solid #10b981"' : '';
     const freeBadge = aiCovered
       ? ' <span class="tag" style="background:#10b981; color:#fff; font-size:10px; padding:1px 6px; border-radius:6px; margin-left:4px">AIサブスク中につき無料</span>'
       : '';
-    // v1343 v1342 で研究ノート カード だけ full-row (全幅) に した の は 中村さん要望 の 誤解釈 (「チャットと同じ」= カード では なく Cosense アプリ 起動時 の 横幅 の こと) だった の で 削除、 通常 カード に 戻す。
+    // v1343 v1342 で研究ノートカードだけ full-row (全幅) にしたのは中村さん要望の誤解釈 (「チャットと同じ」= カードではなく Cosense アプリ起動時の横幅のこと) だったので削除、通常カードに戻す。
     return `
     <a class="list-item" href="${a.url}"${attr}${bgStyle}>
       <div class="grow">

@@ -50,7 +50,7 @@ export async function renderPaperTranslate() {
         論文 PDF をアップすると、全体要約 → RQ/仮説 + 結果 → 主張する貢献 → 章立て要約 (重要図表 inline) →
         今後の課題 → 落合メソッドまとめという順番で構造化して返します。全体 1500-2500 字 (≒ 3-5 分で読める分量)。
       </p>
-      <!-- v1280 中村さん要望 で 順序 変更: (1) PDF → (2) モデル → (3) 同時依頼 → (4) 共有 -->
+      <!-- v1280 中村さん要望で順序変更: (1) PDF → (2) モデル → (3) 同時依頼 → (4) 共有 -->
       <label class="field">
         <span class="lbl">① 論文 PDF (最大 30 MB)</span>
         <input type="file" id="pt-file" accept="application/pdf,.pdf">
@@ -63,20 +63,20 @@ export async function renderPaperTranslate() {
         </select>
         <div class="hint-sm" id="pt-model-info" style="margin-top:4px; font-size:11px"></div>
       </label>
-      <!-- v1221 同時依頼。 v1280 「(お得!)」表記削除 (中村さん指摘「別に お得 じゃないのでは？」)
-           = backend は 単に POST を 2 本 順に投げる だけで 割引 は 無い。 -->
+      <!-- v1221 同時依頼。 v1280 「(お得!)」表記削除 (中村さん指摘「別にお得じゃないのでは？」)
+           = backend は単に POST を 2 本順に投げるだけで割引は無い。 -->
       <fieldset class="field" style="border:1px dashed #7b3fa0; border-radius:6px; padding:8px; margin:8px 0; background:#faf5ff">
-        <legend style="font-size:12px; color:#4a106d; font-weight:600">③ 📑📑 同時 依頼 (任意)</legend>
+        <legend style="font-size:12px; color:#4a106d; font-weight:600">③ 📑📑 同時依頼 (任意)</legend>
         <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600">
           <input type="checkbox" id="pt-also-full" checked>
-          要約 と 一緒に 全訳 も 依頼する
+          要約と一緒に全訳も依頼する
         </label>
         <div class="hint-sm" style="font-size:11px; color:#6b7280; margin:2px 0 6px 22px">
-          1 度の アップロード で 両方 まとめて 依頼 できます (料金は 別々 に 依頼した 場合と 同じ)。
+          1 度のアップロードで両方まとめて依頼できます (料金は別々に依頼した場合と同じ)。
         </div>
         <div id="pt-also-full-opts" style="margin-top:6px">
           <label class="field" style="margin:4px 0">
-            <span class="lbl" style="font-size:11px">全訳 の 翻訳方向</span>
+            <span class="lbl" style="font-size:11px">全訳の翻訳方向</span>
             <select id="pt-ft-direction" style="font-size:12px">
               <option value="en2ja" selected>英語 → 日本語 (E→J)</option>
               <option value="ja2en">日本語 → 英語 (J→E、 5x 料金)</option>
@@ -253,7 +253,7 @@ function updateModelInfo(d) {
   if (!sel || !info) return;
   const models = d.models || { 'gpt-4o': 20 };
   const def = d.default_model || 'gpt-4o';
-  // v1342 AI サブスク 契約中 は 「無料」表示 に (state.me.ai_sub_active)
+  // v1342 AI サブスク契約中は「無料」表示に (state.me.ai_sub_active)
   const aiSubActive = !!state.me?.ai_sub_active;
   // v916 選択肢に「共有なら Xpt」を明記 (画面で見えるまま比較できるように)
   sel.innerHTML = Object.entries(models).map(([m, pt]) => {
@@ -285,12 +285,12 @@ function updateModelInfo(d) {
   refresh();
 }
 
-// v796 #398 全訳オプションのセットアップ / v1221 default ON なので 初期 load 済ませる + 合計 表示
+// v796 #398 全訳オプションのセットアップ / v1221 default ON なので初期 load 済ませる + 合計表示
 let ftSettingsCache = null;
-// v1232 fb (中村さん) 「最新の依頼で 同時全訳 が 効いていない」→
-//  PDF 選択 → 即 送信 で ftSettingsCache が まだ 無く、 modSel.value === '' に なって
-//  条件 fail → 全訳 スキップ が root cause。 loadAndBuild の Promise を 外部 (go) から
-//  await できる ように 公開 する。
+// v1232 fb (中村さん) 「最新の依頼で同時全訳が効いていない」→
+//  PDF 選択 → 即送信で ftSettingsCache がまだ無く、 modSel.value === '' になって
+//  条件 fail → 全訳スキップが root cause。 loadAndBuild の Promise を外部 (go) から
+//  await できるように公開する。
 let _ftLoadPromise = null;
 async function ensureFtLoaded() {
   if (ftSettingsCache) return true;
@@ -318,7 +318,7 @@ async function setupAlsoFullTranslate() {
     if (toggle.checked) { _ftLoadPromise = loadAndBuild(); await _ftLoadPromise; }
     else refreshTopCombinedCost();
   });
-  // v1342 AI サブスク 契約中 は 「無料」 表記 に
+  // v1342 AI サブスク契約中は「無料」表記に
   const aiSubActive = () => !!state.me?.ai_sub_active;
   function rebuildFtModels() {
     if (!ftSettingsCache) return;
@@ -353,12 +353,12 @@ async function setupAlsoFullTranslate() {
   modSel.addEventListener('change', refreshCost);
   document.getElementById('pt-auto-share')?.addEventListener('change', () => { refreshCost(); refreshTopCombinedCost(); });
   document.getElementById('pt-model')?.addEventListener('change', refreshTopCombinedCost);
-  // 初期 (default ON) で 全訳 モデル を 読み込む。 Promise を 保持して go() から await できる ように
+  // 初期 (default ON) で全訳モデルを読み込む。 Promise を保持して go() から await できるように
   if (toggle.checked) _ftLoadPromise = loadAndBuild();
 }
 
-// v1221 モデル 額 は 同時依頼 の チェック 状態 で 「合計」表示 を 切替
-// v1222 中村さん指摘「下のボタンも 要約&全訳 を 作る (合計pt) に なるべき」→ pt-go ラベル も 同時 更新
+// v1221 モデル額は同時依頼のチェック状態で「合計」表示を切替
+// v1222 中村さん指摘「下のボタンも要約&全訳を作る (合計pt) になるべき」→ pt-go ラベルも同時更新
 function refreshTopCombinedCost() {
   const info = document.getElementById('pt-model-info');
   const goBtn = document.getElementById('pt-go');
@@ -376,30 +376,30 @@ function refreshTopCombinedCost() {
     ftBase = models[document.getElementById('pt-ft-model')?.value] || 0;
   }
   const ftPt = shared ? Math.floor(ftBase / 2) : ftBase;
-  // v1342 AI サブスク 契約中 は 「無料」 表記 に (ptは 0 相当、 実 課金 は ai_charge_or_cover で スキップ)
+  // v1342 AI サブスク契約中は「無料」表記に (ptは 0 相当、実課金は ai_charge_or_cover でスキップ)
   const aiSubActive = !!state.me?.ai_sub_active;
   if (alsoFull && ftBase > 0) {
     if (aiSubActive) {
       info.innerHTML = `要約 + 全訳 <span style="color:#059669; font-weight:600">AIサブスク中につき無料</span>`;
-      if (goBtn) goBtn.textContent = `📑 要約 ＆ 全訳 を 作る (AIサブスク中につき無料)`;
+      if (goBtn) goBtn.textContent = `📑 要約＆全訳を作る (AIサブスク中につき無料)`;
     } else {
       info.innerHTML = `要約 ${sumPt}pt + 全訳 ${ftPt}pt = <b style="color:#4a106d">合計 ${sumPt + ftPt}pt</b>` +
-        (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : '');
-      if (goBtn) goBtn.textContent = `📑 要約 ＆ 全訳 を 作る (${sumPt + ftPt}pt)`;
+        (shared ? ` <span style="color:#15803d">(共有 ON、半額)</span>` : '');
+      if (goBtn) goBtn.textContent = `📑 要約＆全訳を作る (${sumPt + ftPt}pt)`;
     }
   } else {
     if (aiSubActive) {
       info.innerHTML = `要約 <span style="color:#059669; font-weight:600">AIサブスク中につき無料</span>`;
-      if (goBtn) goBtn.textContent = `📑 要約 を 作る (AIサブスク中につき無料)`;
+      if (goBtn) goBtn.textContent = `📑 要約を作る (AIサブスク中につき無料)`;
     } else {
       info.innerHTML = `要約 ${sumPt}pt` +
-        (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : ' <span style="color:#6b7280">(基本額)</span>');
-      if (goBtn) goBtn.textContent = `📑 要約 を 作る (${sumPt}pt)`;
+        (shared ? ` <span style="color:#15803d">(共有 ON、半額)</span>` : ' <span style="color:#6b7280">(基本額)</span>');
+      if (goBtn) goBtn.textContent = `📑 要約を作る (${sumPt}pt)`;
     }
   }
 }
-// 要約 モデル の 基本額 は loadHistory で option に 埋め込まれる。 select 側 の 値 だけ から は 引けない ので
-// select の 現在 option の text から 「NN pt」を 抽出 する 簡易 実装。
+// 要約モデルの基本額は loadHistory で option に埋め込まれる。 select 側の値だけからは引けないので
+// select の現在 option の text から「NN pt」を抽出する簡易実装。
 function _sumModelBaseCost(modelVal) {
   const sel = document.getElementById('pt-model');
   if (!sel) return null;
@@ -420,15 +420,15 @@ async function go() {
   const startedHash = location.hash;
   // v796 #398 同時全訳オプション
   const alsoFull = document.getElementById('pt-also-full')?.checked;
-  // v1232 fb (中村さん) 「最新の依頼で 同時全訳 が 効いていない」→ setupAlsoFullTranslate の
-  //  loadAndBuild が fire-and-forget で await されておらず、 PDF 選択 直後 に 送信 すると
-  //  ftSettingsCache が 未 load、 modSel.value が '' で 条件 fail → 全訳 スキップ が root cause。
-  //  ここで 同時依頼 チェック時 のみ 明示的 に load 完了 を 待つ。
+  // v1232 fb (中村さん) 「最新の依頼で同時全訳が効いていない」→ setupAlsoFullTranslate の
+  //  loadAndBuild が fire-and-forget で await されておらず、 PDF 選択直後に送信すると
+  //  ftSettingsCache が未 load、 modSel.value が '' で条件 fail → 全訳スキップが root cause。
+  //  ここで同時依頼チェック時のみ明示的に load 完了を待つ。
   if (alsoFull) await ensureFtLoaded();
   const ftDir   = document.getElementById('pt-ft-direction')?.value;
   const ftModel = document.getElementById('pt-ft-model')?.value;
-  // v1232 同時依頼 ON なのに モデル が 空 は 明示的 に エラー にする (静かな スキップ が
-  //  「効いていない」の 原因 だった の で 二度と 起こさない)
+  // v1232 同時依頼 ON なのにモデルが空は明示的にエラーにする (静かなスキップが
+  //  「効いていない」の原因だったので二度と起こさない)
   if (alsoFull && (!ftDir || !ftModel)) {
     toast('⚠️ 全訳モデルがまだ読み込まれていません。もう一度お試しください。');
     btn.disabled = false; btn.textContent = oldText;
@@ -628,9 +628,9 @@ async function loadSharedList(q) {
 // /#/paper-summary/r/:token  個別結果ページ。
 export async function renderPaperTranslateShared() {
   // v1330 fb#516: v1227 の resetFsInnerNav() を撤去。 v1228 で router の applyFullscreenMode
-  //   が 「兄弟 アプリ 間 の 遷移 (別 top-part) は count しない、 同一 アプリ 内 nav (例: 要約一覧 → 要約詳細)
-  //   だけ count する」 に なった 以上、 detail 側 で count を 0 に すると 「一覧 → 詳細 → ✕」 の 深さ が
-  //   消えて しまい ✕ で 一覧 では なく entry (研究 アプリ 一覧) に 飛んで しまう。 router 側 の 対策 に 任せる。
+  //   が「兄弟アプリ間の遷移 (別 top-part) は count しない、同一アプリ内 nav (例: 要約一覧 → 要約詳細)
+  //   だけ count する」になった以上、 detail 側で count を 0 にすると「一覧 → 詳細 → ✕」の深さが
+  //   消えてしまい ✕ で一覧ではなく entry (研究アプリ一覧) に飛んでしまう。 router 側の対策に任せる。
   const token = decodeURIComponent(location.hash.split('/').pop() || '');
   const app = document.getElementById('app');
   if (sharedPollTimer) { clearInterval(sharedPollTimer); sharedPollTimer = null; }
@@ -760,7 +760,7 @@ async function paintResult(d, token) {
 
     ${ptRenderKeywords(r.keywords)}
 
-    <!-- v1214/v1223 中村さん要望「タブは 著者情報 の 下 に (著者情報 まで は 同一 の 内容 の はず)」→ 著者カード + キーワード の 直後 に 独立 して 配置。 -->
+    <!-- v1214/v1223 中村さん要望「タブは著者情報の下に (著者情報までは同一の内容のはず)」→ 著者カード + キーワードの直後に独立して配置。 -->
     ${renderPaperCrossRefsAndCreate(d)}
 
     ${r.summary_one_paragraph ? `
@@ -797,7 +797,7 @@ async function paintResult(d, token) {
         mod.mountInteractionsCard({ apiBase: '/api/ai/paper_translate', refId: d.id });
       }
     } catch (_) { /* fall through */ }
-    // v1219/v1220 詳細ページ で だけ 💬 fab を 出す (中村さん指摘「どこでも ついてくる の 気になる」)
+    // v1219/v1220 詳細ページでだけ 💬 fab を出す (中村さん指摘「どこでもついてくるの気になる」)
     setAiContext({
       sourceType: 'paper_translate', sourceId: Number(d.id),
       title: (r.title_ja || r.title_orig || d.pdf_name || '論文要約'),
@@ -827,7 +827,7 @@ async function paintResult(d, token) {
       await refreshShared(token, document.getElementById('app'));
     } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = old; }
   });
-  // v1331 fb#514 詳細から その場で 削除 (PDF・ページ画像 も 一緒 に)。 削除後 は 履歴一覧 に 戻る。
+  // v1331 fb#514 詳細からその場で削除 (PDF・ページ画像も一緒に)。削除後は履歴一覧に戻る。
   document.getElementById('pt-delete')?.addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
     if (!confirm('この要約を完全に削除しますか?\n(PDF とページ画像も一緒に削除、復元不可)')) return;
@@ -835,7 +835,7 @@ async function paintResult(d, token) {
     try {
       await del('/api/ai/paper_translate/' + d.id);
       toast('削除しました');
-      // 履歴一覧 (自分の履歴タブ) に 戻る
+      // 履歴一覧 (自分の履歴タブ) に戻る
       location.hash = '#/paper-summary?tab=mine';
     } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; btn.textContent = old; }
   });
@@ -893,9 +893,9 @@ async function paintResult(d, token) {
   mountAuthorAvatars(document.getElementById('app'));
 }
 
-// v813/v1214 cross_refs を「要約 / 全訳」の タブバー に 昇華 (中村さん要望
-//   「1 つの論文を 扱うので タブで 切り替える 形式にしたら 良いのかも」)。
-//   スラッグ は そのまま、 タブ UI で 相互リンク を 明示。
+// v813/v1214 cross_refs を「要約 / 全訳」のタブバーに昇華 (中村さん要望
+//   「1 つの論文を扱うのでタブで切り替える形式にしたら良いのかも」)。
+//   スラッグはそのまま、タブ UI で相互リンクを明示。
 function renderPaperCrossRefsAndCreate(d) {
   return _renderPaperTabBar(d, 'summary');
 }
@@ -915,7 +915,7 @@ function _renderPaperTabBar(d, currentKind) {
   const tabHtml = (label, isActive, href, createId, canCreate) => {
     if (isActive) return `<span style="${base}; ${active}; font-weight:600">${label}</span>`;
     if (href)     return `<a href="${href}" style="${base}; ${linked}">${label}</a>`;
-    if (canCreate) return `<button class="btn" id="${createId}" style="${base}; ${create}; cursor:pointer">＋ ${label} を 作る</button>`;
+    if (canCreate) return `<button class="btn" id="${createId}" style="${base}; ${create}; cursor:pointer">＋ ${label} を作る</button>`;
     return `<span style="${base}; ${grey}">${label} (未作成)</span>`;
   };
   const summaryTab = tabHtml('📄 要約', currentKind === 'summary',
@@ -924,8 +924,8 @@ function _renderPaperTabBar(d, currentKind) {
   const fullTab = tabHtml('📑 全訳', currentKind === 'full',
     fullRef ? `#/${escapeHtml(fullRef.url_slug)}/r/${escapeHtml(fullRef.share_token)}` : null,
     'pt-make-full', canCreateFull);
-  // v1217 中村さん指摘「タブ 表示 が おかしい」→ .row は 子要素 を flex:1 で 引き伸ばす CSS が あり
-  //   タブ が 巨大化 していた。 単純 な display:flex で 幅 を 子要素 の 実サイズ に。
+  // v1217 中村さん指摘「タブ表示がおかしい」→ .row は子要素を flex:1 で引き伸ばす CSS があり
+  //   タブが巨大化していた。単純な display:flex で幅を子要素の実サイズに。
   return `<div style="display:flex; gap:4px; margin-top:6px; border-bottom:2px solid #7b3fa0; padding-bottom:0; flex-wrap:wrap">${summaryTab}${fullTab}</div>`;
 }
 
@@ -953,9 +953,9 @@ async function bindMakeFullTranslate(d) {
       <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px">
         <input type="checkbox" id="mft-auto-share"> 🌐 完了と同時に公開 ON
       </label>`;
-    // v1217 中村さん報告「キャンセルが押せない」の 原因: openModal の onClick は
-    //   (api) を 受け取る 契約 だが (close) と 誤解し 呼ぶと api() = TypeError で 沈黙。
-    //   primary: true も 効かない (kind: 'primary' が 正解)。 両方 修正。
+    // v1217 中村さん報告「キャンセルが押せない」の原因: openModal の onClick は
+    //   (api) を受け取る契約だが (close) と誤解し呼ぶと api() = TypeError で沈黙。
+    //   primary: true も効かない (kind: 'primary' が正解)。両方修正。
     openModal({
       title: '📑 全訳を作る',
       bodyHtml: html,

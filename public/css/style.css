@@ -85,8 +85,8 @@ header .brand { font-weight: 800; font-size: var(--text-xl); color: var(--primar
 header .brand-version {
   font-size: var(--text-xs); font-weight: 600; color: var(--muted);
   margin-left: 2px; vertical-align: super;
-  /* v1152 <span> → <button> に変更 (バージョン履歴タップ 修復) しても
-     見た目 は 変わらないよう button デフォルトスタイルを消す */
+  /* v1152 <span> → <button> に変更 (バージョン履歴タップ修復) しても
+     見た目は変わらないよう button デフォルトスタイルを消す */
   background: transparent; border: none; padding: 0; font-family: inherit; cursor: pointer;
 }
 header .brand-version:hover { color: var(--primary); }
@@ -116,12 +116,12 @@ body.app-fullscreen #install-banner { display: none !important; }
 body.app-fullscreen main#app { max-width: none; padding: 8px 10px 12px 10px; }
 body.app-fullscreen { background: #fff; }
 /* v1278 中村さん要望「いろいろな機能の横幅がウインドウサイズになってしまってるのが
-   使いにくいものが結構ある。 ボードとか全画面を使いたいやつ以外は、横幅をある程度
+   使いにくいものが結構ある。ボードとか全画面を使いたいやつ以外は、横幅をある程度
    固定したい」→ fullscreen デフォルトは 720px (ホームと同じ) に絞る。
    本当に全画面が欲しい機能 (board / kanban / chat-rooms) だけ 1400px で例外。
-   旧: v867 で全 fullscreen 1400px にしていた (paper 系の右溢れ対策) が、 過剰に広い
-   ので、 今回 720px に戻して paper 系 の overflow-wrap 対策は残す。
-   sns 系は 640px の 個別上書きが元々ある (140-147行) ので そのまま。 */
+   旧: v867 で全 fullscreen 1400px にしていた (paper 系の右溢れ対策) が、過剰に広い
+   ので、今回 720px に戻して paper 系の overflow-wrap 対策は残す。
+   sns 系は 640px の個別上書きが元々ある (140-147行) のでそのまま。 */
 body.app-fullscreen main#app > * {
   max-width: 720px;
   margin-left: auto;
@@ -134,12 +134,12 @@ body.app-fullscreen[data-view^="chat-rooms"] main#app > * {
   max-width: none;
 }
 .card { overflow-wrap: anywhere; word-break: break-word; }
-/* v868 #450 論文要約 / 全訳 系 ページ で 「右 に 溢れる」 件 の 強化 防御。
-   v867 で 全カード に 1400px max-width + overflow-wrap を 入れた が、 paper 系
-   ページ 内 の フォーム input や 詳細 ページ の 長い 行 が なお 親 を 押し広げて
-   いた。 paper 系 限定 で input / select / textarea を max-width:100% に
-   強制、 .row 系 を flex-wrap:wrap + 子 に min-width:0 を 入れて 確実 に 親 内
-   で 収まる ように。 */
+/* v868 #450 論文要約 / 全訳系ページで「右に溢れる」件の強化防御。
+   v867 で全カードに 1400px max-width + overflow-wrap を入れたが、 paper 系
+   ページ内のフォーム input や詳細ページの長い行がなお親を押し広げて
+   いた。 paper 系限定で input / select / textarea を max-width:100% に
+   強制、 .row 系を flex-wrap:wrap + 子に min-width:0 を入れて確実に親内
+   で収まるように。 */
 body[data-view^="paper-"] main#app input,
 body[data-view^="paper-"] main#app select,
 body[data-view^="paper-"] main#app textarea {
@@ -150,7 +150,7 @@ body[data-view^="paper-"] main#app .row { flex-wrap: wrap; }
 body[data-view^="paper-"] main#app .row > * { min-width: 0; }
 body[data-view^="paper-"] main#app .card * { max-width: 100%; }
 
-/* v902 らぼったー (SNS) は PC で Twitter / X 風の narrow column に。 タイムライン系は
+/* v902 らぼったー (SNS) は PC で Twitter / X 風の narrow column に。タイムライン系は
    横にだだ広いと視線移動が増えて読みにくい (ユーザ要望)。 fullscreen mode の中で
    さらに max-width を絞る。 mobile では viewport幅に追従するので問題なし。 */
 body.app-fullscreen[data-view^="sns"] main#app > * { max-width: 640px; }
@@ -170,9 +170,9 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
 .card h2 { margin: 0 0 8px; font-size: var(--text-lg); }
 .card h3 { margin: 6px 0; font-size: var(--text-base); color: var(--muted); font-weight: 600; }
 
-/* ページ先頭の「タイトル + 説明だけ」 カード — タップできる list-item と並ぶと
+/* ページ先頭の「タイトル + 説明だけ」カード — タップできる list-item と並ぶと
    見分けがつかない問題があったので、薄い primary-soft 背景 + 影なしで
-   「これは情報、押せない」 を視覚的に示す。 */
+   「これは情報、押せない」を視覚的に示す。 */
 .card.page-header {
   background: var(--primary-soft);
   border-color: var(--primary-soft);
@@ -181,7 +181,7 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
 .card.page-header h2 { color: var(--primary); }
 
 /* 画像つき list-item (本タイプ): 左に大きめの cover image (110×90) + 右にテキスト。
-   販売 / オークション / 集金 など 「商品 / 取引」 系の リストで使う。 */
+   販売 / オークション / 集金など「商品 / 取引」系のリストで使う。 */
 .list-item.with-cover {
   padding: 0;
   overflow: hidden;
@@ -195,7 +195,7 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
   flex-shrink: 0;
   position: relative;       /* v376 price-badge の anchor */
 }
-/* v376 商品ポイント / プレゼント表記 を 画像の左下に半透明バッジで オーバーレイ。 */
+/* v376 商品ポイント / プレゼント表記を画像の左下に半透明バッジでオーバーレイ。 */
 .list-item.with-cover .price-badge {
   position: absolute;
   left: 6px; bottom: 6px;
@@ -220,9 +220,9 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
   border-right: 1px solid var(--line);
 }
 
-/* v373 ホームのリスト 行高さを 統一 (内容で バラつくのを 抑える)。
+/* v373 ホームのリスト行高さを統一 (内容でバラつくのを抑える)。
    data-card-id を持つカード (= ホーム専用カード) 配下の list-item 全部に適用。
-   通常行 80px、 with-cover 行 96px。 はみ出る分は overflow:hidden で クリップ。 */
+   通常行 80px、 with-cover 行 96px。はみ出る分は overflow:hidden でクリップ。 */
 .card[data-card-id] .list-item {
   height: 80px;
   min-height: 80px;
@@ -233,37 +233,37 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
   height: 96px;
   min-height: 96px;
 }
-/* 「＋ 新しく〜」 動線は 1 行で 高さを 抑える (= ボタンに見せる)。 */
+/* 「＋新しく〜」動線は 1 行で高さを抑える (= ボタンに見せる)。 */
 .card[data-card-id] .list-item.add-row {
   height: auto;
   min-height: 44px;
 }
-/* v688 #272 学会 〆切 widget は 1 行 = 1 item で 詰めて 見せたい ので、 80px の
-   既定 高 を 解除。 多数件 を 縦 に 並べる ため。 */
+/* v688 #272 学会〆切 widget は 1 行 = 1 item で詰めて見せたいので、 80px の
+   既定高を解除。多数件を縦に並べるため。 */
 .card[data-card-id="conf-deadlines"] .list-item,
 .card[data-card-id="it-news"]        .list-item {
   height: auto;
   min-height: 0;
 }
-/* v378 ホームの ヒーロー画像幅は 50% に縮める (情報量が多いので テキスト幅を確保)。
-   斜めカットも やや浅め (18px) に。 テキストは 50% 起点 → 画像と かぶらない。 */
+/* v378 ホームのヒーロー画像幅は 50% に縮める (情報量が多いのでテキスト幅を確保)。
+   斜めカットもやや浅め (18px) に。テキストは 50% 起点 → 画像とかぶらない。 */
 .card[data-card-id] .list-item.with-cover.hero > .cover-img {
   width: 50%;
   clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%);
 }
 .card[data-card-id] .list-item.with-cover.hero > .grow {
   padding-left: calc(50% + 6px);
-  /* テキストが画像にかぶらないので 強い backdrop は不要だが、 斜めカットで 画像の
-     上 右隅と テキスト左端が近接する箇所だけ ほんのり 白く。 */
+  /* テキストが画像にかぶらないので強い backdrop は不要だが、斜めカットで画像の
+     上右隅とテキスト左端が近接する箇所だけほんのり白く。 */
   background: linear-gradient(to right,
     rgba(255, 255, 255, 0) 45%,
     rgba(255, 255, 255, 0.85) 55%,
     rgba(255, 255, 255, 0.95) 70%);
 }
 
-/* v372 ヒーロー風 list-item: with-cover に .hero を併用すると、 画像が 左端から 64%
-   を埋めて 右端 22px に斜めカット。 タイトル等は 画像の右 36% に寄せる。
-   グループ / 募集 で使用。 */
+/* v372 ヒーロー風 list-item: with-cover に .hero を併用すると、画像が左端から 64%
+   を埋めて右端 22px に斜めカット。タイトル等は画像の右 36% に寄せる。
+   グループ / 募集で使用。 */
 .list-item.with-cover.hero {
   align-items: stretch;
   min-height: 96px;
@@ -279,13 +279,13 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
 }
 .list-item.with-cover.hero > .grow {
-  /* v374 ヒーロー部分に 多少 かぶってよい (= テキスト幅を確保)。 縦の はみ出しは
+  /* v374 ヒーロー部分に多少かぶってよい (= テキスト幅を確保)。縦のはみ出しは
      親 list-item の overflow:hidden + height:96 でクリップ。 */
   padding-left: calc(40% + 8px);
   position: relative;
   z-index: 2;
-  /* v376 ヒーロー画像と テキストが かぶる部分は 半透明白の グラデーションで 視認性を確保。
-     左側 (画像が見える部分) は 透明、 右側 (テキスト) は 不透明寄り に。 */
+  /* v376 ヒーロー画像とテキストがかぶる部分は半透明白のグラデーションで視認性を確保。
+     左側 (画像が見える部分) は透明、右側 (テキスト) は不透明寄りに。 */
   background: linear-gradient(to right,
     rgba(255, 255, 255, 0) 30%,
     rgba(255, 255, 255, 0.82) 58%,
@@ -296,16 +296,16 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
   font-size: 36px;
   border-right: none;
 }
-/* ホームの 「＋ 新しく〜」 行 — 薄い背景で 「これは行動を促す行」 と分かる。 */
+/* ホームの「＋新しく〜」行 — 薄い背景で「これは行動を促す行」と分かる。 */
 .list .list-item.add-row {
   background: var(--primary-soft);
 }
-/* ホームのカード非表示 — 設定 → ホームのカスタマイズ で外したカードに付く。
+/* ホームのカード非表示 — 設定 → ホームのカスタマイズで外したカードに付く。
    [hidden] 属性より強制したいので !important。 */
 .home-card-user-hidden { display: none !important; }
 .tab-user-hidden { display: none !important; }
 
-/* 折りたたみカード — 各 view で「＋ 新規X」をタップして開く形 (新規請求 / 募集 /
+/* 折りたたみカード — 各 view で「＋新規X」をタップして開く形 (新規請求 / 募集 /
    グループ / 出品 / 詳細管理 …)。.card より padding 控えめ、summary を太字に。 */
 .card.collapsible-form { padding: var(--space-3) var(--space-4); }
 .card.collapsible-form > summary {
@@ -321,20 +321,20 @@ body[data-view] main#app { margin: 0 auto; width: 100%; }
 }
 .collapsible-sub > summary::-webkit-details-marker { display: none; }
 
-/* Small descriptive text utility. 「muted + 細字」 の組み合わせを集約。
+/* Small descriptive text utility. 「muted + 細字」の組み合わせを集約。
    .hint = --text-md (13px) / .hint-sm = --text-sm (12px) */
 .hint { color: var(--muted); font-size: var(--text-md); }
 .hint-sm { color: var(--muted); font-size: var(--text-sm); }
 
 /* v507 ホームの折り畳まれたカード (画面下のもの) を content-visibility:auto で描画
-   遅延。 これにより、 そのカード内の background-image cover や img もスクロール到達
-   まで fetch されない。 起動直後の並列画像 fetch の渋滞 (Network タブで 5 秒の
-   waterfall を作っていた) が劇的に減る。 Chrome 85+/Safari 18+/Edge で有効、 古い
+   遅延。これにより、そのカード内の background-image cover や img もスクロール到達
+   まで fetch されない。起動直後の並列画像 fetch の渋滞 (Network タブで 5 秒の
+   waterfall を作っていた) が劇的に減る。 Chrome 85+/Safari 18+/Edge で有効、古い
    ブラウザでは no-op (劣化しない)。 */
 #home-cards-region > .card { content-visibility: auto; contain-intrinsic-size: auto 220px; }
 
 /* v501 #111 ホームのウィジェットが読み込み中であることを skeleton shimmer で示す。
-   既存の 「読み込み中…」 テキスト placeholder の代替として使用。 */
+   既存の「読み込み中…」テキスト placeholder の代替として使用。 */
 .home-skel-bars {
   display: flex; flex-direction: column; gap: 8px; padding: 6px 0;
 }
@@ -379,7 +379,7 @@ input[type=text], input[type=number], input[type=url], input[type=email], select
   width: 100%; padding: 10px var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--line); background: white;
 }
 textarea { min-height: 80px; resize: vertical; }
-/* v783 #381 ファイル 入力 が 大きすぎる ので コンパクト 化。 アプリ 全体 で 適用。 */
+/* v783 #381 ファイル入力が大きすぎるのでコンパクト化。アプリ全体で適用。 */
 input[type=file] {
   font-size: 12px;
   padding: 2px 0;
@@ -400,13 +400,13 @@ input[type=file]::file-selector-button {
 /* Lists */
 .list { display: grid; gap: var(--space-2); }
 /* v1278 中村さん要望「アプリケーションとかそこら辺は 1 列だけど 2 列にしてしまう方が良い」
-   → apps.js の 各カテゴリ list を 2 列 (画面狭ければ 1 列に自動 fallback) に。 */
+   → apps.js の各カテゴリ list を 2 列 (画面狭ければ 1 列に自動 fallback) に。 */
 .list.apps-grid-2col { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-/* v1343 中村さん要望「チャット と 同じ で 横幅 しっかり 取りたい」は 研究ノート カード の
- * 見栄え で は なく、 Cosense アプリ を 開いた 時 の view 側 の 横幅 の 話 だった。
- * v1342 の カード 全幅 化 は 撤回 (rule 削除)、 代わり に fullscreen 時 の
- * main#app > * に かかる max-width:1400px を research-notes だけ 解除。
- * (チャット は cr-shell が position:fixed で ビューポート 全幅、 それ に 準ずる) */
+/* v1343 中村さん要望「チャットと同じで横幅しっかり取りたい」は研究ノートカードの
+ * 見栄えではなく、 Cosense アプリを開いた時の view 側の横幅の話だった。
+ * v1342 のカード全幅化は撤回 (rule 削除)、代わりに fullscreen 時の
+ * main#app > * にかかる max-width:1400px を research-notes だけ解除。
+ * (チャットは cr-shell が position:fixed でビューポート全幅、それに準ずる) */
 body.app-fullscreen[data-view="research-notes"] main#app > * { max-width: none; }
 .list-item {
   background: white; border: 1px solid var(--line); border-radius: var(--radius);
@@ -414,7 +414,7 @@ body.app-fullscreen[data-view="research-notes"] main#app > * { max-width: none; 
 }
 .list-item .meta { color: var(--muted); font-size: var(--text-sm); }
 
-/* v361/v362 グループ予定 DnD: ドロップ候補の視覚 highlight (list-item と 日コンテナ 両方) */
+/* v361/v362 グループ予定 DnD: ドロップ候補の視覚 highlight (list-item と日コンテナ両方) */
 .list-item.gd-sched-drop-over {
   outline: 2px dashed var(--primary);
   outline-offset: -2px;
@@ -426,19 +426,19 @@ details.gd-sched-drop-over {
   background: #faf6ff;
 }
 
-/* v437 グループ 地図モード は トップ バー + タブ列 を 隠して 広く 取る */
+/* v437 グループ地図モードはトップバー + タブ列を隠して広く取る */
 body.group-map-fullscreen #topbar,
 body.group-map-fullscreen #tabs { display: none !important; }
 body.group-map-fullscreen #app { padding-top: 4px; }
 
 /* Avatars */
-/* v1264 flex-grow:0 も明示 (parent が .row の 時、 .row > * { flex:1 1 auto } で
-   avatar が引き伸ばされて 横長 img になる バグの対策、 中村さん報告 一時画像共有 の
+/* v1264 flex-grow:0 も明示 (parent が .row の時、 .row > * { flex:1 1 auto } で
+   avatar が引き伸ばされて横長 img になるバグの対策、中村さん報告一時画像共有の
    投稿者アイコン) */
 .avatar      { display:inline-block; border-radius:50%; object-fit:cover; background:var(--primary-soft); vertical-align:middle; flex-shrink:0; flex-grow:0; }
-/* v397 presence band (個人 1 週 10 分 在室帯) ─ activity.js
-   v699 #287 横 スクロール 必須 だった の を 解除。 grid を 1fr で 等分 して
-   viewport 幅 に 合わせて 自動 縮小。 */
+/* v397 presence band (個人 1 週 10 分在室帯) ─ activity.js
+   v699 #287 横スクロール必須だったのを解除。 grid を 1fr で等分して
+   viewport 幅に合わせて自動縮小。 */
 .pb-grid { display: flex; flex-direction: column; gap: 2px; width: 100%; }
 .pb-row  { display: flex; align-items: center; gap: 4px; width: 100%; }
 .pb-row.pb-head .pb-cells { padding-left: 0; }
@@ -618,7 +618,7 @@ body.group-map-fullscreen #app { padding-top: 4px; }
 
 /* Balance hero */
 .balance-hero { text-align: center; padding: 24px 12px; }
-/* 「残高 1,234 pt」 を 1 行で。残高は小さくサブ的に、数字は従来通り大きく。 */
+/* 「残高 1,234 pt」を 1 行で。残高は小さくサブ的に、数字は従来通り大きく。 */
 .balance-hero .balance-line {
   display: flex; align-items: baseline; justify-content: center; gap: 8px;
 }
@@ -646,7 +646,7 @@ body.group-map-fullscreen #app { padding-top: 4px; }
 #toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
   background: rgba(20,28,24,.92); color: white; padding: 10px 16px;
-  border-radius: 10px; /* v465 ピル形 (999px) だと 短文 で 丸く 見えるので 角丸 控え目 に */
+  border-radius: 10px; /* v465 ピル形 (999px) だと短文で丸く見えるので角丸控え目に */
   z-index: 100; max-width: 90%;
 }
 
@@ -708,9 +708,9 @@ table.table th { color: var(--muted); font-weight: 600; }
 /* 行内タイトル: .row 内の h2/h3 が伸びる + デフォルト margin を消す。
    .card h2/h3 が持つ縦 margin と衝突するのを避けるための定型。 */
 .row-title { flex: 1 1 0; margin: 0; min-width: 0; }
-/* v478 セクションヘッダの 末尾コントロール (一覧→ / 🔄 再取得 等) は 右端 で 折り返しなし。
-   `.row > * { flex: 1 1 auto }` で 補助リンク も 伸びてしまい、 タイトル が 改行
-   される 不具合 を 防止。 */
+/* v478 セクションヘッダの末尾コントロール (一覧→ / 🔄 再取得等) は右端で折り返しなし。
+   `.row > * { flex: 1 1 auto }` で補助リンクも伸びてしまい、タイトルが改行
+   される不具合を防止。 */
 .row.center > .row-title ~ * {
   flex: 0 0 auto;
 }
@@ -879,10 +879,10 @@ a.list-item { text-decoration: none; color: inherit; }
   text-align: center; background: white;
 }
 
-/* v453 → v455 タイマー フルスクリーン (学会タイマー で 発表者 に 見せる モード)。
-   iOS Safari は Fullscreen API を 通常 要素 で 拒否 する ので、 position:fixed
-   + inset:0 + z-index で CSS だけ で 全画面 を 模す。 Fullscreen API が 通る
-   環境 (Chrome / Edge) では それと 重ねて 適用 (二重で 害なし)。 */
+/* v453 → v455 タイマーフルスクリーン (学会タイマーで発表者に見せるモード)。
+   iOS Safari は Fullscreen API を通常要素で拒否するので、 position:fixed
+   + inset:0 + z-index で CSS だけで全画面を模す。 Fullscreen API が通る
+   環境 (Chrome / Edge) ではそれと重ねて適用 (二重で害なし)。 */
 .tmd-fs-on {
   position: fixed !important;
   inset: 0 !important;
@@ -917,7 +917,7 @@ a.list-item { text-decoration: none; color: inherit; }
   font-size: clamp(14px, 2.2vw, 28px) !important;
   margin-top: 14px !important;
 }
-/* プログレスバーの容器 (= #tmd-bar の親 div) を フルスクリーン時に大きく */
+/* プログレスバーの容器 (= #tmd-bar の親 div) をフルスクリーン時に大きく */
 .tmd-fs-on div:has(> #tmd-bar) {
   height: 22px !important;
   width: 80vw !important;
@@ -926,9 +926,9 @@ a.list-item { text-decoration: none; color: inherit; }
   margin-top: 22px !important;
 }
 /* v724 #322 フルスクリーン中はツールバー (🔊 試聴 / 🖥 フル / 🔗 公開 URL) を隠す。
-   「フル」 ボタンが残ってると押した意味がわからないため。 ✕ 終了で抜ける。 */
+   「フル」ボタンが残ってると押した意味がわからないため。 ✕ 終了で抜ける。 */
 .tmd-fs-on > .row { display: none !important; }
-/* 退出ボタン: 通常時は 隠す、 全画面化 中 だけ 出す (iOS の ESC 代わり) */
+/* 退出ボタン: 通常時は隠す、全画面化中だけ出す (iOS の ESC 代わり) */
 #tmd-fs-exit { display: none; }
 .tmd-fs-on #tmd-fs-exit {
   display: inline-block !important;
@@ -958,7 +958,7 @@ a.list-item { text-decoration: none; color: inherit; }
 .ai-star-btn .ai-star-count { font-weight: 600; }
 .ai-star-btn:disabled { opacity: 0.6; cursor: wait; }
 
-/* v841 🔖 ブックマーク ボタン (⭐ と並ぶ、 紫系) */
+/* v841 🔖 ブックマークボタン (⭐ と並ぶ、紫系) */
 .ai-bookmark-btn {
   display: inline-flex; align-items: center; gap: 3px;
   padding: 2px 6px; border: 1px solid #e5e7eb; border-radius: 12px;
@@ -980,7 +980,7 @@ a.list-item { text-decoration: none; color: inherit; }
 .ai-view-controls select { font-size: 13px; padding: 2px 6px; }
 
 /* v952 minmax(0,1fr) にしないと grid item の min-content が 1fr を無視して
-   右端 に はみ出す (長い 著者名 / 会議名 が 折り返さない 場合 の 予防)。 */
+   右端にはみ出す (長い著者名 / 会議名が折り返さない場合の予防)。 */
 .ai-tile-grid { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 720px)  { .ai-tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 1200px) { .ai-tile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -991,7 +991,7 @@ a.list-item { text-decoration: none; color: inherit; }
   background: #fff; text-decoration: none; color: inherit;
   transition: box-shadow 0.15s;
   min-height: 110px;
-  min-width: 0;   /* v952 flex/grid 子 が 内容 幅 に 引きずられる の を 止める */
+  min-width: 0;   /* v952 flex/grid 子が内容幅に引きずられるのを止める */
   overflow: hidden;
 }
 .ai-tile:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: #c4b5fd; }
@@ -1009,8 +1009,8 @@ a.list-item { text-decoration: none; color: inherit; }
 }
 .ai-tile .ai-tile-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; padding-top: 8px; font-size: 11px; color: #6b7280; }
 
-/* v838 #422 研究ノート カレンダー: PCサイズではセルを拡大して preview text を表示 */
-/* v853 day 数字を 見やすく + wide-screen で 2 column レイアウト (左カレンダー / 右セクション) */
+/* v838 #422 研究ノートカレンダー: PCサイズではセルを拡大して preview text を表示 */
+/* v853 day 数字を見やすく + wide-screen で 2 column レイアウト (左カレンダー / 右セクション) */
 .rn-day { min-height: 42px; }
 .rn-day .rn-day-preview { display: none; }
 .rn-day .rn-day-num { font-size: 15px; }
@@ -1030,7 +1030,7 @@ a.list-item { text-decoration: none; color: inherit; }
   .rn-day.rn-week .rn-day-preview { -webkit-line-clamp: 10 !important; }
 }
 
-/* v853 研究ノート レイアウト: モバイル縦 / wide で 左カレンダー + 右セクション の 2 列 */
+/* v853 研究ノートレイアウト: モバイル縦 / wide で左カレンダー + 右セクションの 2 列 */
 .rn-layout { display: block; }
 .rn-cal-pane { margin-bottom: 12px; }
 @media (min-width: 1100px) {
@@ -1039,7 +1039,7 @@ a.list-item { text-decoration: none; color: inherit; }
 }
 
 /* v933 — 印刷 CSS: AI 結果ページ (要約 / 全訳 / 査読 / Deep Research) を
-   Ctrl+P → 「PDF として 保存」 で きれい に 出せる ように。 .no-print 要素 は 印刷時 に 消える。 */
+   Ctrl+P → 「PDF として保存」できれいに出せるように。 .no-print 要素は印刷時に消える。 */
 @media print {
   #topbar, #tabs, #install-banner, #toast, #splash, .no-print {
     display: none !important;
@@ -1061,14 +1061,14 @@ a.list-item { text-decoration: none; color: inherit; }
   button, .btn:not(.print-keep), input, textarea, select {
     display: none !important;
   }
-  /* 詳細ページ の 「ヘッダ + 本文」 だけ 残す (share / comment / similar 系 は .no-print で 消す) */
+  /* 詳細ページの「ヘッダ + 本文」だけ残す (share / comment / similar 系は .no-print で消す) */
   .meta { color: #444 !important; }
-  /* 印刷モード 中 だけ 本文 の max-width を 広く (通常時 の 中央寄せ は 邪魔) */
+  /* 印刷モード中だけ本文の max-width を広く (通常時の中央寄せは邪魔) */
   body.printing main#app > * { max-width: none !important; }
 }
 
-/* v935 refs (文献管理): PC で 両端 いっぱい は 見にくい ので max-width 制限。
-   fullscreen mode でも 効かせる ため子要素 に かける。 */
+/* v935 refs (文献管理): PC で両端いっぱいは見にくいので max-width 制限。
+   fullscreen mode でも効かせるため子要素にかける。 */
 @media (min-width: 900px) {
   body[data-view^="refs"] main#app > * {
     max-width: 1000px !important;
@@ -1078,8 +1078,8 @@ a.list-item { text-decoration: none; color: inherit; }
 }
 
 /* v1285 中村さん要望「購入依頼の通知から購入に直接行きたい」→ 通知タップで
-   #/buy-requests?open=ID に飛ばし、 該当カードを scrollIntoView + 2秒 紫リング で
-   強調するための アニメーション。 */
+   #/buy-requests?open=ID に飛ばし、該当カードを scrollIntoView + 2秒紫リングで
+   強調するためのアニメーション。 */
 @keyframes br-card-flash-kf {
   0%   { box-shadow: 0 0 0 4px rgba(74,16,109,0.7);  background-color: rgba(74,16,109,0.10); }
   40%  { box-shadow: 0 0 0 4px rgba(74,16,109,0.5);  background-color: rgba(74,16,109,0.06); }
@@ -1088,7 +1088,7 @@ a.list-item { text-decoration: none; color: inherit; }
 .br-card-flash { animation: br-card-flash-kf 2s ease-out; }
 
 /* v1281 中村さん要望「AIサブスクの自動更新をON/OFF切り替えれるようにしておいて欲しい」
-   → ai_sub.js の 契約状態カード の 「🔄 自動更新」行に埋め込む トグルスイッチ。 */
+   → ai_sub.js の契約状態カードの「🔄 自動更新」行に埋め込むトグルスイッチ。 */
 .as-toggle {
   position: relative; display: inline-block;
   width: 40px; height: 22px; vertical-align: middle;
@@ -1110,11 +1110,11 @@ a.list-item { text-decoration: none; color: inherit; }
 .as-toggle input:checked + .slider::before { transform: translateX(18px); }
 .as-toggle input:disabled + .slider { opacity: 0.5; cursor: wait; }
 
-/* v1279 サンプルサイズ検定力 (#/power) の プリセット ボタン反応 (中村さん要望
-   「プリセットボタン 押した時 そのボタンが反応して その下のテキストボックスが
+/* v1279 サンプルサイズ検定力 (#/power) のプリセットボタン反応 (中村さん要望
+   「プリセットボタン押した時そのボタンが反応してその下のテキストボックスが
    入力されたことがわかる感じにしたい。今、押せた？となる」)。
    ボタン (data-pw-* / data-lmm* / data-bay-* / data-nb-* / data-sd-preset) を
-   一瞬パルス + 対応 input を 一瞬 紫でハイライト。 */
+   一瞬パルス + 対応 input を一瞬紫でハイライト。 */
 button.pw-preset-flash {
   transform: scale(0.94);
   background: #4a106d !important;

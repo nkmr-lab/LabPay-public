@@ -450,7 +450,7 @@ function renderTile(it) {
   if (it.pdf_path) idBadges.push('📄 PDF');
   if (it.citation_count != null) idBadges.push(`🔗 ${it.citation_count}`);
   const idHtml = idBadges.length ? `<span class="hint-sm" style="font-size:10px; margin-left:6px">${idBadges.join(' · ')}</span>` : '';
-  // v1324 中村さん要望: 要約/全訳 の 有無 を バッジ で 一目で 分かる ように
+  // v1324 中村さん要望: 要約/全訳の有無をバッジで一目で分かるように
   const aiBadges = [];
   if (it.summary_done_count > 0)      aiBadges.push(`<span style="background:#dcfce7; color:#166534; font-size:10px; padding:1px 6px; border-radius:6px">📑要約${it.summary_done_count > 1 ? '×' + it.summary_done_count : ''}</span>`);
   else if (it.summary_running_count > 0) aiBadges.push('<span style="background:#fef3c7; color:#78350f; font-size:10px; padding:1px 6px; border-radius:6px">📑要約⏳</span>');
@@ -1820,7 +1820,7 @@ function paintDetail(id, d) {
     }
   };
 
-  // v1342 サブスク中 は confirm 文言 を 「無料」 に
+  // v1342 サブスク中は confirm 文言を「無料」に
   const aiSubMsg = () => !!state.me?.ai_sub_active;
   document.getElementById('rf-ai-summary')?.addEventListener('click', async () => {
     const msg = aiSubMsg()
@@ -1829,13 +1829,13 @@ function paintDetail(id, d) {
     if (!confirm(msg)) return;
     await runAiPost('/api/ai/paper_translate', { model: 'gpt-5', auto_share: '1' });
   });
-  // v1323 中村さん要望「要約+全訳を一気に」。 confirm 1 回 で 2 種 (要約 + 英→日全訳) を
-  //   直列 (要約 開始 完了 待ってから 全訳 も POST、 各処理 自体 は バックグラウンド 実行) で キック。
-  //   PDF blob は 1 回 だけ fetch して 使い回し。 gpt-5 / 共有 で 合計 55pt。
+  // v1323 中村さん要望「要約+全訳を一気に」。 confirm 1 回で 2 種 (要約 + 英→日全訳) を
+  //   直列 (要約開始完了待ってから全訳も POST、各処理自体はバックグラウンド実行) でキック。
+  //   PDF blob は 1 回だけ fetch して使い回し。 gpt-5 / 共有で合計 55pt。
   document.getElementById('rf-ai-both')?.addEventListener('click', async () => {
     const msg = aiSubMsg()
-      ? '要約 + 英→日全訳 を 一気に開始します。 モデルは gpt-5 (AIサブスク中につき無料)。続行?'
-      : '要約 + 英→日全訳 を 一気に開始します。 モデルは gpt-5 (共有で 要約25pt + 全訳30pt = 合計55pt)。続行?';
+      ? '要約 + 英→日全訳を一気に開始します。モデルは gpt-5 (AIサブスク中につき無料)。続行?'
+      : '要約 + 英→日全訳を一気に開始します。モデルは gpt-5 (共有で要約25pt + 全訳30pt = 合計55pt)。続行?';
     if (!confirm(msg)) return;
     const btn = document.getElementById('rf-ai-both');
     const oldTxt = btn.textContent;
@@ -1855,11 +1855,11 @@ function paintDetail(id, d) {
     try {
       const blob = await fetchPdfBlob();
       const file = new File([blob], pdfName(), { type: 'application/pdf' });
-      btn.textContent = '⏳ 要約 開始中…';
+      btn.textContent = '⏳ 要約開始中…';
       await postFd('/api/ai/paper_translate',      file, { model: 'gpt-5', auto_share: '1' });
-      btn.textContent = '⏳ 全訳 開始中…';
+      btn.textContent = '⏳ 全訳開始中…';
       await postFd('/api/ai/paper_full_translate', file, { direction: 'en2ja', model: 'gpt-5', auto_share: '1' });
-      toast('要約 と 全訳 を 開始しました (完了通知 が 届きます)');
+      toast('要約と全訳を開始しました (完了通知が届きます)');
       renderRefsDetail({ params: { id } });
     } catch (e) {
       toast('失敗: ' + e.message);

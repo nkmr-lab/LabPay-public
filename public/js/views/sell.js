@@ -78,7 +78,7 @@ export async function renderSell() {
 
     <!-- ============= 新規出品 (折りたたみ) ============= -->
     <details class="card collapsible-form">
-      <summary>＋ 新規出品</summary>
+      <summary>＋新規出品</summary>
       <div style="margin-top:10px"></div>
 
       <details class="collapsible-sub" open>
@@ -285,20 +285,20 @@ function showPreview(prefix, src) {
   img.hidden = false;
 }
 
-// v1345 商品画像 の 90° 回転 (時計回り)。 URL → Image → canvas に 描き直し → jpg blob → File。
-//   /uploads/ 画像 は 同一 origin な の で crossOrigin は 不要 (指定 すると 逆 に taint 化 する 環境 も ある)。
+// v1345 商品画像の 90° 回転 (時計回り)。 URL → Image → canvas に描き直し → jpg blob → File。
+//   /uploads/ 画像は同一 origin なので crossOrigin は不要 (指定すると逆に taint 化する環境もある)。
 async function rotateImage90(url) {
   const img = new Image();
   img.decoding = 'async';
   await new Promise((resolve, reject) => {
     img.onload  = () => resolve();
-    img.onerror = () => reject(new Error('画像 の 読み込み に 失敗'));
+    img.onerror = () => reject(new Error('画像の読み込みに失敗'));
     img.src = url;
   });
   const w = img.naturalWidth || img.width;
   const h = img.naturalHeight || img.height;
   const canvas = document.createElement('canvas');
-  canvas.width = h;  // 90° で 縦横 入れ替え
+  canvas.width = h;  // 90° で縦横入れ替え
   canvas.height = w;
   const ctx = canvas.getContext('2d');
   ctx.translate(h / 2, w / 2);
@@ -527,8 +527,8 @@ async function loadMyListings() {
         } catch (e) { toast('失敗: ' + e.message); }
       });
     });
-    // v1345 画像 90° 回転 (中村さん要望「販売で出品した商品 の 画像 を 回転させたい」)。
-    //   client 側 で canvas に 描き直して 再 upload → PATCH。 4 回 押せば 元 に 戻る。
+    // v1345 画像 90° 回転 (中村さん要望「販売で出品した商品の画像を回転させたい」)。
+    //   client 側で canvas に描き直して再 upload → PATCH。 4 回押せば元に戻る。
     root.querySelectorAll('[data-img-rotate]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const jan = btn.dataset.jan;
@@ -576,8 +576,8 @@ function renderSummaryRow(l) {
   const priceLine = l.is_gift
     ? `<div class="meta">JAN <span class="mono">${escapeHtml(l.jan)}</span> · 🎁 無料配布 · 在庫 ${l.qty}</div>`
     : `<div class="meta">JAN <span class="mono">${escapeHtml(l.jan)}</span> · 価格 ${l.price.toLocaleString()}pt · 在庫 ${l.qty}</div>`;
-  // v1345 中村さん要望「販売で出品した商品 の 画像 を 回転させたい」→
-  // サマリ 行 の thumb 右下 に ↻ button、 押すと 90° 回転 → 再アップ → PATCH。
+  // v1345 中村さん要望「販売で出品した商品の画像を回転させたい」→
+  // サマリ行の thumb 右下に ↻ button、押すと 90° 回転 → 再アップ → PATCH。
   const thumb = l.image_url
     ? `<div style="position:relative; width:48px; height:48px; flex:0 0 auto">
          <img src="${escapeHtml(l.image_url)}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; display:block">

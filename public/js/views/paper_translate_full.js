@@ -27,7 +27,7 @@ export async function renderPaperTranslateFull() {
     </div>
     <details class="card" id="pft-form">
       <summary style="cursor:pointer; font-weight:600; padding:4px 0; user-select:none">➕ 新しい全訳を依頼</summary>
-      <!-- v1280 中村さん要望 で 順序 変更: (1) PDF → (2) 方向 + モデル → (3) 同時依頼 → (4) 共有 -->
+      <!-- v1280 中村さん要望で順序変更: (1) PDF → (2) 方向 + モデル → (3) 同時依頼 → (4) 共有 -->
       <label class="field">
         <span class="lbl">① 論文 PDF (最大 30 MB)</span>
         <input type="file" id="pft-file" accept="application/pdf,.pdf">
@@ -45,16 +45,16 @@ export async function renderPaperTranslateFull() {
         <select id="pft-model"></select>
         <div class="hint-sm" id="pft-cost-info" style="font-size:12px; margin-top:4px; color:#6b21a8"></div>
       </label>
-      <!-- v1221 同時依頼。 v1280 「(お得!)」表記削除 (中村さん指摘「別に お得 じゃないのでは？」)
-           = backend は 単に POST を 2 本 順に投げる だけで 割引 は 無い。 -->
+      <!-- v1221 同時依頼。 v1280 「(お得!)」表記削除 (中村さん指摘「別にお得じゃないのでは？」)
+           = backend は単に POST を 2 本順に投げるだけで割引は無い。 -->
       <fieldset class="field" style="border:1px dashed #7b3fa0; border-radius:6px; padding:8px; margin:8px 0; background:#faf5ff">
-        <legend style="font-size:12px; color:#4a106d; font-weight:600">④ 📑📑 同時 依頼 (任意)</legend>
+        <legend style="font-size:12px; color:#4a106d; font-weight:600">④ 📑📑 同時依頼 (任意)</legend>
         <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600">
           <input type="checkbox" id="pft-also-summary" checked>
-          全訳 と 一緒に 要約 も 依頼する
+          全訳と一緒に要約も依頼する
         </label>
         <div class="hint-sm" style="font-size:11px; color:#6b7280; margin:2px 0 6px 22px">
-          1 度の アップロード で 両方 まとめて 依頼 できます (料金は 別々 に 依頼した 場合と 同じ)。
+          1 度のアップロードで両方まとめて依頼できます (料金は別々に依頼した場合と同じ)。
         </div>
         <div id="pft-also-summary-opts" style="margin-top:6px">
           <label class="field" style="margin:4px 0">
@@ -226,7 +226,7 @@ function bindEvents() {
     status.innerHTML = `<span style="color:#15803d">✓ ${escapeHtml(f.name)} (${(f.size/1048576).toFixed(1)} MB)</span>`;
     btn.disabled = false;
   });
-  // v1342 AI サブスク 契約中 は 「無料」 表記 に (state.me.ai_sub_active)
+  // v1342 AI サブスク契約中は「無料」表記に (state.me.ai_sub_active)
   const aiSubActive = () => !!state.me?.ai_sub_active;
   function rebuildModelOptions() {
     if (!settings) return;
@@ -249,7 +249,7 @@ function bindEvents() {
     // v914 共有で半額割引
     const shared = !!document.getElementById('pft-auto-share')?.checked;
     const pt = shared ? Math.floor(base / 2) : base;
-    // v1221 同時 要約 も 走らせる 場合 は 合計 を 出す
+    // v1221 同時要約も走らせる場合は合計を出す
     const alsoSum = !!document.getElementById('pft-also-summary')?.checked;
     let sumPt = 0;
     if (alsoSum && summarySettingsCache) {
@@ -265,7 +265,7 @@ function bindEvents() {
           ` <span style="color:#059669; font-weight:600">AIサブスク中につき無料</span> (${dirLabel})`;
       } else if (alsoSum && sumPt > 0) {
         info.innerHTML = `全訳 ${pt}pt + 要約 ${sumPt}pt = <b style="color:#4a106d">合計 ${pt + sumPt}pt</b> (${dirLabel})` +
-          (shared ? ` <span style="color:#15803d">(共有 ON、 半額)</span>` : '');
+          (shared ? ` <span style="color:#15803d">(共有 ON、半額)</span>` : '');
       } else {
         info.innerHTML = `選択中: ${escapeHtml(m)} ・ ${pt}pt (${dirLabel})` +
           (shared ? ` <span style="color:#15803d">(公開 ON、半額割引 = 基本 ${base}pt の半額)</span>`
@@ -273,9 +273,9 @@ function bindEvents() {
       }
     }
     if (sub) {
-      btn.textContent = alsoSum ? `📑 全訳+要約 開始 (AIサブスク中につき無料)` : `📑 全訳開始 (AIサブスク中につき無料)`;
+      btn.textContent = alsoSum ? `📑 全訳+要約開始 (AIサブスク中につき無料)` : `📑 全訳開始 (AIサブスク中につき無料)`;
     } else {
-      btn.textContent = alsoSum && sumPt > 0 ? `📑 全訳+要約 開始 (${pt + sumPt}pt)` : `📑 全訳開始 (${pt}pt)`;
+      btn.textContent = alsoSum && sumPt > 0 ? `📑 全訳+要約開始 (${pt + sumPt}pt)` : `📑 全訳開始 (${pt}pt)`;
     }
   }
   dir?.addEventListener('change', rebuildModelOptions);
@@ -287,7 +287,7 @@ function bindEvents() {
   setupAlsoSummary(refreshCost);
 }
 
-// v798/v1221 同時要約オプションのセットアップ (default ON なので 初期 load 済ませる + 合計 更新 コールバック)
+// v798/v1221 同時要約オプションのセットアップ (default ON なので初期 load 済ませる + 合計更新コールバック)
 let summarySettingsCache = null;
 async function setupAlsoSummary(onCostChange) {
   const toggle = document.getElementById('pft-also-summary');
@@ -308,7 +308,7 @@ async function setupAlsoSummary(onCostChange) {
     if (toggle.checked) await loadAndBuild();
     else if (typeof onCostChange === 'function') onCostChange();
   });
-  // v1342 サブスク中 は 「無料」 表記 に
+  // v1342 サブスク中は「無料」表記に
   const aiSubActive2 = () => !!state.me?.ai_sub_active;
   function rebuildSummaryModels() {
     if (!summarySettingsCache) return;
@@ -341,7 +341,7 @@ async function setupAlsoSummary(onCostChange) {
   }
   modSel.addEventListener('change', refreshCost);
   document.getElementById('pft-auto-share')?.addEventListener('change', refreshCost);
-  // v1221 default ON なので 初期 load
+  // v1221 default ON なので初期 load
   if (toggle.checked) loadAndBuild();
 }
 
@@ -538,8 +538,8 @@ async function go() {
 
 let pollTimer = null;
 export async function renderPaperTranslateFullShared({ params }) {
-  // v1330 fb#515: v1227 の resetFsInnerNav() を撤去 (paper_translate.js と 同じ 理由)。
-  //   一覧 → 詳細 の 深さ を router 側 で count させて、 ✕ 一発 で 一覧 に 戻す。
+  // v1330 fb#515: v1227 の resetFsInnerNav() を撤去 (paper_translate.js と同じ理由)。
+  //   一覧 → 詳細の深さを router 側で count させて、 ✕ 一発で一覧に戻す。
   const token = params.token;
   const app = document.getElementById('app');
   app.innerHTML = '<div class="card"><div class="muted">読み込み中…</div></div>';
@@ -600,7 +600,7 @@ async function refresh(token) {
           ${isOwner ? `<button class="btn" id="pft-delete" title="この全訳を削除 (PDF ごと)" style="font-size:12px; padding:3px 10px; background:#fee2e2; color:#991b1b; border:1px solid #fca5a5">🗑 削除</button>` : ''}
         </div>
       </div>
-      <!-- v1214/v1223 中村さん要望「タブ は 著者情報 の 下 に」→ 著者カード + キーワード の あと に 独立 配置 (paintResult 内 で 差し込む)。 -->
+      <!-- v1214/v1223 中村さん要望「タブは著者情報の下に」→ 著者カード + キーワードのあとに独立配置 (paintResult 内で差し込む)。 -->
       <div id="pft-r"></div>`;
     app.innerHTML = header;
     if (d.status === 'pending' || d.status === 'processing') {
@@ -687,10 +687,10 @@ async function refresh(token) {
         refresh(token);
       } catch (e) { toast('失敗: ' + e.message); btn.disabled = false; }
     });
-    // v1331 fb#514 詳細から その場で 削除 (PDF ごと)。 削除後 は 履歴一覧 に 戻る。
+    // v1331 fb#514 詳細からその場で削除 (PDF ごと)。削除後は履歴一覧に戻る。
     document.getElementById('pft-delete')?.addEventListener('click', async (ev) => {
       const btn = ev.currentTarget;
-      if (!confirm('この全訳を完全に削除しますか?\n(PDF も 一緒 に 削除、復元不可)')) return;
+      if (!confirm('この全訳を完全に削除しますか?\n(PDF も一緒に削除、復元不可)')) return;
       btn.disabled = true; const old = btn.textContent; btn.textContent = '🗑 削除中…';
       try {
         await del('/api/ai/paper_full_translate/' + d.id);
@@ -723,11 +723,11 @@ async function paint(d) {
       const filtered = r.chapters.filter(ch => !isBoilerplateChapter(ch));
       const authors = mergeAuthors(r.authors, r.chapters);
       let out = renderAuthorCards(authors);
-      // v1224 キーワード スロット (中村さん指摘「全訳 に すると キーワード が 消える」)。
-      //   1. sync: chapters から 抽出 (直接 の Keywords 章 or front matter/abstract の Keywords 行)
-      //   2. async: 空 なら sibling summary の keywords を 取ってきて 差し込む
+      // v1224 キーワードスロット (中村さん指摘「全訳にするとキーワードが消える」)。
+      //   1. sync: chapters から抽出 (直接の Keywords 章 or front matter/abstract の Keywords 行)
+      //   2. async: 空なら sibling summary の keywords を取ってきて差し込む
       out += `<div id="pft-kw-slot">${kws.length ? renderKwCardHtml(kws) : ''}</div>`;
-      // v1214/v1223 中村さん要望「タブ は 著者情報 の 下 に」→ 著者 + キーワード の 後、 章別翻訳 の 前 に 挿入。
+      // v1214/v1223 中村さん要望「タブは著者情報の下に」→ 著者 + キーワードの後、章別翻訳の前に挿入。
       out += renderFullCrossRefsAndCreate(d);
       if (filtered.length) {
         out += `
@@ -779,7 +779,7 @@ async function paint(d) {
         mod.mountInteractionsCard({ apiBase: '/api/ai/paper_full_translate', refId: d.id });
       }
     } catch (_) {}
-    // v1219/v1220 詳細ページ で だけ 💬 fab を 出す
+    // v1219/v1220 詳細ページでだけ 💬 fab を出す
     setAiContext({
       sourceType: 'paper_translate_full', sourceId: Number(d.id),
       title: (d.pdf_name || '論文全訳'),
@@ -787,10 +787,10 @@ async function paint(d) {
   }
   // v813 #405 ペアの要約を作るボタン
   bindMakeSummary(d);
-  // v1224/v1225 キーワード: sibling summary が あれば その keywords を 優先 (中村さん指摘
-  //   「要約 と 全訳 で 表示 される キーワード 違う の 気持ち悪い」)。 summary は AI 構造化 の
-  //   r.keywords、 全訳 は Keywords 章 抽出 で 一致 しない ため、 sibling が あれば 上書きで 統一。
-  //   sibling 無し の 場合 のみ 全訳側 の chapters 抽出 (sync render で 既に 入っている) を 使う。
+  // v1224/v1225 キーワード: sibling summary があればその keywords を優先 (中村さん指摘
+  //   「要約と全訳で表示されるキーワード違うの気持ち悪い」)。 summary は AI 構造化の
+  //   r.keywords、全訳は Keywords 章抽出で一致しないため、 sibling があれば上書きで統一。
+  //   sibling 無しの場合のみ全訳側の chapters 抽出 (sync render で既に入っている) を使う。
   const kwSlot = document.getElementById('pft-kw-slot');
   if (kwSlot) {
     const summaryRef = (d.cross_refs || []).find(x => x.kind === 'paper_translate');
@@ -835,14 +835,14 @@ async function paint(d) {
   mountAuthorAvatars(document.getElementById('app'));
 }
 
-// v813/v1214 cross_refs を「要約 / 全訳」の タブバー に 昇華 (中村さん要望
-//   「1 つの論文を 扱うので タブで 切り替える 形式にしたら 良いのかも」)。
-//   スラッグ は そのまま (URL は 個別)、 タブ UI で 相互リンク を 明示 する。
+// v813/v1214 cross_refs を「要約 / 全訳」のタブバーに昇華 (中村さん要望
+//   「1 つの論文を扱うのでタブで切り替える形式にしたら良いのかも」)。
+//   スラッグはそのまま (URL は個別)、タブ UI で相互リンクを明示する。
 function renderFullCrossRefsAndCreate(d) {
   return _renderPaperTabBar(d, 'full');
 }
-// 共通 tab bar: 現在ページ を active、 反対側は (a) 存在すれば その share_token へ link、
-//   (b) 存在しないが 本人 + status=done + PDF あり なら 「+ 作る」ボタン、 (c) それ以外 は grey。
+// 共通 tab bar: 現在ページを active、反対側は (a) 存在すればその share_token へ link、
+//   (b) 存在しないが本人 + status=done + PDF ありなら「+ 作る」ボタン、 (c) それ以外は grey。
 function _renderPaperTabBar(d, currentKind) {
   const refs = Array.isArray(d.cross_refs) ? d.cross_refs : [];
   const myUid = Number(state.me?.id || 0);
@@ -859,7 +859,7 @@ function _renderPaperTabBar(d, currentKind) {
   const tabHtml = (label, isActive, href, createId, canCreate) => {
     if (isActive) return `<span style="${base}; ${active}; font-weight:600">${label}</span>`;
     if (href)     return `<a href="${href}" style="${base}; ${linked}">${label}</a>`;
-    if (canCreate) return `<button class="btn" id="${createId}" style="${base}; ${create}; cursor:pointer">＋ ${label} を 作る</button>`;
+    if (canCreate) return `<button class="btn" id="${createId}" style="${base}; ${create}; cursor:pointer">＋ ${label} を作る</button>`;
     return `<span style="${base}; ${grey}">${label} (未作成)</span>`;
   };
   const summaryTab = tabHtml('📄 要約', currentKind === 'summary',
@@ -868,8 +868,8 @@ function _renderPaperTabBar(d, currentKind) {
   const fullTab = tabHtml('📑 全訳', currentKind === 'full',
     fullRef ? `#/${escapeHtml(fullRef.url_slug)}/r/${escapeHtml(fullRef.share_token)}` : null,
     'pt-make-full', canCreateFull);
-  // v1217 中村さん指摘「タブ 表示 が おかしい」→ .row は 子要素 を flex:1 で 引き伸ばす CSS が あり
-  //   タブ が 巨大化 していた。 単純 な display:flex で 幅 を 子要素 の 実サイズ に。
+  // v1217 中村さん指摘「タブ表示がおかしい」→ .row は子要素を flex:1 で引き伸ばす CSS があり
+  //   タブが巨大化していた。単純な display:flex で幅を子要素の実サイズに。
   return `<div style="display:flex; gap:4px; margin-top:6px; border-bottom:2px solid #7b3fa0; padding-bottom:0; flex-wrap:wrap">${summaryTab}${fullTab}</div>`;
 }
 
@@ -890,9 +890,9 @@ async function bindMakeSummary(d) {
       <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px">
         <input type="checkbox" id="mfs-auto-share"> 🌐 完了と同時に公開 ON
       </label>`;
-    // v1217 中村さん報告「キャンセルが押せない」の 原因: openModal の onClick は
-    //   (api) を 受け取る 契約 だが (close) と 誤解し 呼ぶと api() = TypeError で 沈黙。
-    //   primary: true も 効かない (kind: 'primary' が 正解)。 両方 修正。
+    // v1217 中村さん報告「キャンセルが押せない」の原因: openModal の onClick は
+    //   (api) を受け取る契約だが (close) と誤解し呼ぶと api() = TypeError で沈黙。
+    //   primary: true も効かない (kind: 'primary' が正解)。両方修正。
     openModal({
       title: '📄 要約を作る',
       bodyHtml: html,
@@ -920,7 +920,7 @@ function isBoilerplateChapter(ch) {
   return /^(ccs (concept|categorie)|keywords?|acm reference format|permission|copyright|references|bibliography|acknowledg?ments?|appendix|front matter|title page)/.test(t);
 }
 
-// v1224 キーワード カード HTML を 生成 (sync/async 両方 で 使う)
+// v1224 キーワードカード HTML を生成 (sync/async 両方で使う)
 function renderKwCardHtml(kws) {
   if (!kws || !kws.length) return '';
   return `
@@ -933,9 +933,9 @@ function renderKwCardHtml(kws) {
     </div>`;
 }
 
-// v955/v1224 Keywords 章 or Front matter / Abstract 章 の 「Keywords: ...」行 から 抽出
-//   多く の 論文 で Keywords が 独立章 に なって いない ので、 front matter や 冒頭章 の 中 も 走査。
-//   中村さん指摘「全訳 に すると キーワードが 消える」対応。
+// v955/v1224 Keywords 章 or Front matter / Abstract 章の「Keywords: ...」行から抽出
+//   多くの論文で Keywords が独立章になっていないので、 front matter や冒頭章の中も走査。
+//   中村さん指摘「全訳にするとキーワードが消える」対応。
 function extractKeywordsFromChapters(chapters) {
   const parseLine = (raw) => {
     let text = String(raw || '').trim();
@@ -948,12 +948,12 @@ function extractKeywordsFromChapters(chapters) {
     const kws = parseLine(kwCh.translation);
     if (kws.length) return kws;
   }
-  // (b) front matter / abstract / index terms 章 の 中 の 「Keywords: ...」/「キーワード: ...」行
+  // (b) front matter / abstract / index terms 章の中の「Keywords: ...」/「キーワード: ...」行
   for (const c of chapters) {
     const t = String(c?.chapter_title_original || '').toLowerCase().trim();
     if (!/^(front matter|title page|abstract|index terms|ccs (concept|categorie))/.test(t)) continue;
     const body = String(c?.translation || '');
-    // 行単位 で Keywords: ... を 探す
+    // 行単位で Keywords: ... を探す
     const m = /(?:^|\n)\s*(?:keywords?|index terms|キーワード)\s*[:：]([^\n]+)/i.exec(body);
     if (m) {
       const kws = parseLine(m[1]);
@@ -1071,17 +1071,17 @@ function renderAuthorCards(authors) {
     </div>`;
 }
 
-// v1226 中村さん指摘「全訳 に ページ番号 が 混じる ケース」対策 の 描画時 サニタイザ。
-//   PDF 由来 の 単独行 ページ番号 / 「Page N of M」/ 「N ページ」/ 章 の 末尾 空白 を 除去。
-//   段落 の 途中 に 現れる 数字 は 触らない (引用/数式/年号 で 混乱 する ので)。
+// v1226 中村さん指摘「全訳にページ番号が混じるケース」対策の描画時サニタイザ。
+//   PDF 由来の単独行ページ番号 / 「Page N of M」/ 「N ページ」/ 章の末尾空白を除去。
+//   段落の途中に現れる数字は触らない (引用/数式/年号で混乱するので)。
 function sanitizeChapterTranslation(text) {
   if (!text) return '';
   let s = String(text);
-  // 単独行 の ページ番号 (1〜4 桁)
+  // 単独行のページ番号 (1〜4 桁)
   s = s.replace(/(^|\n)\s*\d{1,4}\s*(?=\n|$)/g, '\n');
-  // 「Page N (of M)?」/「p. N」/「N ページ」 単独行
+  // 「Page N (of M)?」/「p. N」/「N ページ」単独行
   s = s.replace(/(^|\n)\s*(?:Page|Pg\.?|p\.?|ページ|頁)\s*\d+(?:\s*(?:of|\/|・)?\s*\d+)?\s*(?=\n|$)/gi, '\n');
-  // 3 連 以上 の 空行 を 2 連 に 圧縮
+  // 3 連以上の空行を 2 連に圧縮
   s = s.replace(/\n{3,}/g, '\n\n');
   return s.trim();
 }

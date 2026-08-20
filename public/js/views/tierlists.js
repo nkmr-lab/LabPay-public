@@ -14,7 +14,7 @@ export async function renderTierlists() {
       <div class="row center" style="gap:6px; flex-wrap:wrap">
         <h2 style="margin:0">🎯 ティア表</h2>
         <span style="flex:1"></span>
-        <a class="btn primary" href="#/tierlists/new">＋ 新規</a>
+        <a class="btn primary" href="#/tierlists/new">＋新規</a>
       </div>
     </div>
     <div id="tl-list" class="list"><div class="muted">読み込み中…</div></div>
@@ -23,7 +23,7 @@ export async function renderTierlists() {
     const d = await get('/api/tierlists');
     const items = d.items || [];
     if (!items.length) {
-      document.getElementById('tl-list').innerHTML = '<div class="empty">まだティア表がありません。「＋ 新規」から作ってみてください。</div>';
+      document.getElementById('tl-list').innerHTML = '<div class="empty">まだティア表がありません。「＋新規」から作ってみてください。</div>';
       return;
     }
     document.getElementById('tl-list').innerHTML = items.map(t => `
@@ -193,15 +193,48 @@ export async function renderTierlistDetail({ params }) {
       </div>
     </div>
     ${d.other_answers.length ? `<div class="card">
-      <div class="bold" style="margin-bottom:6px">👥 他の人の回答</div>
+      <div class="row center" style="gap:8px; flex-wrap:wrap; margin-bottom:6px">
+        <span class="bold">👥 他の人の回答</span>
+        <span style="flex:1"></span>
+        <button id="tl-filter-toggle" class="btn" style="font-size:11px; padding:2px 8px">🔍 絞込</button>
+      </div>
+      <!-- v1346 fb#523 中村研（氏名01）要望「回答した人から数人だけ選んで、その人達だけの結果を比較とか一覧で見れるように」 -->
+      <div id="tl-filter" hidden style="padding:8px 10px; background:#f8fafc; border:1px solid var(--line); border-radius:6px; margin-bottom:8px">
+        <div class="row" style="gap:6px; margin-bottom:6px; align-items:center; flex-wrap:wrap">
+          <span class="hint-sm">表示する人(未選択なら全員):</span>
+          <button id="tl-filter-all"  type="button" class="btn" style="font-size:11px; padding:2px 8px">全選択</button>
+          <button id="tl-filter-none" type="button" class="btn" style="font-size:11px; padding:2px 8px">全解除</button>
+        </div>
+        <div id="tl-filter-users" style="display:flex; flex-wrap:wrap; gap:6px"></div>
+      </div>
       <div id="tl-others" class="list"></div>
     </div>` : ''}
-    <!-- v962 📊 集計 は ページ下部 に 移動 (ユーザ 要望)。 まず 自分 の 回答 + 他人 の 回答 が
-         見えて、 最後 に 総合 集計 で 締める 流れ に。 -->
+    <!-- v962 📊 集計はページ下部に移動 (ユーザ要望)。まず自分の回答 + 他人の回答が
+         見えて、最後に総合集計で締める流れに。 v1346 filter 適用時は対象人数で再集計。 -->
     <div class="card">
-      <div class="bold" style="margin-bottom:6px">📊 集計 (全員 = ${d.answer_count} 人)</div>
+      <div class="bold" style="margin-bottom:6px" id="tl-agg-title">📊 集計 (全員 = ${d.answer_count} 人)</div>
       <div id="tl-agg"></div>
     </div>
+    ${d.is_creator && !d.is_closed ? `<div class="card">
+      <!-- v1346 fb#523 中村研（氏名01）要望「一度作ったティア表も、作成したユーザだったらそこに要素を追加・削除できるように」 -->
+      <details>
+        <summary style="cursor:pointer"><span class="bold">🛠 候補を追加/削除(起案者のみ)</span></summary>
+        <div style="padding:8px 0">
+          <div class="hint-sm" style="margin-bottom:6px">追加は新しいidで発番、削除は既存回答の該当選択も一緒に消えます(集計が綺麗になる)。</div>
+          <div id="tl-edit-add" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px"></div>
+          <div class="row" style="gap:6px">
+            <button id="tl-edit-add-row" type="button" class="btn">+追加候補を1行</button>
+          </div>
+          <div style="margin-top:12px">
+            <div class="hint-sm" style="margin-bottom:6px">削除したい候補にチェック:</div>
+            <div id="tl-edit-remove" style="display:flex; flex-direction:column; gap:4px"></div>
+          </div>
+          <div class="row" style="margin-top:10px; gap:6px; justify-content:flex-end">
+            <button id="tl-edit-apply" class="primary">変更を保存</button>
+          </div>
+        </div>
+      </details>
+    </div>` : ''}
   `;
   if (d.is_creator && !d.is_closed) {
     document.getElementById('tl-close').addEventListener('click', async () => {
@@ -214,8 +247,113 @@ export async function renderTierlistDetail({ params }) {
     shareToSns(`🎯 ティア表「${d.title}」 ${d.is_closed ? '結果' : '回答募集中'} (${d.answer_count} 人回答)`, `#/tierlists/${tid}`);
   });
   paintBoard(d, items, tiers, my);
-  paintAggregation(d, items, tiers);
-  if (d.other_answers.length) paintOthers(d, items, tiers);
+  // v1346 選択された回答者 id (state 変数)。空集合なら「全員」扱いにする。
+  const filterState = { selectedUids: new Set() };
+  const applyFilter = () => {
+    const sel = filterState.selectedUids;
+    const useAll = sel.size === 0;
+    const others = useAll ? d.other_answers : d.other_answers.filter(a => sel.has(a.user_id));
+    // 集計も filter に応じて再計算 (my_answer は常に全集計に入れる pattern を保つか
+    // filter 側で制御するか悩ましいが、 fb#523 の意は「回答者のうち数人だけで比較」
+    // なので filter 中は my_answer は除外する。未 filter 時は従来通り全員 = 自分込み)。
+    let subset;
+    if (useAll) subset = d.aggregation;
+    else {
+      subset = {};
+      for (const it of items) {
+        subset[it.id] = {};
+        for (const t of tiers) subset[it.id][t.key] = 0;
+      }
+      for (const a of others) {
+        const as = a.assignments || {};
+        for (const iid of Object.keys(as)) {
+          const tk = as[iid];
+          if (subset[iid] && subset[iid][tk] !== undefined) subset[iid][tk]++;
+        }
+      }
+    }
+    const count = useAll ? d.answer_count : others.length;
+    paintAggregation({ answer_count: count, aggregation: subset }, items, tiers);
+    document.getElementById('tl-agg-title').textContent = useAll
+      ? `📊 集計(全員=${d.answer_count}人)`
+      : `📊 集計(絞込 ${count}/${d.answer_count}人、自分の回答は除外)`;
+    if (d.other_answers.length) paintOthers({ other_answers: others }, items, tiers);
+  };
+  applyFilter();
+  // filter UI (他の人の回答がある時のみ)
+  if (d.other_answers.length) {
+    document.getElementById('tl-filter-toggle')?.addEventListener('click', () => {
+      const fl = document.getElementById('tl-filter');
+      fl.hidden = !fl.hidden;
+    });
+    const fUsers = document.getElementById('tl-filter-users');
+    fUsers.innerHTML = d.other_answers.map(a => `
+      <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; padding:4px 8px; background:#fff; border:1px solid var(--line); border-radius:14px; cursor:pointer">
+        <input type="checkbox" data-uid="${a.user_id}" style="margin:0">
+        <span style="display:inline-flex; vertical-align:middle">${avatarHtml(a.display_name, a.avatar_url, 'sm')}</span>
+        <span>${escapeHtml(a.display_name)}</span>
+      </label>`).join('');
+    fUsers.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const uid = Number(cb.dataset.uid);
+        if (cb.checked) filterState.selectedUids.add(uid);
+        else filterState.selectedUids.delete(uid);
+        applyFilter();
+      });
+    });
+    document.getElementById('tl-filter-all')?.addEventListener('click', () => {
+      filterState.selectedUids = new Set(d.other_answers.map(a => a.user_id));
+      fUsers.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+      applyFilter();
+    });
+    document.getElementById('tl-filter-none')?.addEventListener('click', () => {
+      filterState.selectedUids.clear();
+      fUsers.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+      applyFilter();
+    });
+  }
+  // v1346 起案者の候補編集 UI (追加 / 削除)
+  if (d.is_creator && !d.is_closed) {
+    const addRoot = document.getElementById('tl-edit-add');
+    const removeRoot = document.getElementById('tl-edit-remove');
+    const mkAddRow = () => {
+      const row = document.createElement('div');
+      row.className = 'tl-edit-add-row';
+      row.style.cssText = 'display:flex; gap:6px; align-items:center';
+      row.innerHTML = `
+        <input type="text" class="tl-add-label" maxlength="80" placeholder="追加候補のラベル" style="flex:1; padding:6px 8px">
+        <button type="button" class="tl-add-remove" style="background:none; border:none; color:#c00; font-size:16px; cursor:pointer; padding:0 6px">×</button>`;
+      row.querySelector('.tl-add-remove').addEventListener('click', () => row.remove());
+      addRoot.appendChild(row);
+    };
+    document.getElementById('tl-edit-add-row').addEventListener('click', () => mkAddRow());
+    removeRoot.innerHTML = items.map(it => `
+      <label style="display:inline-flex; align-items:center; gap:6px; padding:2px 0; font-size:13px">
+        <input type="checkbox" data-remove-iid="${escapeHtml(it.id)}">
+        ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" style="width:24px; height:24px; object-fit:cover; border-radius:4px; vertical-align:middle">` : ''}
+        <span>${escapeHtml(it.label)}</span>
+      </label>`).join('');
+    document.getElementById('tl-edit-apply').addEventListener('click', async () => {
+      const add = [...addRoot.querySelectorAll('.tl-add-label')]
+        .map(inp => inp.value.trim())
+        .filter(v => v)
+        .map(label => ({ label }));
+      const remove = [...removeRoot.querySelectorAll('input[type="checkbox"]:checked')]
+        .map(cb => cb.dataset.removeIid);
+      if (!add.length && !remove.length) { toast('追加も削除もありません'); return; }
+      if (remove.length && !confirm(`${remove.length}件の候補を削除します(既存回答の該当選択も消えます)。続行?`)) return;
+      const btn = document.getElementById('tl-edit-apply');
+      btn.disabled = true; btn.textContent = '保存中…';
+      try {
+        await put('/api/tierlists/' + tid + '/items', { add, remove });
+        toast('候補を更新しました');
+        await renderTierlistDetail({ params: { id: tid } });
+      } catch (e) {
+        toast('失敗: ' + e.message);
+        btn.disabled = false; btn.textContent = '変更を保存';
+      }
+    });
+  }
   document.getElementById('tl-save').addEventListener('click', async () => {
     const btn = document.getElementById('tl-save');
     btn.disabled = true; btn.textContent = '保存中…';
@@ -371,8 +509,8 @@ function paintAggregation(d, items, tiers) {
 function paintOthers(d, items, tiers) {
   const root = document.getElementById('tl-others');
   if (!root) return;
-  // v961 「?」 (評価不能) は 他人 の 回答 では 表示 しない (ユーザ 要望)。 通常 の
-  //   S/A/B/C/D 列 だけ 見える。
+  // v961 「?」 (評価不能) は他人の回答では表示しない (ユーザ要望)。通常の
+  //   S/A/B/C/D 列だけ見える。
   const visibleTiers = tiers.filter(t => t.key !== '?');
   root.innerHTML = d.other_answers.map(a => {
     const lines = visibleTiers.map(t => {
