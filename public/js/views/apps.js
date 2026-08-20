@@ -137,7 +137,7 @@ export const APPS = [
     desc: '「setlogに1投稿で20pt」等のゲリラミッションを主催・参加。 主催者が出したptと同額をLabPayが補助 (50/50) するので、実質2倍の賞金プールに。 参加者は対象機能を使うだけで自動で報酬支給。', defaultVisible: true },
   // v1251 AI サブスク (共通、 chai.nkmr.io / file.nkmr.io で 使う 1 週間 500pt サブスク)
   { id: 'ai-sub',         cat: 'shared', url: '#/ai-sub', title: '🤖 AIサブスク (共通)',
-    desc: '1週間500ptの自動更新サブスク。契約中は論文要約 / 全訳 / DeepResearch / 実験計画書 / 原稿 / 査読 / リライター / 研究特化AIチャットが全部無料に。加えてchai.nkmr.io (ChatGPT/Claude風) やfile.nkmr.io (ファイルブラウザAI) 等の外部サービスでもフル機能。残高500ptを切ると自動解約。', defaultVisible: true },
+    desc: '1週間500ptの自動更新サブスク。契約中は論文要約 / 全訳 / DeepResearch / 実験計画書 / 原稿 / 査読 / リライターが全部無料に。加えてchai.nkmr.io (ChatGPT/Claude風) やfile.nkmr.io (ファイルブラウザAI) 等の外部サービスでもフル機能。残高500ptを切ると自動解約。', defaultVisible: true },
   { id: 'photo-portal',   cat: 'shared', url: 'https://photo.nkmr.io', title: '📷 photo.nkmr.ioを開く',
     desc: '中村研の写真・動画を全部貯める自前フォト基盤 (Google Photosの代替)。学会 / 合宿 / 飲み会 / ゼミの写真と動画をまとめて保存+検索+顔識別+地図+同席グラフ等の全機能は外部サイトで。nkmr-SSOで保護。アルバム一覧をLabPay内で見たい時は🖼 フォトアルバムをどうぞ。', defaultVisible: true },
   { id: 'poster-maker',   cat: 'shared', url: 'https://member.nkmr.io', title: '📇 メンバー紹介ポスター作成',
@@ -160,7 +160,7 @@ export const APPS = [
   { id: 'exp-recruits', cat: 'research', url: '#/exp-recruits', title: '🧪 実験協力者募集', desc: '実験の被験者を早い者順で募集。 枠 (時間帯や日程) と定員を並べて公開、 メンバーは空いてる枠に自分でエントリー。 実施者は代理追加も可能。 参加者は自分の枠を後から確認できる。', defaultVisible: false },
   { id: 'bokete', cat: 'game', url: '#/bokete', title: '😆 ぼけて (bokete)', desc: '画像大喜利。 お題 (画像 + 任意の一言) を出して、みんなでボケ (面白い一言) を書く → ⭐ で評価 → ⭐ 数で ランキング。 bokete.jp 的、 無料。', defaultVisible: true },
   { id: 'setlog', cat: 'game', url: '#/setlog', title: '📸 setlog (LabPay 版 Vlog)', desc: '1 日を短いクリップ (写真 + キャプション) で断片記録するラボ内 Vlog (BeReal 的)。写真を随時ポスト → 日別・ユーザ別に時系列でまとまる。今日のみんなのフィードもある。', defaultVisible: true },
-  { id: 'research-ai', cat: 'research', url: '#/research-ai', title: '🔬 研究特化AIチャット (一旦停止)', desc: 'この機能は一旦停止しています。汎用チャットは chai.nkmr.io、LabPay内AI (要約 / 全訳 / 査読 / Deep Research / 実験計画書 / 原稿チェック / リライター) の使い放題は AIサブスクをご利用ください。', defaultVisible: false },
+  // v1344 中村さん要望「研究特化AIチャット は UI から 消して 良いな」→ カタログ から 削除 (v1263 停止済、 grandfather user 分 の view/router は 残置)。
   { id: 'profile-book', cat: 'game', url: '#/profile-book', title: '🎀 プロフ帳 (平成デザ)', desc: '基本情報 + 心理テスト + 匿名質問。基本情報を 6 個以上埋めると +50pt reward。他人のプロフ閲覧 10pt (一度アンロックで無制限)、匿名質問投稿 10pt、質問回答 +5pt。手書き風フォント + パステル背景。', defaultVisible: true },
   { id: 'labo-eats', cat: 'trade', url: '#/labo-eats', title: '🍱 ラーボーイーツ', desc: '研究室にいる人が外にいる人に「ついで買い」を頼めるサービス。基本料 50pt + 距離 10pt/100m + 商品代 (実費)。依頼 → 引受 → 引渡 (商品代入力) → 依頼者が受取確定で全額支払。', defaultVisible: true },
   { id: 'tickets', cat: 'trade', url: '#/tickets', title: '🎫 チケット', desc: '「◯◯します」「◯◯できる権利」を pt で売買できる社内マーケット。誰でも発行 → 対象者が pt を払って使う → 発行者に pt 入る。例: 運転しますチケット / 席を選べる / 罰ゲーム回避 / 好きなお菓子選べる。発行時に対象 (全員 / 学年限定) と有効期限、発行枚数を指定。', defaultVisible: true },
