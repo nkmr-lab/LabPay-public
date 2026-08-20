@@ -230,6 +230,8 @@ function route_admin(PDO $pdo, array $cfg, string $method, array $seg): void {
                         'presence_window_minutes','geo_default_radius_m',
                         'scrapbox_base_pt','scrapbox_pt_per_extra','scrapbox_bonus_cap',
                         'scrapbox_any_edit_pt','scrapbox_own_note_pt','scrapbox_start_date',
+                        // v1350 自ノート編集の 行数連動 (1行=Xpt, 上限 Y)。Cosense API 直叩き版で使用。
+                        'scrapbox_own_note_pt_per_line','scrapbox_own_note_pt_cap',
                         'roulette_tags'];
             $updated = [];
             foreach ($body as $k => $v) {
