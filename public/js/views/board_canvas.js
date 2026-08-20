@@ -41,10 +41,10 @@ let CURSOR_POST_ANIM = null;
 let MINIMAP_OPEN = true;
 // v1173 手書きモード
 // v1189 arrow モード追加 (Miro 風 note-to-note 矢印)
-// v1201 shape モード追加 (図形: 四角/楕円/直線/破線 の 4 種類 + dashed 切替)
+// v1201 shape モード追加 (図形: 四角/楕円/直線/破線の 4 種類 + dashed 切替)
 // MODE: 'select' / 'draw' / 'erase' / 'arrow' / 'shape'
 let MODE = 'select';
-let SHAPE_TYPE = 'rect';   // 'rect' | 'ellipse' | 'line'  (dashed 切替 は 別 flag)
+let SHAPE_TYPE = 'rect';   // 'rect' | 'ellipse' | 'line'  (dashed 切替は別 flag)
 let SHAPE_DASHED = false;
 // 図形描画中: 開始点 + 現在点 (world 座標)
 let CURRENT_SHAPE = null;   // { x1, y1, x2, y2 }
@@ -54,11 +54,11 @@ let CURRENT_STROKE = null;  // 描画中: { points:[{x,y},...], color, width }
 // v1189 矢印
 let ARROWS = [];      // 全矢印
 let ARROW_MAP = {};   // id → arrow
-let ARROW_SOURCE_NOTE_ID = null;  // arrow モードで 1 本目タップ済 の source note id (2 本目タップで確定)
+let ARROW_SOURCE_NOTE_ID = null;  // arrow モードで 1 本目タップ済の source note id (2 本目タップで確定)
 
-// v1197 世界座標での 手動 hit-test (SVG の pointer-events で 詰まないよう ブラウザ非依存 に)
+// v1197 世界座標での手動 hit-test (SVG の pointer-events で詰まないようブラウザ非依存に)
 function hitTestNote(wx, wy) {
-  // 上 (z_index 大) から順 に走査、 最初に box に 入った note を返す
+  // 上 (z_index 大) から順に走査、最初に box に入った note を返す
   const sorted = [...Object.values(NOTE_MAP)].sort((a, b) => (b.z_index || 0) - (a.z_index || 0));
   for (const n of sorted) {
     if (!n || n.hidden_for_me) continue;
@@ -68,7 +68,7 @@ function hitTestNote(wx, wy) {
   }
   return null;
 }
-// 点 (wx,wy) と 線分 (x1,y1)-(x2,y2) の 距離
+// 点 (wx,wy) と線分 (x1,y1)-(x2,y2) の距離
 function distPointToSegment(wx, wy, x1, y1, x2, y2) {
   const dx = x2 - x1, dy = y2 - y1;
   const len2 = dx * dx + dy * dy;
@@ -79,7 +79,7 @@ function distPointToSegment(wx, wy, x1, y1, x2, y2) {
   return Math.hypot(wx - px, wy - py);
 }
 function hitTestArrow(wx, wy, tol) {
-  const T = tol / VIEW.scale;  // ズーム で 判定幅 を 調整
+  const T = tol / VIEW.scale;  // ズームで判定幅を調整
   for (const a of Object.values(ARROW_MAP)) {
     if (!a) continue;
     const p1 = noteCenter(a.from_note_id); if (!p1) continue;
@@ -98,7 +98,7 @@ function hitTestStroke(wx, wy, tol) {
       const p1 = s.points[0], p2 = s.points[s.points.length - 1];
       const x1 = Math.min(p1.x, p2.x), y1 = Math.min(p1.y, p2.y);
       const x2 = Math.max(p1.x, p2.x), y2 = Math.max(p1.y, p2.y);
-      // 4 辺 の うち どれか に 近い か
+      // 4 辺のうちどれかに近いか
       if (distPointToSegment(wx, wy, x1, y1, x2, y1) <= half) return s;
       if (distPointToSegment(wx, wy, x2, y1, x2, y2) <= half) return s;
       if (distPointToSegment(wx, wy, x2, y2, x1, y2) <= half) return s;
@@ -110,14 +110,14 @@ function hitTestStroke(wx, wy, tol) {
       const cx = (p1.x + p2.x) / 2, cy = (p1.y + p2.y) / 2;
       const rx = Math.abs(p2.x - p1.x) / 2, ry = Math.abs(p2.y - p1.y) / 2;
       if (rx < 1 || ry < 1) continue;
-      // 楕円 の 円周距離 の 近似: 点 を 楕円 の 中心 座標系 に 変換 → 正規化
+      // 楕円の円周距離の近似: 点を楕円の中心座標系に変換 → 正規化
       const dx = (wx - cx) / rx, dy = (wy - cy) / ry;
       const dist = Math.abs(Math.sqrt(dx * dx + dy * dy) - 1);
-      // dist は 正規化距離。 実 距離 は 大まかに dist * min(rx, ry)
+      // dist は正規化距離。実距離は大まかに dist * min(rx, ry)
       if (dist * Math.min(rx, ry) <= half) return s;
       continue;
     }
-    // freehand / line: 各セグメント 距離
+    // freehand / line: 各セグメント距離
     for (let i = 1; i < s.points.length; i++) {
       const a = s.points[i - 1], b = s.points[i];
       if (distPointToSegment(wx, wy, a.x, a.y, b.x, b.y) <= half) return s;
@@ -125,16 +125,16 @@ function hitTestStroke(wx, wy, tol) {
   }
   return null;
 }
-// v1202/v1203 fb#493/494: 選択状態 (v1203 で 複数選択 対応)
-//   SELECTED_NOTE_ID は 互換 のため 残す (単一 選択 の 代表 = Set の 最後 に 追加された id)
+// v1202/v1203 fb#493/494: 選択状態 (v1203 で複数選択対応)
+//   SELECTED_NOTE_ID は互換のため残す (単一選択の代表 = Set の最後に追加された id)
 let SELECTED_NOTE_ID = null;
 const SELECTED_NOTE_IDS = new Set();
-// v1203 clipboard は 単一 でなく 配列 に (相対 位置 保持)
+// v1203 clipboard は単一でなく配列に (相対位置保持)
 let CLIPBOARD_NOTES = [];    // [{ color, front_text, back_text, front_image_url, width, height, dx, dy }]
-let LAST_POINTER = { x: 0, y: 0 };  // 直近 pointer 位置 (Ctrl+V の 貼り付け 場所 用)
-// v1203 範囲選択 (rubber-band) の 状態
+let LAST_POINTER = { x: 0, y: 0 };  // 直近 pointer 位置 (Ctrl+V の貼り付け場所用)
+// v1203 範囲選択 (rubber-band) の状態
 let RECT_SELECT = null;   // { x1, y1, x2, y2 } world 座標
-// v1196 Undo スタック — 各アクション を {label, undo: async fn} で 積む、 ↶ ボタン / Ctrl+Z で pop
+// v1196 Undo スタック — 各アクションを {label, undo: async fn} で積む、 ↶ ボタン / Ctrl+Z で pop
 const UNDO_STACK = [];
 const UNDO_LIMIT = 40;
 function pushUndo(label, undoFn) {
@@ -147,16 +147,16 @@ async function doUndo() {
   const action = UNDO_STACK.pop();
   const btn = document.getElementById('board-undo');
   if (btn) btn.disabled = UNDO_STACK.length === 0;
-  if (!action) { toast('取り消せる操作 が ないよ', 900); return; }
+  if (!action) { toast('取り消せる操作がないよ', 900); return; }
   try {
     await action.undo();
     toast('↶ ' + action.label, 900);
   } catch (e) {
-    toast('取消 失敗: ' + e.message);
+    toast('取消失敗: ' + e.message);
   }
 }
 function boardKeydown(ev) {
-  // 編集中 の textarea / input では Ctrl+Z が 効かなくなると 困る の で、 board-shell 内 の 入力欄 で は 通す
+  // 編集中の textarea / input では Ctrl+Z が効かなくなると困るので、 board-shell 内の入力欄では通す
   if (!document.getElementById('board-shell')) return;
   const t = ev.target;
   const tag = t?.tagName;
@@ -167,11 +167,11 @@ function boardKeydown(ev) {
     doUndo();
     return;
   }
-  // v1203 fb#493/494 コピー / 貼り付け (複数 対応: 相対位置 保持)
+  // v1203 fb#493/494 コピー / 貼り付け (複数対応: 相対位置保持)
   if (ctrl && (ev.key === 'c' || ev.key === 'C')) {
     const ids = [...SELECTED_NOTE_IDS];
     if (ids.length === 0) return;
-    // 全 note の 中心 の 重心 を 基準 に、 各 note の 相対 dx/dy を 保存
+    // 全 note の中心の重心を基準に、各 note の相対 dx/dy を保存
     const cx = ids.reduce((s, id) => s + ((NOTE_MAP[id]?.x || 0) + (NOTE_MAP[id]?.width || 200) / 2), 0) / ids.length;
     const cy = ids.reduce((s, id) => s + ((NOTE_MAP[id]?.y || 0) + (NOTE_MAP[id]?.height || 200) / 2), 0) / ids.length;
     CLIPBOARD_NOTES = ids.filter(id => NOTE_MAP[id]).map(id => {
@@ -183,7 +183,7 @@ function boardKeydown(ev) {
         dy: (n.y + (n.height || 200) / 2) - cy,
       };
     });
-    toast(`${CLIPBOARD_NOTES.length} 枚 コピー (Ctrl+V で 貼り付け)`, 1200);
+    toast(`${CLIPBOARD_NOTES.length} 枚コピー (Ctrl+V で貼り付け)`, 1200);
     ev.preventDefault();
     return;
   }
@@ -194,16 +194,23 @@ function boardKeydown(ev) {
     }
     return;
   }
-  // v1203/v1206 Delete / Backspace で 選択中 の 付箋 を 一括 削除
-  //   v1206 fb#497/500 confirm 撤去 (Ctrl+Z で 戻せる ので 誤操作 の 心配 小)
+  // v1203/v1206 Delete / Backspace で選択中の付箋を一括削除
+  //   v1206 fb#497/500 confirm 撤去 (Ctrl+Z で戻せるので誤操作の心配小)
   if ((ev.key === 'Delete' || ev.key === 'Backspace') && SELECTED_NOTE_IDS.size > 0) {
     ev.preventDefault();
     deleteSelectedNotes();
     return;
   }
+  // v1347 fb#522 Ctrl+G でグループ化 / Ctrl+Shift+G で解除
+  if (ctrl && (ev.key === 'g' || ev.key === 'G')) {
+    ev.preventDefault();
+    if (ev.shiftKey) ungroupSelectedNotes();
+    else             groupSelectedNotes();
+    return;
+  }
 }
 
-// v1202/v1203 fb#493 選択状態 の 見た目 反映 (複数選択 対応)
+// v1202/v1203 fb#493 選択状態の見た目反映 (複数選択対応)
 function updateSelectionHighlight() {
   document.querySelectorAll('.bnote').forEach(el => {
     const id = parseInt(el.dataset.id, 10);
@@ -216,7 +223,7 @@ function updateSelectionHighlight() {
     }
   });
 }
-// 選択の 追加/切替/クリア のユーティリティ
+// 選択の追加/切替/クリアのユーティリティ
 function selectOnlyNote(id) {
   SELECTED_NOTE_IDS.clear();
   SELECTED_NOTE_IDS.add(id);
@@ -240,7 +247,48 @@ function clearNoteSelection() {
   updateSelectionHighlight();
 }
 
-// v1203 複数貼り付け: 相対位置 (dx/dy) を 保持 したまま cursor 位置 に 集合 を 落とす
+// v1347 fb#522 タップされたノートに group_id があればグループ全員を選択、なければ単体選択。
+//   → タップ一発でグループ全体を掴めて、既存の multi-drag でそのまま一緒に動く。
+function selectGroupOfNote(id) {
+  const n = NOTE_MAP[id];
+  if (!n || !n.group_id) { selectOnlyNote(id); return; }
+  SELECTED_NOTE_IDS.clear();
+  for (const other of Object.values(NOTE_MAP)) {
+    if (other && other.group_id === n.group_id) SELECTED_NOTE_IDS.add(other.id);
+  }
+  SELECTED_NOTE_ID = id;
+  updateSelectionHighlight();
+}
+
+// v1347 選択中を新しいグループに束ねる (最低2枚)。既に別グループに属していても新グループへ移す。
+async function groupSelectedNotes() {
+  const ids = [...SELECTED_NOTE_IDS];
+  if (ids.length < 2) { toast('2枚以上を選択してからグループ化してください', 1200); return; }
+  try {
+    const res = await post(`/api/board/rooms/${ROOM_ID}/notes-group`, { note_ids: ids });
+    if (res && res.group_id) {
+      for (const id of (res.note_ids || ids)) {
+        if (NOTE_MAP[id]) NOTE_MAP[id].group_id = res.group_id;
+      }
+      renderNotes();
+      toast(`${(res.note_ids || ids).length}枚をグループ化しました`, 1200);
+    }
+  } catch (e) { toast('失敗: ' + (e?.message || e)); }
+}
+
+// v1347 選択中のグループを解除 (group_id を NULL に)。
+async function ungroupSelectedNotes() {
+  const ids = [...SELECTED_NOTE_IDS];
+  if (ids.length === 0) { toast('ノートを選択してください', 1200); return; }
+  try {
+    await post(`/api/board/rooms/${ROOM_ID}/notes-ungroup`, { note_ids: ids });
+    for (const id of ids) if (NOTE_MAP[id]) NOTE_MAP[id].group_id = null;
+    renderNotes();
+    toast(`${ids.length}枚のグループを解除しました`, 1200);
+  } catch (e) { toast('失敗: ' + (e?.message || e)); }
+}
+
+// v1203 複数貼り付け: 相対位置 (dx/dy) を保持したまま cursor 位置に集合を落とす
 async function pasteClipboardAtCursor() {
   if (!CLIPBOARD_NOTES || CLIPBOARD_NOTES.length === 0) return;
   const cx = LAST_POINTER.x, cy = LAST_POINTER.y;
@@ -267,18 +315,18 @@ async function pasteClipboardAtCursor() {
     NOTES = Object.values(NOTE_MAP);
     renderAll();
     if (createdIds.length > 0) {
-      pushUndo(`${createdIds.length} 枚 の 貼付 を 取消`, async () => {
+      pushUndo(`${createdIds.length} 枚の貼付を取消`, async () => {
         await Promise.all(createdIds.map(id => del(`/api/board/notes/${id}`).catch(() => {})));
         for (const id of createdIds) delete NOTE_MAP[id];
         NOTES = Object.values(NOTE_MAP);
         renderAll();
       });
-      toast(`${createdIds.length} 枚 貼り付け`, 1000);
+      toast(`${createdIds.length} 枚貼り付け`, 1000);
     }
   } catch (e) { toast('貼り付け失敗: ' + e.message); }
 }
 
-// v1203 選択中 note を 一括削除 (Undo で 復活)
+// v1203 選択中 note を一括削除 (Undo で復活)
 async function deleteSelectedNotes() {
   const ids = [...SELECTED_NOTE_IDS];
   if (ids.length === 0) return;
@@ -290,7 +338,7 @@ async function deleteSelectedNotes() {
     SELECTED_NOTE_IDS.clear();
     SELECTED_NOTE_ID = null;
     renderAll();
-    pushUndo(`${backups.length} 枚 の 削除 を 取消`, async () => {
+    pushUndo(`${backups.length} 枚の削除を取消`, async () => {
       const news = await Promise.all(backups.map(b =>
         post(`/api/board/rooms/${ROOM_ID}/notes`, {
           x: b.x, y: b.y, width: b.width, height: b.height,
@@ -302,11 +350,11 @@ async function deleteSelectedNotes() {
       NOTES = Object.values(NOTE_MAP);
       renderAll();
     });
-    toast(`${backups.length} 枚 削除 (↶ で 戻せる)`, 1400);
+    toast(`${backups.length} 枚削除 (↶ で戻せる)`, 1400);
   } catch (e) { toast('削除失敗: ' + e.message); }
 }
 
-// v1203 範囲選択 の rubber-band 描画 (SVG overlay に 破線 rect)
+// v1203 範囲選択の rubber-band 描画 (SVG overlay に破線 rect)
 function renderRectSelect() {
   const svg = document.getElementById('board-strokes-svg');
   if (!svg) return;
@@ -337,12 +385,12 @@ export async function renderBoardCanvas({ params }) {
   ROOM_ID = parseInt(params?.id, 10);
   if (!ROOM_ID) { navigate('/board'); return; }
   const app = document.getElementById('app');
-  // v1194 中村さん報告「左右両端まで行かない」→ main#app の padding が 干渉している 疑い。
-  //   board-shell は position:fixed だが safety-first で document.body 直下 に 挿入
-  //   (前回残置分を掃除)。 app は 空に して SPA の期待 に 合わせる。
-  // v1195 前バージョンで firstElementChild だけ を append していて <style> だけ が 移動 →
-  //   本体 <div id="board-shell"> が 消えて addEventListener が null に なった 事故。
-  //   全ての 子ノード を まとめて body 直下 の board-host div に 移す。
+  // v1194 中村さん報告「左右両端まで行かない」→ main#app の padding が干渉している疑い。
+  //   board-shell は position:fixed だが safety-first で document.body 直下に挿入
+  //   (前回残置分を掃除)。 app は空にして SPA の期待に合わせる。
+  // v1195 前バージョンで firstElementChild だけを append していて <style> だけが移動 →
+  //   本体 <div id="board-shell"> が消えて addEventListener が null になった事故。
+  //   全ての子ノードをまとめて body 直下の board-host div に移す。
   document.querySelectorAll('#board-shell, #board-host').forEach(el => el.remove());
   app.innerHTML = '';
   const host = document.createElement('div');
@@ -362,9 +410,9 @@ export async function renderBoardCanvas({ params }) {
   startPolling();
   LEAVE_HANDLER = () => {
     stopPolling();
-    // v1194 body 直下 に 移した shell + host を 掃除
+    // v1194 body 直下に移した shell + host を掃除
     document.querySelectorAll('#board-shell, #board-host').forEach(el => el.remove());
-    // v1196 undo stack + keydown リスナー を 解放 (Board を 離れたら 有効 に しない)
+    // v1196 undo stack + keydown リスナーを解放 (Board を離れたら有効にしない)
     UNDO_STACK.length = 0;
     window.removeEventListener('keydown', boardKeydown);
     if (topbar) topbar.style.display = wasTopHidden  ? '' : '';
@@ -379,8 +427,8 @@ export async function renderBoardCanvas({ params }) {
 function shellHtml() {
   return `
     <style>
-      /* v1202 fb#496 中村さん要望「左のツールバーをホバリングで それがなんの機能であるか 表示」→
-         native title の 遅延 (500ms) を 短縮 する 素早い 独自 tooltip */
+      /* v1202 fb#496 中村さん要望「左のツールバーをホバリングでそれがなんの機能であるか表示」→
+         native title の遅延 (500ms) を短縮する素早い独自 tooltip */
       #board-shell .b-icon-btn { position:relative; }
       #board-shell .b-icon-btn[data-tip]::after {
         content: attr(data-tip);
@@ -391,7 +439,7 @@ function shellHtml() {
         z-index: 1000;
       }
       #board-shell .b-icon-btn[data-tip]:hover::after { opacity: 1; transition-delay: 0.15s; }
-      /* v1194 board-shell を 確実 に フルスクリーン に (親要素 の 制約 を 全上書き) */
+      /* v1194 board-shell を確実にフルスクリーンに (親要素の制約を全上書き) */
       #board-shell {
         position: fixed !important;
         top: 0 !important; left: 0 !important;
@@ -405,7 +453,7 @@ function shellHtml() {
       #board-shell .bnote-editta::-webkit-scrollbar { display:none }
       #board-shell .bnote-body,
       #board-shell .bnote-editta { scrollbar-width:none; -ms-overflow-style:none }
-      /* v1190 Miro 風 フローティング UI パネル 共通 */
+      /* v1190 Miro 風フローティング UI パネル共通 */
       #board-shell .b-float {
         position:absolute; background:rgba(255,255,255,0.96);
         border:1px solid #d1d5db; border-radius:10px;
@@ -422,29 +470,32 @@ function shellHtml() {
       #board-shell .b-sep { height:1px; background:#e5e7eb; margin:4px 4px; }
     </style>
     <div id="board-shell" style="position:fixed; top:0; left:0; right:0; bottom:0; width:100vw; height:100vh; background:#fafafa; z-index:100">
-      <!-- v1190 中村さん指示「Miro って メニュー を 上 に 固める んじゃ なくて ツールバー的 にしてる、
-           画面 全体 を 使える の が メリット」→ 従来 の 上固定 toolbar を 撤去、 全 UI を
-           floating pane で viewport に 重ねる。 viewport は 常時 全画面。 -->
+      <!-- v1190 中村さん指示「Miro ってメニューを上に固めるんじゃなくてツールバー的にしてる、
+           画面全体を使えるのがメリット」→ 従来の上固定 toolbar を撤去、全 UI を
+           floating pane で viewport に重ねる。 viewport は常時全画面。 -->
       <!-- 上左: 戻る + タイトル (compact) -->
       <div class="b-float" style="top:8px; left:8px; padding:6px 12px; display:flex; align-items:center; gap:8px; max-width:calc(100vw - 24px)">
         <a href="#/board" class="hint" style="text-decoration:none; padding:2px 6px; color:#6b7280">← 一覧</a>
         <div id="board-title" style="font-weight:700; font-size:14px; min-width:0; max-width:60vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">…</div>
-        <!-- v1188 削除メニュー: 作成者/admin のみ 表示 / v1205 共有設定 追加 -->
+        <!-- v1188 削除メニュー: 作成者/admin のみ表示 / v1205 共有設定追加 -->
         <div id="board-more-wrap" hidden style="position:relative">
           <button class="b-icon-btn" id="board-more" title="その他" style="width:28px; height:28px; font-size:16px">⋯</button>
           <div id="board-more-menu" style="display:none; position:absolute; top:100%; right:0; margin-top:4px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; min-width:200px">
             <button class="btn" id="board-share" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🔓 共有設定 (公開範囲)</button>
+            <!-- v1347 fb#522 （氏名02）要望: ノート同士のグループ化 (永続、同グループは一括移動) -->
+            <button class="btn" id="board-group"   style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🔗 選択中をグループ化 (Ctrl+G)</button>
+            <button class="btn" id="board-ungroup" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer">🔓 選択のグループを解除 (Ctrl+Shift+G)</button>
             <button class="btn" id="board-delete" style="display:block; width:100%; text-align:left; padding:6px 10px; border:none; background:none; cursor:pointer; color:#b91c1c">🗑 このボードを削除</button>
           </div>
         </div>
 
-        <!-- v1205 共有設定 モーダル -->
+        <!-- v1205 共有設定モーダル -->
         <div id="board-share-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10001; align-items:center; justify-content:center; padding:16px">
           <div style="background:#fff; border-radius:12px; padding:16px; width:100%; max-width:440px; display:flex; flex-direction:column; gap:10px">
             <div style="font-weight:700; font-size:15px">🔓 公開範囲を変える</div>
             <div class="hint-sm" style="font-size:12px; color:#6b7280">誰にこのボードを見せる/編集させるかを設定します。</div>
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:8px; border:1px solid #e5e7eb; border-radius:6px">
-              <input type="radio" name="bshare-vis" value="lab"> <span>🌏 全体 (ラボ全員が 見られる/書ける)</span>
+              <input type="radio" name="bshare-vis" value="lab"> <span>🌏 全体 (ラボ全員が見られる/書ける)</span>
             </label>
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:8px; border:1px solid #e5e7eb; border-radius:6px">
               <input type="radio" name="bshare-vis" value="group"> <span>👥 グループ (指定したグループのメンバーだけ)</span>
@@ -463,13 +514,13 @@ function shellHtml() {
         </div>
       </div>
 
-      <!-- v1193 中村さん指示: 左ツールバーは 上下中央 に (⋯ 削除メニュー との被り 解消) -->
-      <!-- 左レール: 主要ツール (Miro 風 縦アイコン) -->
+      <!-- v1193 中村さん指示: 左ツールバーは上下中央に (⋯ 削除メニューとの被り解消) -->
+      <!-- 左レール: 主要ツール (Miro 風縦アイコン) -->
       <div class="b-float" style="top:50%; left:8px; transform:translateY(-50%); padding:6px; display:flex; flex-direction:column; gap:2px; width:50px">
-        <button class="b-icon-btn board-mode" data-mode="select" title="選択/移動 (Miro 風 手のひら)">🖐</button>
+        <button class="b-icon-btn board-mode" data-mode="select" title="選択/移動 (Miro 風手のひら)">🖐</button>
         <button class="b-icon-btn board-mode" data-mode="draw"   title="手書き">✏️</button>
         <button class="b-icon-btn board-mode" data-mode="arrow"  title="矢印 (付箋 → 付箋)">↗</button>
-        <!-- v1201 図形モード: 押すと 右 に 図形 picker が 出る、 選んだ図形 を ドラッグ で 描画 -->
+        <!-- v1201 図形モード: 押すと右に図形 picker が出る、選んだ図形をドラッグで描画 -->
         <div style="position:relative">
           <button class="b-icon-btn board-mode" data-mode="shape" id="board-mode-shape" title="図形 (四角/楕円/直線 / 破線切替)">⬜</button>
           <div id="board-shape-menu" style="display:none; position:absolute; left:100%; top:0; margin-left:6px; background:#fff; border:1px solid #d1d5db; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:4px; z-index:10; width:180px">
@@ -483,7 +534,7 @@ function shellHtml() {
             </div>
           </div>
         </div>
-        <button class="b-icon-btn board-mode" data-mode="erase"  title="消しゴム (ストローク/矢印/付箋 タップで削除)">🩹</button>
+        <button class="b-icon-btn board-mode" data-mode="erase"  title="消しゴム (ストローク/矢印/付箋タップで削除)">🩹</button>
         <div class="b-sep"></div>
         <button class="b-icon-btn" id="board-undo" title="取り消す (Ctrl+Z)" disabled>↶</button>
         <button class="b-icon-btn" id="board-add" title="ノートを追加">➕</button>
@@ -500,7 +551,7 @@ function shellHtml() {
         <input type="file" id="board-import-video-input" accept="video/*" multiple style="display:none">
       </div>
 
-      <!-- 左レールの下: draw モードのときだけ 出る ペン設定 -->
+      <!-- 左レールの下: draw モードのときだけ出るペン設定 -->
       <div id="board-pen-group" class="b-float" style="display:none; top:auto; bottom:70px; left:8px; padding:6px; flex-direction:column; align-items:center; gap:4px; width:50px" title="ペン設定">
         <input type="color" id="board-pen-color" value="#111827" style="width:32px; height:32px; padding:0; border:1px solid #d1d5db; border-radius:4px; cursor:pointer">
         <select id="board-pen-width" style="padding:2px 2px; font-size:11px; width:40px">
@@ -511,7 +562,7 @@ function shellHtml() {
         </select>
       </div>
 
-      <!-- 右下: ズーム コントロール (ミニマップ の 上 に 配置) -->
+      <!-- 右下: ズームコントロール (ミニマップの上に配置) -->
       <div class="b-float" style="top:auto; bottom:150px; right:8px; padding:4px; display:flex; align-items:center; gap:2px">
         <button class="b-icon-btn" id="board-zoom-out" style="width:32px; height:32px; font-size:20px">−</button>
         <span id="board-zoom-label" style="font-size:12px; color:#6b7280; min-width:46px; text-align:center">100%</span>
@@ -524,16 +575,16 @@ function shellHtml() {
         ${PALETTE.map(c => `<button class="bpal" data-color="${c}" style="width:20px; height:20px; border-radius:5px; border:2px solid transparent; background:${c}; padding:0; cursor:pointer" title="${c}"></button>`).join('')}
       </div>
 
-      <!-- v1192 diagnostic bar: 下中央、 v1200 で 非表示 (window.__board_debug=true で 有効化)。 内部 は 残す ので 次回 トラブル 時 は 即 切替可能 -->
+      <!-- v1192 diagnostic bar: 下中央、 v1200 で非表示 (window.__board_debug=true で有効化)。内部は残すので次回トラブル時は即切替可能 -->
       <div id="board-debug" class="b-float" style="display:none; top:auto; bottom:8px; left:50%; transform:translateX(-50%); padding:4px 10px; font-size:11px; color:#111827; font-family:monospace; z-index:100">
         <span id="board-dbg-mode">MODE=?</span> <span id="board-dbg-drag">DRAG=?</span> <span id="board-dbg-pts">pts=0</span> <span id="board-dbg-last">last=?</span>
       </div>
 
-      <!-- viewport は 全画面。 UI は 全部 b-float で 上 に 重ねる -->
+      <!-- viewport は全画面。 UI は全部 b-float で上に重ねる -->
       <div id="board-viewport" style="position:absolute; top:0; left:0; right:0; bottom:0; overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; background:#fafafa">
         <div id="board-layer" style="position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform">
           <!-- v1173 手書きストローク SVG (world 座標。 board-layer の transform に追随) -->
-          <!-- v1197 pointer-events:none 固定 (ブラウザ の SVG hit-test に 依存 しない、 手動 hit-test で 拾う) -->
+          <!-- v1197 pointer-events:none 固定 (ブラウザの SVG hit-test に依存しない、手動 hit-test で拾う) -->
           <svg id="board-strokes-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible; z-index:1"></svg>
           <!-- v1189 note-to-note 矢印 SVG -->
           <svg id="board-arrows-svg" width="20000" height="20000" style="position:absolute; left:-10000px; top:-10000px; pointer-events:none; overflow:visible; z-index:2">
@@ -543,14 +594,14 @@ function shellHtml() {
               </marker>
             </defs>
           </svg>
-          <!-- v1192 中村さん報告「線が引けない」の 決定的 バグ 修正:
+          <!-- v1192 中村さん報告「線が引けない」の決定的バグ修正:
                従来 renderAll で layer.innerHTML = notesHtml していたため
-               SVG (strokes / arrows) が 毎回 破棄されていた。 notes 専用の 別 container に
-               分離し、 SVG は layer 直下 に 残す。
-               v1196 中村さん再報告「矢印/消しゴム 効かない」→ SVG hit-test に 頼らず
-               z-index で notes を 最上位 に (z-index:10)、 note tap の 判定 を 確実に する。
-               arrow / stroke の hit test は 個別 line/path の pointer-events="stroke" と
-               svg pointer-events:visiblePainted で 拾う。 -->
+               SVG (strokes / arrows) が毎回破棄されていた。 notes 専用の別 container に
+               分離し、 SVG は layer 直下に残す。
+               v1196 中村さん再報告「矢印/消しゴム効かない」→ SVG hit-test に頼らず
+               z-index で notes を最上位に (z-index:10)、 note tap の判定を確実にする。
+               arrow / stroke の hit test は個別 line/path の pointer-events="stroke" と
+               svg pointer-events:visiblePainted で拾う。 -->
           <div id="board-notes-container" style="position:absolute; left:0; top:0; z-index:10"></div>
         </div>
         <!-- v1104 他人カーソルオーバーレイ (screen 座標、変形しないので上のレイヤ) -->
@@ -653,7 +704,7 @@ async function loadInitial() {
     document.getElementById('board-title').textContent = ROOM.title;
     document.getElementById('board-viewport').style.background = ROOM.bg_color || '#fafafa';
     // v1188 削除メニュー: 作成者 or admin のみ ⋯ を表示
-    // v1205/v1207 共有設定 も 作成者 or admin (中村さん確認「・・・からの共有モード変更できる？」→ admin でも 開ける よう 見直し)
+    // v1205/v1207 共有設定も作成者 or admin (中村さん確認「・・・からの共有モード変更できる？」→ admin でも開けるよう見直し)
     const myId   = state?.me?.id ?? 0;
     const myRole = state?.me?.role ?? '';
     const isCreator = Number(ROOM.creator_user_id) === Number(myId);
@@ -705,7 +756,7 @@ function startPolling() {
       // v1173 手書きストロークの diff
       for (const s of d.stroke_upserts || []) { STROKE_MAP[s.id] = s; dirty = true; }
       for (const sid of d.stroke_deletes || []) { if (STROKE_MAP[sid]) { delete STROKE_MAP[sid]; dirty = true; } }
-      // v1189 矢印 の diff
+      // v1189 矢印の diff
       for (const a of d.arrow_upserts || []) { ARROW_MAP[a.id] = a; dirty = true; }
       for (const aid of d.arrow_deletes || []) { if (ARROW_MAP[aid]) { delete ARROW_MAP[aid]; dirty = true; } }
       if (dirty) {
@@ -803,8 +854,8 @@ function wireCanvas() {
       ACTIVE_POINTERS.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (ACTIVE_POINTERS.size === 2) {
         // 2 本目が着地 = pinch + pan モード開始。既存の 1 本指 drag/draw をキャンセル
-        // v1202 fb#495 中村さん要望「二本指ドラッグで視点移動」→ pinch と 同時 に 2 本指 中点 の
-        //   移動 でも view を pan させる (Miro/Google Maps 風)。 PINCH_STATE に mid0 と tx0/ty0 を追加。
+        // v1202 fb#495 中村さん要望「二本指ドラッグで視点移動」→ pinch と同時に 2 本指中点の
+        //   移動でも view を pan させる (Miro/Google Maps 風)。 PINCH_STATE に mid0 と tx0/ty0 を追加。
         const [a, b] = [...ACTIVE_POINTERS.values()];
         const dx = b.x - a.x, dy = b.y - a.y;
         PINCH_STATE = {
@@ -820,12 +871,12 @@ function wireCanvas() {
         return;
       }
     }
-    // v1191 中村さん再報告「手書きできない」の 決定版 修正:
-    //   v1178 の mousedown 保険 + v1188 の pointerType=='mouse' skip 分岐 は 二重発火 と
-    //   誤解 の 温床 だった。 全 pointerType (mouse/pen/touch) を 単一の pointer 経路 で
-    //   処理する 単純設計 に 戻す + 「描画開始」を toast で 可視化 する。
+    // v1191 中村さん再報告「手書きできない」の決定版修正:
+    //   v1178 の mousedown 保険 + v1188 の pointerType=='mouse' skip 分岐は二重発火と
+    //   誤解の温床だった。全 pointerType (mouse/pen/touch) を単一の pointer 経路で
+    //   処理する単純設計に戻す + 「描画開始」を toast で可視化する。
     if (MODE === 'draw') {
-      // ボタン系 (b-icon-btn, .bpal, .bnote 内部ボタン等) は 描画 の 起点 に しない
+      // ボタン系 (b-icon-btn, .bpal, .bnote 内部ボタン等) は描画の起点にしない
       if (e.target.closest('button, .bnote, .bpal, input, select')) { updateDebug('down:blocked'); return; }
       e.preventDefault();
       const w = screenToWorld(e.clientX, e.clientY);
@@ -835,10 +886,10 @@ function wireCanvas() {
       try { vp.setPointerCapture(e.pointerId); } catch (_) {}
       renderCurrentStroke();
       updateDebug('down:' + e.pointerType);
-      // v1200: 描画開始 toast は 撤去 (draw 中は 毎回 出ると 邪魔)
+      // v1200: 描画開始 toast は撤去 (draw 中は毎回出ると邪魔)
       return;
     }
-    // v1201 図形モード: ドラッグ で 四角/楕円/直線 を 描画
+    // v1201 図形モード: ドラッグで四角/楕円/直線を描画
     if (MODE === 'shape') {
       if (e.target.closest('button, .bnote, .bpal, input, select')) { updateDebug('shape:blocked'); return; }
       e.preventDefault();
@@ -851,11 +902,11 @@ function wireCanvas() {
       updateDebug('shape:down:' + SHAPE_TYPE);
       return;
     }
-    // v1197 消しゴムモード: 手動 hit-test (SVG の pointer-events に 頼らない)
-    // v1199 note タップ で note 削除 (Miro 風、 Undo で 復活)
+    // v1197 消しゴムモード: 手動 hit-test (SVG の pointer-events に頼らない)
+    // v1199 note タップで note 削除 (Miro 風、 Undo で復活)
     if (MODE === 'erase') {
       const w0 = screenToWorld(e.clientX, e.clientY);
-      // まず stroke (幅 12px 以内)、 次に arrow (10px 以内)、 最後 に note を 判定
+      // まず stroke (幅 12px 以内)、次に arrow (10px 以内)、最後に note を判定
       const sHit = hitTestStroke(w0.x, w0.y, 12);
       if (sHit) {
         deleteStroke(sHit.id).catch(err => toast('削除失敗: ' + err.message));
@@ -870,7 +921,7 @@ function wireCanvas() {
         e.preventDefault();
         return;
       }
-      // note 削除 (DOM ancestry と 世界座標 の 両方 で 判定)
+      // note 削除 (DOM ancestry と世界座標の両方で判定)
       const nEl = e.target.closest('.bnote');
       let nHit = null;
       if (nEl) {
@@ -884,11 +935,11 @@ function wireCanvas() {
         e.preventDefault();
         return;
       }
-      // 空白 は pan に fall-through
+      // 空白は pan に fall-through
       updateDebug('erase:fall-thr');
     }
-    // v1197 矢印モード: note を 拾う。 v1199 DOM ancestor と 世界座標 の 両方 で 判定
-    //   どちらか が 見つけたら hit 成立 (screenToWorld / n.width の 微妙な ずれ を 吸収)
+    // v1197 矢印モード: note を拾う。 v1199 DOM ancestor と世界座標の両方で判定
+    //   どちらかが見つけたら hit 成立 (screenToWorld / n.width の微妙なずれを吸収)
     if (MODE === 'arrow') {
       const nEl = e.target.closest('.bnote');
       let nHit = null;
@@ -919,7 +970,7 @@ function wireCanvas() {
         updateDebug('arrow:note=' + nid);
         return;
       }
-      // 空白タップ で source clear + pan に fall-through
+      // 空白タップで source clear + pan に fall-through
       if (ARROW_SOURCE_NOTE_ID) {
         ARROW_SOURCE_NOTE_ID = null;
         renderArrows();
@@ -940,23 +991,24 @@ function wireCanvas() {
       const nid = parseInt(noteEl.dataset.id, 10);
       const n = NOTE_MAP[nid];
       if (!n) return;
-      // v1203 fb#493 複数選択: Shift+click で 追加/削除、 通常 click は 単一 に
+      // v1203 fb#493 複数選択: Shift+click で追加/削除、通常 click は単一に
       if (e.shiftKey) {
         toggleNoteSelection(nid);
-        // v1206 fb#498 中村さん要望「shift+選択で 順次複数選択」→ 選択数 を toast で フィードバック
+        // v1206 fb#498 中村さん要望「shift+選択で順次複数選択」→ 選択数を toast でフィードバック
         const n = SELECTED_NOTE_IDS.size;
-        if (n > 0) toast(`${n} 枚 選択中`, 700);
-        // Shift 選択 だけ の 時 は drag 開始 しない
+        if (n > 0) toast(`${n} 枚選択中`, 700);
+        // Shift 選択だけの時は drag 開始しない
         DRAG.mode = null;
         return;
       }
-      // 既に 選択済 なら 選択維持 (multi-drag 準備)、 未選択 なら single-select
-      if (!SELECTED_NOTE_IDS.has(nid)) selectOnlyNote(nid);
+      // 既に選択済なら選択維持 (multi-drag 準備)、未選択なら
+      //   v1347 fb#522 group_id があればグループ全員を選択、なければ単体
+      if (!SELECTED_NOTE_IDS.has(nid)) selectGroupOfNote(nid);
       DRAG.mode = 'note';
       DRAG.noteId = nid;
       DRAG.startX = e.clientX; DRAG.startY = e.clientY;
       DRAG.noteStartX = n.x; DRAG.noteStartY = n.y;
-      // v1203 multi-drag 用: 選択中 全 note の 初期位置 を 保存
+      // v1203 multi-drag 用: 選択中全 note の初期位置を保存
       DRAG.multi = [];
       for (const sid of SELECTED_NOTE_IDS) {
         const s = NOTE_MAP[sid];
@@ -965,7 +1017,7 @@ function wireCanvas() {
       // z bump
       bringToFront(nid).catch(() => {});
     } else if (!e.target.closest('button, .bmodal-color, .bpal')) {
-      // v1203 空白 で Shift+drag = 範囲選択 (rubber-band)
+      // v1203 空白で Shift+drag = 範囲選択 (rubber-band)
       if (e.shiftKey && MODE === 'select') {
         const w = screenToWorld(e.clientX, e.clientY);
         RECT_SELECT = { x1: w.x, y1: w.y, x2: w.x, y2: w.y };
@@ -975,7 +1027,7 @@ function wireCanvas() {
         renderRectSelect();
         return;
       }
-      // v1202 空白 タップ で 選択解除
+      // v1202 空白タップで選択解除
       clearNoteSelection();
       DRAG.mode = 'pan';
       DRAG.startX = e.clientX; DRAG.startY = e.clientY;
@@ -999,16 +1051,16 @@ function wireCanvas() {
         const dx = b.x - a.x, dy = b.y - a.y;
         const d = Math.sqrt(dx * dx + dy * dy);
         if (d > 0) {
-          // v1202 fb#495 pinch (拡大縮小) + pan (2本指中点移動) を 同時 に。
-          //   まず scale を 2本指 中点 で 更新、 その後 mid の 移動 分 だけ tx/ty を 追加 シフト。
+          // v1202 fb#495 pinch (拡大縮小) + pan (2本指中点移動) を同時に。
+          //   まず scale を 2本指中点で更新、その後 mid の移動分だけ tx/ty を追加シフト。
           const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-          // v1206 fb#499 zoom 感度 上げ: 距離比 を 累乗 で 増幅 (1.8 乗)。
-          //   指 距離 2 倍 → scale 3.5 倍 (従来 は 2 倍)。 指 半分 → scale 0.29 倍 (従来 0.5 倍)。
+          // v1206 fb#499 zoom 感度上げ: 距離比を累乗で増幅 (1.8 乗)。
+          //   指距離 2 倍 → scale 3.5 倍 (従来は 2 倍)。指半分 → scale 0.29 倍 (従来 0.5 倍)。
           const ratio = d / PINCH_STATE.d0;
           const amp = Math.pow(ratio, 1.8);
           const newScale = PINCH_STATE.scale0 * amp;
           zoomAtScreen(cx, cy, newScale);
-          // 2 本指 中点 の 移動 = pan 量
+          // 2 本指中点の移動 = pan 量
           VIEW.tx += (cx - PINCH_STATE.mid0.x);
           VIEW.ty += (cy - PINCH_STATE.mid0.y);
           PINCH_STATE.mid0.x = cx; PINCH_STATE.mid0.y = cy;
@@ -1020,9 +1072,9 @@ function wireCanvas() {
     // v1104 自分のカーソル位置 (world 座標) を常時追跡してスロットル送信
     const w = screenToWorld(e.clientX, e.clientY);
     MY_CURSOR.x = w.x; MY_CURSOR.y = w.y;
-    LAST_POINTER = { x: w.x, y: w.y };  // v1202 貼り付け 位置 用
+    LAST_POINTER = { x: w.x, y: w.y };  // v1202 貼り付け位置用
     scheduleCursorPost();
-    // v1201 図形描画中: 終点 を 更新 + preview 再描画
+    // v1201 図形描画中: 終点を更新 + preview 再描画
     if (DRAG.mode === 'shape' && CURRENT_SHAPE) {
       CURRENT_SHAPE.x2 = w.x;
       CURRENT_SHAPE.y2 = w.y;
@@ -1030,7 +1082,7 @@ function wireCanvas() {
       return;
     }
     // v1173 手書き: 描画中は世界座標で点を追加、SVG に反映
-    // v1191 pointerType 分岐 撤廃 (v1188 の mouse skip を 取消)
+    // v1191 pointerType 分岐撤廃 (v1188 の mouse skip を取消)
     if (DRAG.mode === 'draw' && CURRENT_STROKE) {
       const last = CURRENT_STROKE.points[CURRENT_STROKE.points.length - 1];
       // 隣接点間の距離が最低 2px 以上あるときだけ追加 (点数節約)
@@ -1052,7 +1104,7 @@ function wireCanvas() {
       VIEW.ty = DRAG.origTy + dy;
       applyTransform();
     } else if (DRAG.mode === 'note') {
-      // v1203 multi-drag: DRAG.multi に 記録した 全 選択 note を 同じ dx/dy で 移動
+      // v1203 multi-drag: DRAG.multi に記録した全選択 note を同じ dx/dy で移動
       const shiftX = dx / VIEW.scale, shiftY = dy / VIEW.scale;
       if (DRAG.multi && DRAG.multi.length > 1) {
         for (const m of DRAG.multi) {
@@ -1069,7 +1121,7 @@ function wireCanvas() {
         if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
       }
     } else if (DRAG.mode === 'rect-select') {
-      // v1203 範囲選択 の 終点 を 更新 + preview 再描画
+      // v1203 範囲選択の終点を更新 + preview 再描画
       const w = screenToWorld(e.clientX, e.clientY);
       if (RECT_SELECT) { RECT_SELECT.x2 = w.x; RECT_SELECT.y2 = w.y; renderRectSelect(); }
     } else if (DRAG.mode === 'resize') {
@@ -1092,16 +1144,16 @@ function wireCanvas() {
       // draw モード中なら下の draw 完了パスに任せる。それ以外なら pinch/pan 中断。
       if (DRAG.mode !== 'draw' && ACTIVE_POINTERS.size === 0) DRAG.mode = null;
     }
-    // v1201 図形完了: shape stroke として サーバ 保存
+    // v1201 図形完了: shape stroke としてサーバ保存
     if (DRAG.mode === 'shape' && CURRENT_SHAPE) {
       try { vp.releasePointerCapture(e.pointerId); } catch (_) {}
       const s = CURRENT_SHAPE;
       CURRENT_SHAPE = null;
       DRAG.mode = null;
       const dx = Math.abs(s.x2 - s.x1), dy = Math.abs(s.y2 - s.y1);
-      // 極小 は 捨てる (誤タップ)
+      // 極小は捨てる (誤タップ)
       if (dx < 6 && dy < 6) { renderCurrentShape(); return; }
-      // points = [start, end] の 2 点、 shape / dashed で サーバ が 解釈
+      // points = [start, end] の 2 点、 shape / dashed でサーバが解釈
       try {
         const r = await post(`/api/board/rooms/${ROOM_ID}/strokes`, {
           points: [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }],
@@ -1127,7 +1179,7 @@ function wireCanvas() {
       return;
     }
     // v1173 手書き完了: サーバ保存
-    // v1191 pointerType 分岐 撤廃
+    // v1191 pointerType 分岐撤廃
     if (DRAG.mode === 'draw' && CURRENT_STROKE) {
       try { vp.releasePointerCapture(e.pointerId); } catch (_) {}
       const stroke = CURRENT_STROKE;
@@ -1165,7 +1217,7 @@ function wireCanvas() {
     vp.style.cursor = 'grab';
     try { vp.releasePointerCapture(e.pointerId); } catch (_) {}
     DRAG.mode = null; DRAG.noteId = null; DRAG.multi = null;
-    // v1203 範囲選択 の 確定
+    // v1203 範囲選択の確定
     if (mode === 'rect-select' && RECT_SELECT) {
       const r = RECT_SELECT;
       const x1 = Math.min(r.x1, r.x2), y1 = Math.min(r.y1, r.y2);
@@ -1173,7 +1225,7 @@ function wireCanvas() {
       RECT_SELECT = null;
       renderRectSelect();
       let added = 0;
-      // 選択矩形 内 に 完全 に 収まる note を 追加 (Miro/Figma 風、 交差 でなく 内包)
+      // 選択矩形内に完全に収まる note を追加 (Miro/Figma 風、交差でなく内包)
       for (const n of Object.values(NOTE_MAP)) {
         if (!n || n.hidden_for_me) continue;
         const w = n.width || 200, h = n.height || 200;
@@ -1184,7 +1236,7 @@ function wireCanvas() {
         }
       }
       updateSelectionHighlight();
-      if (added > 0) toast(`${added} 枚 選択`, 900);
+      if (added > 0) toast(`${added} 枚選択`, 900);
       return;
     }
     if ((mode === 'note' || mode === 'resize') && nid && moved) {
@@ -1192,7 +1244,7 @@ function wireCanvas() {
       if (n) {
         try {
           if (mode === 'note') {
-            // v1203 multi-drag: DRAG.multi の 全 note を 並列 で PATCH
+            // v1203 multi-drag: DRAG.multi の全 note を並列で PATCH
             if (multi && multi.length > 1) {
               const backup = multi.map(m => ({ id: m.id, x0: m.x0, y0: m.y0 }));
               await Promise.all(multi.map(m => {
@@ -1200,8 +1252,8 @@ function wireCanvas() {
                 if (!nn) return null;
                 return patch(`/api/board/notes/${m.id}`, { x: nn.x, y: nn.y }).catch(() => {});
               }));
-              // undo: 全 note を 元位置 に 戻す
-              pushUndo(`${multi.length} 枚 の 移動 を 取消`, async () => {
+              // undo: 全 note を元位置に戻す
+              pushUndo(`${multi.length} 枚の移動を取消`, async () => {
                 await Promise.all(backup.map(m => {
                   const nn = NOTE_MAP[m.id]; if (!nn) return null;
                   nn.x = m.x0; nn.y = m.y0;
@@ -1241,7 +1293,7 @@ function wireCanvas() {
     }
   });
 
-  // wheel = zoom (v1206 fb#499 中村さん要望「同一の動作でもっと拡大縮小が大きく」→ 感度 2.7 倍 (0.0015 → 0.004)。 1 tick で ~30% ズームアウト/イン、 2〜3 tick で 倍/半分 に なる 体感)
+  // wheel = zoom (v1206 fb#499 中村さん要望「同一の動作でもっと拡大縮小が大きく」→ 感度 2.7 倍 (0.0015 → 0.004)。 1 tick で ~30% ズームアウト/イン、 2〜3 tick で倍/半分になる体感)
   vp.addEventListener('wheel', (e) => {
     e.preventDefault();
     const delta = -e.deltaY;
@@ -1249,10 +1301,10 @@ function wireCanvas() {
     zoomAtScreen(e.clientX, e.clientY, VIEW.scale * factor);
   }, { passive: false });
 
-  // v1191 中村さん再報告「手書きできない」の 決定版 修正: v1178 の mousedown 保険 と
-  //   window mousemove/mouseup は 撤去。 pointer events 単独で 全ての 入力を 扱う (二重
-  //   発火 の 誤解を 排除)。 pointerType が mouse/pen/touch のどれでも 上の pointerdown/
-  //   move/up の 一本道 で 完結。
+  // v1191 中村さん再報告「手書きできない」の決定版修正: v1178 の mousedown 保険と
+  //   window mousemove/mouseup は撤去。 pointer events 単独で全ての入力を扱う (二重
+  //   発火の誤解を排除)。 pointerType が mouse/pen/touch のどれでも上の pointerdown/
+  //   move/up の一本道で完結。
 }
 
 function zoomAtScreen(sx, sy, newScale) {
@@ -1294,7 +1346,7 @@ function wireToolbar() {
   document.querySelectorAll('.board-mode').forEach(b => {
     b.addEventListener('click', () => setMode(b.dataset.mode));
   });
-  // v1202 fb#496: 左ツールバー の title を data-tip に 反映 (独自 tooltip 用)
+  // v1202 fb#496: 左ツールバーの title を data-tip に反映 (独自 tooltip 用)
   document.querySelectorAll('#board-shell .b-icon-btn[title]').forEach(b => {
     if (!b.dataset.tip) b.dataset.tip = b.title;
   });
@@ -1311,7 +1363,7 @@ function wireToolbar() {
     b.addEventListener('click', (ev) => {
       ev.stopPropagation();
       SHAPE_TYPE = b.dataset.shape;
-      // 選択状態 の highlight
+      // 選択状態の highlight
       document.querySelectorAll('.board-shape-type').forEach(x => x.classList.toggle('active', x === b));
       const label = SHAPE_TYPE === 'rect' ? '⬜ 四角' : SHAPE_TYPE === 'ellipse' ? '⭕ 楕円' : '─ 直線';
       toast('図形: ' + label + (SHAPE_DASHED ? ' (点線)' : ''), 1200);
@@ -1360,11 +1412,22 @@ function wireToolbar() {
       toast('削除失敗: ' + e.message);
     }
   });
-  // v1205 共有設定 (作成者 のみ)
+  // v1205 共有設定 (作成者のみ)
   document.getElementById('board-share')?.addEventListener('click', (ev) => {
     ev.stopPropagation();
     moreMenu.style.display = 'none';
     openShareModal();
+  });
+  // v1347 fb#522 グループ化 / 解除 (⋯ メニュー内)
+  document.getElementById('board-group')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    moreMenu.style.display = 'none';
+    groupSelectedNotes();
+  });
+  document.getElementById('board-ungroup')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    moreMenu.style.display = 'none';
+    ungroupSelectedNotes();
   });
   document.getElementById('bshare-cancel')?.addEventListener('click', () => closeShareModal());
   document.getElementById('bshare-save')?.addEventListener('click', () => saveShareSettings());
@@ -1408,7 +1471,7 @@ function renderAll() {
   applyTransform();
   // v1173 手書きストロークも同時に描画
   renderStrokes();
-  // v1189 note-to-note 矢印 も同時に描画
+  // v1189 note-to-note 矢印も同時に描画
   renderArrows();
   // z_index でソート
   const sorted = [...Object.values(NOTE_MAP)].sort((a, b) => (a.z_index || 0) - (b.z_index || 0));
@@ -1422,7 +1485,7 @@ function renderAll() {
     if (ta) editingSnapshot = { value: ta.value, start: ta.selectionStart, end: ta.selectionEnd };
     EDITING_NOTE_ID = null;
   }
-  // v1192 layer 直下 の SVG を 破壊 しない よう、 notes は board-notes-container に 書く
+  // v1192 layer 直下の SVG を破壊しないよう、 notes は board-notes-container に書く
   const notesRoot = document.getElementById('board-notes-container') || layer;
   notesRoot.innerHTML = sorted.map(noteHtml).join('');
   notesRoot.querySelectorAll('[data-flip-id]').forEach(el => {
@@ -1449,7 +1512,7 @@ function renderAll() {
       openColorPop(parseInt(el.dataset.colorId, 10), el);
     });
   });
-  // v1328 fb#512 文字サイズ 手動指定 (prompt で 数値 入力、 空欄 で 自動 に 戻す)
+  // v1328 fb#512 文字サイズ手動指定 (prompt で数値入力、空欄で自動に戻す)
   notesRoot.querySelectorAll('[data-fontsize-id]').forEach(el => {
     el.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -1457,14 +1520,14 @@ function renderAll() {
       const n = NOTE_MAP[nid];
       if (!n) return;
       const cur = n.font_size ? String(n.font_size) : '';
-      const s = prompt('文字サイズ (px、 8〜128)。 空欄で自動に戻す。', cur);
+      const s = prompt('文字サイズ (px、 8〜128)。空欄で自動に戻す。', cur);
       if (s === null) return; // キャンセル
       let payload;
       if (s.trim() === '') {
         payload = { font_size: null };
       } else {
         const v = Number(s);
-        if (!Number.isFinite(v) || v < 8 || v > 128) { toast('8〜128 の 数字 で 入力して ください'); return; }
+        if (!Number.isFinite(v) || v < 8 || v > 128) { toast('8〜128 の数字で入力してください'); return; }
         payload = { font_size: Math.round(v) };
       }
       try {
@@ -1483,7 +1546,7 @@ function renderAll() {
   if (wasEditing && NOTE_MAP[wasEditing]) {
     enterInlineEdit(wasEditing, editingSnapshot);
   }
-  // v1202 選択状態 の 見た目 を 復元
+  // v1202 選択状態の見た目を復元
   updateSelectionHighlight();
 }
 
@@ -1538,7 +1601,7 @@ function noteHtml(n) {
   } else {
     const img = n.front_image_url;
     const imgBlock = img ? `<img src="${escapeHtml(img)}" style="max-width:100%; max-height:70%; object-fit:contain; border-radius:4px; margin-bottom:4px" alt="">` : '';
-    // v1328 fb#512: 手動指定 (n.font_size) が あれば それ を 優先、 NULL なら 従来 の 自動計算
+    // v1328 fb#512: 手動指定 (n.font_size) があればそれを優先、 NULL なら従来の自動計算
     const fpx = (n.font_size && n.font_size > 0)
       ? n.font_size
       : dynamicFontSize(n.front_text || '', n.width, n.height);
@@ -1699,8 +1762,8 @@ async function deleteNote(id) {
   } catch (e) { toast('削除失敗: ' + e.message); }
 }
 
-// v1199 消しゴム モード の note タップ 用
-// v1206 fb#497 中村さん最新「付箋削除時のアラート不要」→ confirm 撤去。 undo で 戻せる ので 安全。
+// v1199 消しゴムモードの note タップ用
+// v1206 fb#497 中村さん最新「付箋削除時のアラート不要」→ confirm 撤去。 undo で戻せるので安全。
 async function deleteNoteWithUndo(id) {
   const backup = NOTE_MAP[id];
   if (!backup) return;
@@ -2262,26 +2325,26 @@ async function uploadFilesAsNotes(files, mediaType) {
 // ─── v1173 手書き ───────────────────────────────────────
 function setMode(m) {
   MODE = m;
-  // v1190 レール ボタン は .active クラスで highlight (b-icon-btn.active)
+  // v1190 レールボタンは .active クラスで highlight (b-icon-btn.active)
   document.querySelectorAll('.board-mode').forEach(b => {
     const active = b.dataset.mode === m;
     b.classList.toggle('active', active);
-    // 旧 .btn 系 の 直接 style 上書きも残しておく (b-icon-btn 以外の セレクタから 呼ばれても 効くよう)
+    // 旧 .btn 系の直接 style 上書きも残しておく (b-icon-btn 以外のセレクタから呼ばれても効くよう)
     b.style.background = active ? '#7b3fa0' : '';
     b.style.color      = active ? '#fff'   : '';
   });
-  // v1200 モード切替 の toast を 使い方 付き に (中村さん実測「矢印はノード間、消しゴムはクリックなのね」→ 一目で 分かる 説明を 添える)
+  // v1200 モード切替の toast を使い方付きに (中村さん実測「矢印はノード間、消しゴムはクリックなのね」→ 一目で分かる説明を添える)
   const HINT = {
-    select: '🖐 選択/移動: パン+ドラッグ / Shift+クリック で 複数選択 / Shift+ドラッグ で 範囲選択 / Ctrl+C/V',
-    draw:   '✏️ 手書き: ドラッグで 自由 に 線を 引く',
-    arrow:  '↗ 矢印: ノードA → ノードB を 順にタップ で 接続',
-    shape:  '⬜ 図形: ドラッグ で 四角/楕円/直線 を 描く (点線 チェックで 破線に)',
-    erase:  '🩹 消しゴム: 線/矢印/ノート を タップで 削除 (↶ で 戻せる)',
+    select: '🖐 選択/移動: パン+ドラッグ / Shift+クリックで複数選択 / Shift+ドラッグで範囲選択 / Ctrl+C/V',
+    draw:   '✏️ 手書き: ドラッグで自由に線を引く',
+    arrow:  '↗ 矢印: ノードA → ノードB を順にタップで接続',
+    shape:  '⬜ 図形: ドラッグで四角/楕円/直線を描く (点線チェックで破線に)',
+    erase:  '🩹 消しゴム: 線/矢印/ノートをタップで削除 (↶ で戻せる)',
   };
   toast(HINT[m] || m, 1600);
   const pen = document.getElementById('board-pen-group');
   if (pen) pen.style.display = (m === 'draw' || m === 'shape') ? 'flex' : 'none';
-  // v1197 SVG root は none 固定 (hit-test は 手動 で NOTE_MAP / STROKE_MAP / ARROW_MAP から)
+  // v1197 SVG root は none 固定 (hit-test は手動で NOTE_MAP / STROKE_MAP / ARROW_MAP から)
   const svg = document.getElementById('board-strokes-svg');
   if (svg) svg.style.pointerEvents = 'none';
   const asvg = document.getElementById('board-arrows-svg');
@@ -2293,7 +2356,7 @@ function setMode(m) {
                     : m === 'arrow' ? 'cell'
                     : 'grab';
   }
-  // v1189 モード切替 で 矢印 の 選択状態 は 常にクリア + 再描画 (pointerEvents 反映)
+  // v1189 モード切替で矢印の選択状態は常にクリア + 再描画 (pointerEvents 反映)
   if (m !== 'arrow') ARROW_SOURCE_NOTE_ID = null;
   renderArrows();
 }
@@ -2331,7 +2394,7 @@ function renderStrokes() {
   svg.innerHTML = parts.join('');
 }
 
-// v1201 図形描画中 の preview (drag 中 に 半透明で 出す)
+// v1201 図形描画中の preview (drag 中に半透明で出す)
 function renderCurrentShape() {
   const svg = document.getElementById('board-strokes-svg');
   if (!svg) return;
@@ -2430,7 +2493,7 @@ async function deleteStroke(sid) {
 
 // ─── v1189 note-to-note 矢印 ───────────────────────────────────
 
-// note の 中心 world 座標 (v1201: n.width/n.height の フィールド名 バグ 修正)
+// note の中心 world 座標 (v1201: n.width/n.height のフィールド名バグ修正)
 function noteCenter(nid) {
   const n = NOTE_MAP[nid]; if (!n) return null;
   return { x: (n.x || 0) + (n.width || 200) / 2, y: (n.y || 0) + (n.height || 200) / 2 };
@@ -2442,13 +2505,13 @@ function noteBox(nid) {
   const w = n.width || 200, h = n.height || 200;
   return { x1, y1, x2: x1 + w, y2: y1 + h, cx: x1 + w / 2, cy: y1 + h / 2 };
 }
-// note の rect edge と 中心 → 外向き の 線分 の 交点。 gap 分 さらに 外側 に 押し出す。
-//   矢印 の 始点/終点 が 付箋 から 少し 離れる ように する ため。
+// note の rect edge と中心 → 外向きの線分の交点。 gap 分さらに外側に押し出す。
+//   矢印の始点/終点が付箋から少し離れるようにするため。
 function rectEdgeToward(box, tx, ty, gap) {
   const cx = box.cx, cy = box.cy;
   const dx = tx - cx, dy = ty - cy;
   if (dx === 0 && dy === 0) return { x: cx, y: cy };
-  // 中心 から 外へ の parametric line: (cx + t*dx, cy + t*dy)。 rect の 4 辺 の うち 最短 の t (>0) を 探す。
+  // 中心から外への parametric line: (cx + t*dx, cy + t*dy)。 rect の 4 辺のうち最短の t (>0) を探す。
   const halfW = (box.x2 - box.x1) / 2;
   const halfH = (box.y2 - box.y1) / 2;
   const tx2 = dx !== 0 ? halfW / Math.abs(dx) : Infinity;
@@ -2456,7 +2519,7 @@ function rectEdgeToward(box, tx, ty, gap) {
   const t = Math.min(tx2, ty2);
   // 交点 = 中心 + t * (dx, dy)
   const ex = cx + t * dx, ey = cy + t * dy;
-  // gap 分 (px) 外向き に 追加
+  // gap 分 (px) 外向きに追加
   const len = Math.sqrt(dx * dx + dy * dy);
   const ux = dx / len, uy = dy / len;
   return { x: ex + ux * gap, y: ey + uy * gap };
@@ -2472,8 +2535,8 @@ function renderArrows() {
     const boxS = noteBox(a.from_note_id);
     const boxT = noteBox(a.to_note_id);
     if (!boxS || !boxT) continue;
-    // v1201 中村さん要望「矢印の始点終点は 付箋から少し離して」→ rect の 実際 の 辺 で 交点 を 取って、
-    //   gap:14px 分 外側 に 押し出す。 これで 付箋 と 矢印線 の 間 に 空気層 が 生まれる。
+    // v1201 中村さん要望「矢印の始点終点は付箋から少し離して」→ rect の実際の辺で交点を取って、
+    //   gap:14px 分外側に押し出す。これで付箋と矢印線の間に空気層が生まれる。
     const GAP = 14;
     const q1 = rectEdgeToward(boxS, boxT.cx, boxT.cy, GAP);
     const q2 = rectEdgeToward(boxT, boxS.cx, boxS.cy, GAP);
@@ -2481,7 +2544,7 @@ function renderArrows() {
     // 選択中の source を強調
     const highlight = (a.from_note_id === ARROW_SOURCE_NOTE_ID || a.to_note_id === ARROW_SOURCE_NOTE_ID);
     const strokeW = highlight ? 4 : 2.5;
-    // 太い透明ライン を 下敷き に 置いて タップ判定 を 広げる (12px ヒット)
+    // 太い透明ラインを下敷きに置いてタップ判定を広げる (12px ヒット)
     parts.push(`<line data-arrow-id="${a.id}" x1="${(q1.x+10000).toFixed(1)}" y1="${(q1.y+10000).toFixed(1)}" x2="${(q2.x+10000).toFixed(1)}" y2="${(q2.y+10000).toFixed(1)}" stroke="transparent" stroke-width="14" pointer-events="stroke" style="cursor:pointer" />`);
     parts.push(`<line data-arrow-id="${a.id}" x1="${(q1.x+10000).toFixed(1)}" y1="${(q1.y+10000).toFixed(1)}" x2="${(q2.x+10000).toFixed(1)}" y2="${(q2.y+10000).toFixed(1)}" stroke="${a.color}" stroke-width="${strokeW}" marker-end="url(#board-arrow-head)"${dash} pointer-events="none" />`);
     if (a.label) {
@@ -2492,11 +2555,11 @@ function renderArrows() {
       parts.push(`<text x="${mx.toFixed(1)}" y="${(my + 3).toFixed(1)}" font-size="12" text-anchor="middle" fill="${a.color}" pointer-events="none">${escapeHtml(a.label)}</text>`);
     }
   }
-  // defs は 残して 本体を差替え
+  // defs は残して本体を差替え
   svg.innerHTML = (defs ? defs.outerHTML : '') + parts.join('');
-  // v1197 SVG root は 常に none、 hit-test は 手動 (hitTestArrow) で NOTE_MAP から 幾何計算。
+  // v1197 SVG root は常に none、 hit-test は手動 (hitTestArrow) で NOTE_MAP から幾何計算。
   svg.style.pointerEvents = 'none';
-  // 各矢印線 に click ハンドラ
+  // 各矢印線に click ハンドラ
   svg.querySelectorAll('[data-arrow-id]').forEach(el => {
     el.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -2510,7 +2573,7 @@ function onArrowClick(aid) {
   const a = ARROW_MAP[aid]; if (!a) return;
   if (MODE === 'erase') { deleteArrow(aid); return; }
   // arrow / select モード: 簡易ダイアログ
-  const nxt = prompt(`矢印 のラベル (空欄で無し / "delete" で削除 / "dash" で 破線切替)\n色は 頭に #RRGGBB を 付ければ 一緒に 変更 (例: "#ff0000 因果")`, a.label || '');
+  const nxt = prompt(`矢印のラベル (空欄で無し / "delete" で削除 / "dash" で破線切替)\n色は頭に #RRGGBB を付ければ一緒に変更 (例: "#ff0000 因果")`, a.label || '');
   if (nxt === null) return;
   const trimmed = nxt.trim();
   if (trimmed === 'delete') { deleteArrow(aid); return; }
@@ -2553,16 +2616,16 @@ async function deleteArrow(aid) {
   } catch (e) { toast('矢印削除失敗: ' + e.message); }
 }
 
-// v1205 共有設定 モーダル
+// v1205 共有設定モーダル
 async function openShareModal() {
   if (!ROOM) return;
   const modal = document.getElementById('board-share-modal');
   if (!modal) return;
-  // 現在の visibility を radio に 反映
+  // 現在の visibility を radio に反映
   const cur = ROOM.visibility || 'lab';
   document.querySelectorAll('input[name="bshare-vis"]').forEach(el => { el.checked = (el.value === cur); });
   document.getElementById('bshare-group-wrap').style.display = (cur === 'group') ? 'block' : 'none';
-  // group ドロップダウン は 自分が入っている adhoc_groups を 埋める
+  // group ドロップダウンは自分が入っている adhoc_groups を埋める
   const sel = document.getElementById('bshare-group');
   sel.innerHTML = '<option value="">読み込み中…</option>';
   try {

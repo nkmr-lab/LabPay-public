@@ -37,6 +37,9 @@ function route_board(PDO $pdo, array $cfg, string $method, array $seg): void {
             // v1189 note-to-note 矢印 (Miro 風)
             if ($next === 'arrows'  && $method === 'GET')  { board_arrows_list ($pdo, $cfg, $id);   return; }
             if ($next === 'arrows'  && $method === 'POST') { board_arrow_create($pdo, $cfg, $id);   return; }
+            // v1347 fb#522 中村研（氏名02）要望: ノート同士のグループ化 (永続) + 一括移動。
+            if ($next === 'notes-group'   && $method === 'POST') { board_notes_group  ($pdo, $cfg, $id); return; }
+            if ($next === 'notes-ungroup' && $method === 'POST') { board_notes_ungroup($pdo, $cfg, $id); return; }
         }
     }
     // /api/board/notes/{id} ...
@@ -132,7 +135,7 @@ function _board_note_shape(array $r, int $requesterId): array {
         'height'            => (float)$r['height'],
         'rotation'          => (float)$r['rotation'],
         'color'             => (string)$r['color'],
-        // v1328 font_size (px) — NULL は 自動計算 (client 側 dynamicFontSize) を 使う 目印
+        // v1328 font_size (px) — NULL は自動計算 (client 側 dynamicFontSize) を使う目印
         'font_size'         => isset($r['font_size']) && $r['font_size'] !== null ? (int)$r['font_size'] : null,
         // 他人に見えない (hidden) 時は text / image を配信しない (漏洩防止)
         'front_text'        => $hiddenForMe ? '' : (string)($r['front_text'] ?? ''),
@@ -143,6 +146,9 @@ function _board_note_shape(array $r, int $requesterId): array {
         // v1171 refs/places から貼ったノートは link_url に元ページへのリンクを持つ
         'link_url'          => $hiddenForMe ? null : ($r['link_url'] ?? null),
         'z_index'           => (int)$r['z_index'],
+        // v1347 fb#522 中村研（氏名02）要望: 永続的なグループ化。同一 room 内で group_id 一致の
+        //   ノートは client 側で「1つのまとまり」として扱い、選択やドラッグが連動する。
+        'group_id'          => isset($r['group_id']) && $r['group_id'] !== null ? (int)$r['group_id'] : null,
         'is_hidden'         => $isHidden,
         'hidden_for_me'     => $hiddenForMe,
         'is_mine'           => $isMine,
@@ -196,13 +202,13 @@ function board_rooms_list(PDO $pdo, array $cfg): void {
     $st->execute([$uid, $uid, $uid]);
     $items = [];
     $rooms = $st->fetchAll(PDO::FETCH_ASSOC);
-    // v1204 各 room の 貢献者 (notes / strokes / arrows を 作った 人) を 一括収集
-    //   creator は 除いた 状態 で 返す (フロント で 起案者アバター の 右 に 追加表示)
+    // v1204 各 room の貢献者 (notes / strokes / arrows を作った人) を一括収集
+    //   creator は除いた状態で返す (フロントで起案者アバターの右に追加表示)
     $contribByRoom = [];
     if (!empty($rooms)) {
         $roomIds = array_map(fn($r) => (int)$r['id'], $rooms);
         $ph = implode(',', array_fill(0, count($roomIds), '?'));
-        // notes/strokes/arrows の UNION で 各 room の 貢献者ユーザ一覧 (deleted 除く)
+        // notes/strokes/arrows の UNION で各 room の貢献者ユーザ一覧 (deleted 除く)
         $sqlC = "SELECT room_id, uid FROM (
                    SELECT room_id, created_by_user_id AS uid FROM board_notes   WHERE deleted_at IS NULL AND room_id IN ($ph)
                    UNION
@@ -232,7 +238,7 @@ function board_rooms_list(PDO $pdo, array $cfg): void {
         $r['creator_user_id'] = (int)$r['creator_user_id'];
         $r['owner_group_id']  = $r['owner_group_id'] !== null ? (int)$r['owner_group_id'] : null;
         $r['note_count']      = (int)$r['note_count'];
-        // 貢献者 (creator を 除く) — フロント で 起案者 アバター の 隣 に 重ね て 表示
+        // 貢献者 (creator を除く) — フロントで起案者アバターの隣に重ねて表示
         $all = $contribByRoom[$r['id']] ?? [];
         $r['contributors'] = array_values(array_filter($all, fn($c) => $c['id'] !== $r['creator_user_id']));
         $items[] = $r;
@@ -240,8 +246,8 @@ function board_rooms_list(PDO $pdo, array $cfg): void {
     json_response(['items' => $items]);
 }
 
-// v1204 「ボード から 抜ける」は 中村さん 撤回 で 撤去 (migration 233 の テーブル は 空 で 残す、
-//   将来 復活 時 に そのまま 使える)
+// v1204 「ボードから抜ける」は中村さん撤回で撤去 (migration 233 のテーブルは空で残す、
+//   将来復活時にそのまま使える)
 
 // POST /api/board/rooms  body: { title, description?, bg_color?, visibility?, owner_group_id? }
 function board_rooms_create(PDO $pdo, array $cfg): void {
@@ -423,7 +429,7 @@ function board_stroke_delete(PDO $pdo, array $cfg, int $strokeId): void {
     if (!_board_room_visible_to_user($pdo, $room, (int)$u['id'])) {
         throw new ApiException('forbidden', '権限なし', 403);
     }
-    // 削除は 作成者 or admin or room 参加者 (共同編集 モデル)
+    // 削除は作成者 or admin or room 参加者 (共同編集モデル)
     $pdo->prepare("UPDATE board_strokes SET deleted_at = NOW() WHERE id = ?")->execute([$strokeId]);
     $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([(int)$s['room_id']]);
     json_response(['ok' => true]);
@@ -488,7 +494,7 @@ function board_arrow_create(PDO $pdo, array $cfg, int $roomId): void {
     $label = isset($body['label']) ? trim((string)$body['label']) : '';
     if ($label === '') $label = null;
     if ($label !== null && mb_strlen($label) > 120) $label = mb_substr($label, 0, 120);
-    // 同じ (from,to) の 生きた矢印 が 既に あれば それを 返す (重複防止)
+    // 同じ (from,to) の生きた矢印が既にあればそれを返す (重複防止)
     $exist = $pdo->prepare("SELECT * FROM board_arrows WHERE room_id = ? AND from_note_id = ? AND to_note_id = ? AND deleted_at IS NULL LIMIT 1");
     $exist->execute([$roomId, $from, $to]);
     if ($row = $exist->fetch(PDO::FETCH_ASSOC)) {
@@ -578,7 +584,7 @@ function board_room_patch(PDO $pdo, array $cfg, int $id): void {
     if (array_key_exists('bg_color', $body)) {
         $sets[] = 'bg_color = ?'; $params[] = _board_norm_color((string)$body['bg_color'], '#FAFAFA');
     }
-    // v1110 visibility 切替は作成者のみ / v1207 admin も 許可 (⋯ メニュー を admin にも 出しているため 整合)
+    // v1110 visibility 切替は作成者のみ / v1207 admin も許可 (⋯ メニューを admin にも出しているため整合)
     if (array_key_exists('visibility', $body)) {
         $isAdmin2 = (string)($u['role'] ?? '') === 'admin';
         if ((int)$r['creator_user_id'] !== (int)$u['id'] && !$isAdmin2) {
@@ -663,7 +669,7 @@ function board_room_updates(PDO $pdo, array $cfg, int $id): void {
         ];
     }
     // v1173 手書きストローク: since より新しい (or 削除) を返す
-    // v1201 shape / dashed も 同梱
+    // v1201 shape / dashed も同梱
     $stS = $pdo->prepare("SELECT id, points_json, shape, dashed, color, width, created_by_user_id, created_at, deleted_at
                             FROM board_strokes
                            WHERE room_id = ? AND created_at > ?");
@@ -691,7 +697,7 @@ function board_room_updates(PDO $pdo, array $cfg, int $id): void {
     $stD = $pdo->prepare("SELECT id FROM board_strokes WHERE room_id = ? AND deleted_at IS NOT NULL AND deleted_at > ? AND created_at <= ?");
     $stD->execute([$id, $since, $since]);
     foreach ($stD->fetchAll(PDO::FETCH_COLUMN) as $sid) $strokeDeletes[] = (int)$sid;
-    // v1189 note-to-note 矢印 の 差分 (updated_at > since = 新規 + patch + delete)
+    // v1189 note-to-note 矢印の差分 (updated_at > since = 新規 + patch + delete)
     $stA = $pdo->prepare("SELECT * FROM board_arrows WHERE room_id = ? AND updated_at > ?");
     $stA->execute([$id, $since]);
     $arrowUpserts = []; $arrowDeletes = [];
@@ -760,7 +766,7 @@ function board_notes_create(PDO $pdo, array $cfg, int $roomId): void {
     $color = _board_norm_color($body['color'] ?? null, _board_default_color_of_user($pdo, (int)$u['id']));
     $frontText = trim((string)($body['front_text'] ?? ''));
     if (mb_strlen($frontText) > 4000) $frontText = mb_substr($frontText, 0, 4000);
-    // v1177 中村さん要望「インポート で画像ファイル群 を アップロード したい」→ front_image_url を作成時に受け付ける。
+    // v1177 中村さん要望「インポートで画像ファイル群をアップロードしたい」→ front_image_url を作成時に受け付ける。
     $frontImg = null;
     if (isset($body['front_image_url']) && is_string($body['front_image_url'])) {
         $iu = trim($body['front_image_url']);
@@ -812,7 +818,7 @@ function board_note_patch(PDO $pdo, array $cfg, int $id): void {
     if (array_key_exists('color', $body)) {
         $sets[] = 'color = ?'; $params[] = _board_norm_color((string)$body['color']);
     }
-    // v1328 fb#512: font_size を 手動指定 (null で 自動 に 戻す)
+    // v1328 fb#512: font_size を手動指定 (null で自動に戻す)
     if (array_key_exists('font_size', $body)) {
         $fs = $body['font_size'];
         if ($fs === null || $fs === '' || $fs === 0) {
@@ -986,9 +992,9 @@ function board_notes_from_refs(PDO $pdo, array $cfg, int $roomId): void {
 }
 
 // v1171 中村さん要望「Miro に、たべあるきから張り込む機能もほしい (サムネ画像を積極的に使いたい)」
-//   places (食べある記) から 選んだ 場所 を miro ノート として 貼付。 image が 主役 な ので
-//   cover_image_thumb を front_image_url に、 name (と 任意で category) を front_text に、
-//   link_url は #/places/{id} に。 サイズ は 少し 大きめ (画像 主体)。
+//   places (食べある記) から選んだ場所を miro ノートとして貼付。 image が主役なので
+//   cover_image_thumb を front_image_url に、 name (と任意で category) を front_text に、
+//   link_url は #/places/{id} に。サイズは少し大きめ (画像主体)。
 function board_notes_from_places(PDO $pdo, array $cfg, int $roomId): void {
     $u = Auth::requireUser($pdo, $cfg);
     $room = _board_room_row($pdo, $roomId);
@@ -1025,7 +1031,7 @@ function board_notes_from_places(PDO $pdo, array $cfg, int $roomId): void {
     foreach ($ids as $id) if (isset($places[$id])) $ordered[] = $places[$id];
 
     $defColor = _board_default_color_of_user($pdo, (int)$u['id']);
-    // 画像 主体 なので 少し 大きめ の 正方形
+    // 画像主体なので少し大きめの正方形
     $W = 260; $H = 260; $GAP = 20;
     $cols = max(1, (int)ceil(sqrt(count($ordered))));
     $rows = (int)ceil(count($ordered) / $cols);
@@ -1191,4 +1197,63 @@ function board_note_generate_image(PDO $pdo, array $cfg, int $id): void {
         'image_url' => $rel,
         'note'      => _board_note_shape($rr->fetch(PDO::FETCH_ASSOC), (int)$u['id']),
     ]);
+}
+
+// v1347 fb#522 中村研（氏名02）要望「ノート同士をグループ化する機能」。
+//   POST /api/board/rooms/{roomId}/notes-group { note_ids: [...] }
+//   同一 room 内の指定ノートに新しい group_id を発番して割り当てる。編集権限がある
+//   人 (member 以上) なら誰でも実行可。既に別グループに属していたノートも上書きで
+//   新グループへ移す (グループ間の合流)。
+function board_notes_group(PDO $pdo, array $cfg, int $roomId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    _board_require_editable($pdo, (int)$u['id'], $roomId);
+    $body = read_json_body();
+    $ids = is_array($body['note_ids'] ?? null) ? array_values(array_unique(array_map('intval', $body['note_ids']))) : [];
+    $ids = array_values(array_filter($ids, fn($v) => $v > 0));
+    if (count($ids) < 2) throw new ApiException('bad_request', 'グループ化には2枚以上のノートが必要', 400);
+    if (count($ids) > 500) throw new ApiException('bad_request', '一度にグループ化できるのは500枚まで', 400);
+    // room 内かつ未削除のみ受け付ける (異なる room のノートを混ぜない)
+    $ph = implode(',', array_fill(0, count($ids), '?'));
+    $chk = $pdo->prepare("SELECT id FROM board_notes WHERE id IN ($ph) AND room_id = ? AND deleted_at IS NULL");
+    $chk->execute([...$ids, $roomId]);
+    $validIds = array_map('intval', $chk->fetchAll(PDO::FETCH_COLUMN));
+    if (count($validIds) < 2) throw new ApiException('bad_request', '有効なノートが2枚未満', 400);
+    // 新 group_id 発番 (room 内で被らない連番)
+    $newGid = ((int)$pdo->prepare("SELECT COALESCE(MAX(group_id), 0) FROM board_notes WHERE room_id = ?")
+        ->execute([$roomId]) ? 0 : 0);
+    $st = $pdo->prepare("SELECT COALESCE(MAX(group_id), 0) FROM board_notes WHERE room_id = ?");
+    $st->execute([$roomId]);
+    $newGid = (int)$st->fetchColumn() + 1;
+    $ph2 = implode(',', array_fill(0, count($validIds), '?'));
+    $upd = $pdo->prepare("UPDATE board_notes SET group_id = ?, updated_at = NOW() WHERE id IN ($ph2)");
+    $upd->execute([$newGid, ...$validIds]);
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
+    json_response(['ok' => true, 'group_id' => $newGid, 'note_ids' => $validIds]);
+}
+
+// v1347 グループ解除 (指定ノートの group_id を NULL に)。
+//   POST /api/board/rooms/{roomId}/notes-ungroup { note_ids: [...] }
+function board_notes_ungroup(PDO $pdo, array $cfg, int $roomId): void {
+    $u = Auth::requireUser($pdo, $cfg);
+    _board_require_editable($pdo, (int)$u['id'], $roomId);
+    $body = read_json_body();
+    $ids = is_array($body['note_ids'] ?? null) ? array_values(array_unique(array_map('intval', $body['note_ids']))) : [];
+    $ids = array_values(array_filter($ids, fn($v) => $v > 0));
+    if (!$ids) throw new ApiException('bad_request', 'note_ids 必須', 400);
+    $ph = implode(',', array_fill(0, count($ids), '?'));
+    $pdo->prepare("UPDATE board_notes SET group_id = NULL, updated_at = NOW()
+                    WHERE id IN ($ph) AND room_id = ? AND deleted_at IS NULL")
+        ->execute([...$ids, $roomId]);
+    $pdo->prepare("UPDATE board_rooms SET updated_at = NOW() WHERE id = ?")->execute([$roomId]);
+    json_response(['ok' => true, 'note_ids' => $ids]);
+}
+
+// v1347 編集権限確認。既存の board_notes_create と同じ「room が見えれば編集可」の
+//   ゆるい ACL を踏襲 (_board_room_visible_to_user)。
+function _board_require_editable(PDO $pdo, int $userId, int $roomId): void {
+    $room = _board_room_row($pdo, $roomId);
+    if (!$room) throw new ApiException('not_found', 'room なし', 404);
+    if (!_board_room_visible_to_user($pdo, $room, $userId)) {
+        throw new ApiException('forbidden', 'この部屋にはアクセス権がありません', 403);
+    }
 }
