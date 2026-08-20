@@ -8,7 +8,7 @@
 // AI → 受動。「届くタイプ」と「黙って使うタイプ」が一目で分かるように。
 
 import { escapeHtml } from '../router.js';
-import { state } from '../app.js';   // v1342 state.me.ai_sub_active 参照用
+import { state, refreshMe } from '../app.js';   // v1342 state.me.ai_sub_active 参照用 / リロード時の再検証
 
 // 通知軸カテゴリ。並び順 = 表示順。
 export const APP_CATEGORIES = [
@@ -136,7 +136,7 @@ export const APPS = [
   { id: 'game-missions', cat: 'game', url: '#/game-missions', title: '🎯 娯楽ミッション',
     desc: '「setlogに1投稿で20pt」等のゲリラミッションを主催・参加。主催者が出したptと同額をLabPayが補助 (50/50) するので、実質2倍の賞金プールに。参加者は対象機能を使うだけで自動で報酬支給。', defaultVisible: true },
   // v1251 AI サブスク (共通、 chai.nkmr.io / file.nkmr.io で使う 1 週間 500pt サブスク)
-  { id: 'ai-sub',         cat: 'shared', url: '#/ai-sub', title: '🤖 AIサブスク (共通)',
+  { id: 'ai-sub',         cat: 'research', url: '#/ai-sub', title: '🤖 AIサブスク (共通)',
     desc: '1週間500ptの自動更新サブスク。契約中は論文要約 / 全訳 / DeepResearch / 実験計画書 / 原稿 / 査読 / リライターが全部無料に。加えてchai.nkmr.io (ChatGPT/Claude風) やfile.nkmr.io (ファイルブラウザAI) 等の外部サービスでもフル機能。残高500ptを切ると自動解約。', defaultVisible: true },
   { id: 'photo-portal',   cat: 'shared', url: 'https://photo.nkmr.io', title: '📷 photo.nkmr.ioを開く',
     desc: '中村研の写真・動画を全部貯める自前フォト基盤 (Google Photosの代替)。学会 / 合宿 / 飲み会 / ゼミの写真と動画をまとめて保存+検索+顔識別+地図+同席グラフ等の全機能は外部サイトで。nkmr-SSOで保護。アルバム一覧をLabPay内で見たい時は🖼 フォトアルバムをどうぞ。', defaultVisible: true },
@@ -243,6 +243,7 @@ const CATEGORY_SUBGROUPS = {
 const CATEGORY_ORDER = {
   // v792 #396 研究用は AI で研究を直接進めるものだけ
   research: [
+    'ai-sub',         // 🤖 AI サブスク (研究タブ左上・共有→研究へ移動)
     'research-notes', // v821 Cosense 連携
     'deep-research',
     'paper-summary',
@@ -276,7 +277,6 @@ const CATEGORY_ORDER = {
   // v1001 共有タブ (中村さん指定順) / v1238 nkmr-albums 撤去 → photo + photo-portal を最上位に
   'shared': [
     'photo-portal',                 // 📷 photo.nkmr.io を開く (外部) v1229 (v1268 で唯一)
-    'ai-sub',                       // 🤖 AI サブスク v1251
     'zemi-videos',                  // 🎥 ゼミ動画
     'chat-rooms',                   // 💬 チャット
     'file-transfers',               // 📦 ファイル送受信
@@ -391,4 +391,16 @@ export async function renderApps(ctx = {}) {
       ? `<div class="hint" style="text-align:center; padding:10px">…他 ${hiddenCount} 個は <a href="#/settings" style="color:var(--primary)">設定 → アプリ表示</a> から ON にできます</div>`
       : ''}
   `;
+
+  // リロード直後は state.me がキャッシュ由来で ai_sub_active が古い/欠けることがあり、研究アプリの
+  //   「AIサブスク中につき無料」緑バッジが消えて見える。最新 me を取り直し、契約状態が変わっていて
+  //   まだ同じ画面なら一度だけ描き直す (_reRendered で無限ループ防止)。
+  if (!ctx._reRendered) {
+    const hashAtRender = location.hash;
+    refreshMe().then(() => {
+      if (location.hash === hashAtRender && !!state.me?.ai_sub_active !== aiSubActive) {
+        renderApps({ ...ctx, _reRendered: true });
+      }
+    }).catch(() => {});
+  }
 }
