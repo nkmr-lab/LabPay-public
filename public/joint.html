@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
-  <title>合同研究会 投票</title>
+  <title>合同研究会投票</title>
   <style>
     * { box-sizing: border-box }
     body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", sans-serif;
@@ -74,7 +74,10 @@ function esc(s) {
 let evData = null;
 let myAff = null;      // 'host' | 'guest' | 'other'
 let myName = '';       // optional voter name
-let openSid = null;    // v949 展開中 の session id (accordion、 最初 は 1 つ目 が 開く)
+let openSid = null;    // v949 展開中の session id (accordion、最初は 1 つ目が開く)
+// v1351 fb#524 中村さん要望「発表者をタップした瞬間に投票済みになってしまうため、最終的な選択を送信できるように」
+// タップで staging (pendingVote)、「投票を送信」 button でサーバへ POST。
+const pendingVote = {};   // sid => pid (未送信の選択)
 
 async function loadEvent() {
   try {
@@ -84,10 +87,10 @@ async function loadEvent() {
       throw new Error((j && j.error && j.error.message) || `HTTP ${res.status}`);
     }
     evData = await res.json();
-    // localStorage で 過去 の 選択 を 復元
+    // localStorage で過去の選択を復元
     myAff = localStorage.getItem('joint_aff_' + t) || null;
     myName = localStorage.getItem('joint_name_' + t) || '';
-    // v949 accordion: デフォルト は 1 つ目 の session を 開く
+    // v949 accordion: デフォルトは 1 つ目の session を開く
     if (openSid === null && evData.sessions && evData.sessions.length) {
       openSid = evData.sessions[0].id;
     }
@@ -145,7 +148,7 @@ function wireAff() {
       myAff = lbl.dataset.aff;
       localStorage.setItem('joint_aff_' + t, myAff);
       document.querySelectorAll('#aff-picker label').forEach(o => o.classList.toggle('on', o === lbl));
-      render(); // 選択後 は 対応 プレゼンター が active に
+      render(); // 選択後は対応プレゼンターが active に
     });
   });
   const nameEl = document.getElementById('voter-name');
@@ -157,29 +160,49 @@ function wireAff() {
 
 function renderSession(s) {
   const finalized = !!evData.finalized_at;
+  const sessionClosed = !!s.closed_at;
   const myVote = (evData.my_votes || {})[s.id] || null;
+  const pending = pendingVote[s.id] || null;
+  // 表示上の選択 = pending があれば pending、なければ my_votes (送信済)
+  const selected = pending || myVote;
   const isOpen = openSid === s.id;
   const chevron = isOpen ? '▾' : '▸';
+  // 送信 button の状態
+  const canSend = !finalized && !sessionClosed && pending && pending !== myVote;
+  const sendBtnHtml = (!finalized && !sessionClosed && s.presenters.length) ? `
+    <div style="margin-top:10px; display:flex; align-items:center; gap:8px">
+      <button data-send-sid="${s.id}" ${canSend ? '' : 'disabled'} style="flex:1">
+        ${pending ? (pending === myVote ? '✓ 送信済み' : '📨 この選択で投票を送信') : '発表者をタップして選んでください'}
+      </button>
+      ${myVote ? `<span class="meta" style="white-space:nowrap">前回送信: <b>${esc(presenterName(s, myVote))}</b></span>` : ''}
+    </div>` : '';
   return `
     <div class="session-block" data-session-id="${s.id}">
       <h2 class="session-head" data-toggle-sid="${s.id}" style="cursor:pointer; display:flex; align-items:center; gap:8px; user-select:none">
         <span style="color:#9ca3af; width:16px; text-align:center; font-size:14px">${chevron}</span>
-        <span style="flex:1">${esc(s.name)}</span>
+        <span style="flex:1">${esc(s.name)}${sessionClosed ? ' <span style="font-size:12px; background:#fbbf24; color:#78350f; padding:2px 8px; border-radius:10px; margin-left:4px">🔒 締切済</span>' : ''}</span>
         ${myVote ? '<span class="voted-mark">✓ 投票済</span>' : ''}
       </h2>
       ${isOpen ? `
         ${s.starts_at ? `<div class="meta">${esc(s.starts_at.slice(0, 16))}${s.ends_at ? ' - ' + esc(s.ends_at.slice(11, 16)) : ''}</div>` : ''}
-        ${s.presenters.map(p => renderPresenter(s.id, p, myVote, finalized)).join('') || '<div class="muted">発表者が登録されていません</div>'}
+        ${sessionClosed && !finalized ? '<div class="banner banner-warn">🔒 このセッションの投票は締め切られました。新規/変更の送信はできません。</div>' : ''}
+        ${s.presenters.map(p => renderPresenter(s.id, p, selected, finalized || sessionClosed)).join('') || '<div class="muted">発表者が登録されていません</div>'}
+        ${sendBtnHtml}
       ` : ''}
     </div>
   `;
 }
 
-function renderPresenter(sessionId, p, myVote, finalized) {
-  const isMine = myVote === p.id;
-  const isBest = finalized && p.is_best;
-  // 投票可否: finalized なら全部 disable。 aff 未選択なら全部 disable。 aff='host' なら guest しか投票不可、逆も同じ。
-  let disabled = finalized || !myAff;
+function presenterName(s, pid) {
+  const p = (s.presenters || []).find(pp => pp.id === pid);
+  return p ? p.name : '';
+}
+
+function renderPresenter(sessionId, p, selectedPid, finalizedOrClosed) {
+  const isMine = selectedPid === p.id;
+  const isBest = !!evData.finalized_at && p.is_best;
+  // 投票可否: finalized/締切なら全部 disable。 aff 未選択なら全部 disable。 aff='host' なら guest しか投票不可、逆も同じ。
+  let disabled = finalizedOrClosed || !myAff;
   if (!disabled && myAff === 'host'  && p.affiliation !== 'guest') disabled = true;
   if (!disabled && myAff === 'guest' && p.affiliation !== 'host')  disabled = true;
   const cls = ['presenter', isMine ? 'selected' : '', isBest ? 'best' : '', disabled ? 'disabled' : ''].filter(Boolean).join(' ');
@@ -195,7 +218,7 @@ function renderPresenter(sessionId, p, myVote, finalized) {
 }
 
 function wireVote() {
-  // v949 session accordion: header クリックで 開閉切替 (常に 1 つ だけ 開く)
+  // v949 session accordion: header クリックで開閉切替 (常に 1 つだけ開く)
   document.querySelectorAll('[data-toggle-sid]').forEach(el => {
     el.addEventListener('click', () => {
       const sid = Number(el.dataset.toggleSid);
@@ -203,12 +226,26 @@ function wireVote() {
       render();
     });
   });
+  // v1351 発表者タップ = pending 更新のみ (即送信しない)。送信は「投票を送信」 button。
   document.querySelectorAll('.presenter').forEach(el => {
     if (el.dataset.disabled === '1') return;
-    el.addEventListener('click', async () => {
+    el.addEventListener('click', () => {
       if (!myAff) { toast('先に所属を選んでください'); return; }
       const sid = Number(el.dataset.sid);
       const pid = Number(el.dataset.pid);
+      pendingVote[sid] = pid;
+      render();
+    });
+  });
+  // v1351 送信 button
+  document.querySelectorAll('[data-send-sid]').forEach(el => {
+    if (el.disabled) return;
+    el.addEventListener('click', async () => {
+      const sid = Number(el.dataset.sendSid);
+      const pid = pendingVote[sid];
+      if (!pid) { toast('発表者を選んでください'); return; }
+      el.disabled = true;
+      const oldTxt = el.textContent; el.textContent = '⏳ 送信中…';
       try {
         const res = await fetch('/api/joint-events/public/' + encodeURIComponent(t) + '/vote', {
           method: 'POST',
@@ -230,9 +267,13 @@ function wireVote() {
         }
         evData.my_votes = evData.my_votes || {};
         evData.my_votes[sid] = pid;
-        toast('投票しました');
+        delete pendingVote[sid];
+        toast('投票を送信しました');
         render();
-      } catch (e) { toast('失敗: ' + e.message); }
+      } catch (e) {
+        toast('失敗: ' + e.message);
+        el.disabled = false; el.textContent = oldTxt;
+      }
     });
   });
 }
