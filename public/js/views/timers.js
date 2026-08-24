@@ -55,20 +55,20 @@ export async function renderTimers() {
     <div class="card page-header">
       <div class="row center">
         <h2 style="margin:0">⏱️ タイマー</h2>
-        <a class="btn primary" href="#/timers/new">＋ 新規</a>
+        <a class="btn primary" href="#/timers/new">＋新規</a>
       </div>
     </div>
     <div id="tm-list" class="list"><div class="muted">読み込み中…</div></div>
-    <!-- v1340 fb#520 削除履歴 の 折り畳み。 開いた 時 に 別 fetch (?deleted=1) して 一覧表示、 復元ボタン付き。 -->
+    <!-- v1340 fb#520 削除履歴の折り畳み。開いた時に別 fetch (?deleted=1) して一覧表示、復元ボタン付き。 -->
     <details class="card" id="tm-deleted-details" style="margin-top:12px">
-      <summary style="cursor:pointer; color:#555; font-size:13px">🗑 削除した タイマー を 見る</summary>
-      <div id="tm-deleted-list" class="list" style="margin-top:8px"><div class="muted">タップで 読み込み</div></div>
+      <summary style="cursor:pointer; color:#555; font-size:13px">🗑 削除したタイマーを見る</summary>
+      <div id="tm-deleted-list" class="list" style="margin-top:8px"><div class="muted">タップで読み込み</div></div>
     </details>
   `;
   document.getElementById('tm-deleted-details').addEventListener('toggle', async (ev) => {
     if (!ev.target.open) return;
     const root = document.getElementById('tm-deleted-list');
-    // 既 に 中身 が あれ ば 再 fetch し ない (復元 直後 は 別 途 refresh される)
+    // 既に中身があれば再 fetch しない (復元直後は別途 refresh される)
     if (root.dataset.loaded === '1') return;
     root.innerHTML = '<div class="muted">読み込み中…</div>';
     try {
@@ -99,8 +99,8 @@ export async function renderTimers() {
             try {
               await patch('/api/timers/' + id + '/restore', {});
               toast('復元しました');
-              root.dataset.loaded = '';   // 削除履歴 リスト の 再 fetch を 許可
-              await renderTimers();       // 一覧 も 再描画
+              root.dataset.loaded = '';   // 削除履歴リストの再 fetch を許可
+              await renderTimers();       // 一覧も再描画
             } catch (e) { toast('失敗: ' + e.message); b.disabled = false; b.textContent = old; }
           });
         });
@@ -208,18 +208,18 @@ export async function renderTimerNew({ query } = {}) {
           <span class="muted" style="font-size:11px">(0 = 1 回きり)</span>
         </div>
       </details>
-      <!-- v1335 タイマー画像 (ハッカソン 等 で 「今 何 を やっている か」 を 参加者 が 目視 で 分かる ように) -->
-      <!-- v1341 cast (cast.nkmr.io) の 「最新の1枚 の 画像URL」 を 直接 入力 できる ように -->
+      <!-- v1335 タイマー画像 (ハッカソン等で「今何をやっているか」を参加者が目視で分かるように) -->
+      <!-- v1341 cast (cast.nkmr.io) の「最新の1枚の画像URL」を直接入力できるように -->
       <div class="field" style="margin-top:10px">
         <span class="lbl">画像 (任意)</span>
         <div class="row" style="gap:6px; align-items:center; flex-wrap:wrap">
           <input type="file" id="tmn-image-file" accept="image/*" style="flex:1 1 200px; min-width:0">
-          <button type="button" id="tmn-image-url-btn" class="btn" style="font-size:11px; padding:3px 10px">🔗 URL で 指定</button>
+          <button type="button" id="tmn-image-url-btn" class="btn" style="font-size:11px; padding:3px 10px">🔗 URL で指定</button>
         </div>
         <input type="hidden" id="tmn-image-url" value="">
         <img id="tmn-image-preview" alt="" hidden style="max-width:180px; max-height:180px; margin-top:6px; border-radius:8px; object-fit:contain; display:block">
         <div id="tmn-image-status" class="hint-sm"></div>
-        <div class="hint-sm" style="margin-top:4px">💡 <a href="https://cast.nkmr.io/" target="_blank" rel="noopener" style="color:var(--primary)">cast.nkmr.io</a> の 「最新の1枚 の 画像URL」 を 「URL で 指定」 に 貼る と、 発表者 の 画面 が 5秒 毎 に 更新 されます</div>
+        <div class="hint-sm" style="margin-top:4px">💡 <a href="https://cast.nkmr.io/" target="_blank" rel="noopener" style="color:var(--primary)">cast.nkmr.io</a> の「最新の1枚の画像URL」を「URL で指定」に貼ると、発表者の画面が 5秒毎に更新されます</div>
       </div>
       <div class="field" style="margin-top:10px">
         <span class="lbl">参加者${lockMembers ? ' (グループ内)' : ''}</span>
@@ -233,7 +233,7 @@ export async function renderTimerNew({ query } = {}) {
       </div>
       <div class="row" style="gap:6px; justify-content:flex-end; margin-top:8px">
         <a href="#/timers" class="btn">キャンセル</a>
-        <button id="tmn-save" class="primary">＋ 作成</button>
+        <button id="tmn-save" class="primary">＋作成</button>
       </div>
     </div>
   `;
@@ -290,7 +290,7 @@ export async function renderTimerNew({ query } = {}) {
     document.getElementById('tmn-members').innerHTML = `<div class="muted">${escapeHtml(e.message)}</div>`;
   }
 
-  // v1335 タイマー画像 の アップロード hook
+  // v1335 タイマー画像のアップロード hook
   document.getElementById('tmn-image-file').addEventListener('change', async (ev) => {
     const f = ev.target.files?.[0];
     if (!f) return;
@@ -306,17 +306,17 @@ export async function renderTimerNew({ query } = {}) {
       status.textContent = '失敗: ' + e.message;
     }
   });
-  // v1341 URL 直接 入力 (cast の shot URL でも OK)
+  // v1341 URL 直接入力 (cast の shot URL でも OK)
   document.getElementById('tmn-image-url-btn').addEventListener('click', () => {
     const cur = document.getElementById('tmn-image-url').value || '';
-    const url = prompt('画像 URL (cast の shot URL でも OK、 5秒毎 に 自動更新):', cur);
+    const url = prompt('画像 URL (cast の shot URL でも OK、 5秒毎に自動更新):', cur);
     if (url === null) return;
     const v = url.trim();
     document.getElementById('tmn-image-url').value = v;
     const prev = document.getElementById('tmn-image-preview');
     if (v) { prev.src = v; prev.hidden = false; }
     else   { prev.hidden = true; prev.removeAttribute('src'); }
-    document.getElementById('tmn-image-status').textContent = v ? 'URL を セット しました' : '(未設定)';
+    document.getElementById('tmn-image-status').textContent = v ? 'URL をセットしました' : '(未設定)';
   });
 
   document.getElementById('tmn-save').addEventListener('click', async () => {
@@ -356,7 +356,7 @@ export async function renderTimerNew({ query } = {}) {
         title = 'タイマー';
       }
     }
-    btn.textContent = '＋ 作成中…';
+    btn.textContent = '＋作成中…';
     const repeatMax = Math.max(0, Math.min(100, parseInt(document.getElementById('tmn-repeat').value, 10) || 0));
     const imageUrl = document.getElementById('tmn-image-url').value || null;   // v1335
     try {
@@ -374,16 +374,16 @@ export async function renderTimerNew({ query } = {}) {
       navigate('#/timers/' + r.id);
     } catch (e) {
       toast('失敗: ' + e.message);
-      btn.disabled = false; btn.textContent = '＋ 作成';
+      btn.disabled = false; btn.textContent = '＋作成';
     }
   });
 }
 
 let tmTickTimer = null;
 let tmSyncTimer = null;
-let tmLiveImg = null;      // v1341 cast の 5秒 自動更新 ハンドル (詳細 view 用、 view 離脱 で stop)
+let tmLiveImg = null;      // v1341 cast の 5秒自動更新ハンドル (詳細 view 用、 view 離脱で stop)
 let tmLiveImgUrl = null;
-let tmVisHandler = null;  // v915 タブ 可視化 時に 即 sync する リスナ の 参照 (剥がす 用)
+let tmVisHandler = null;  // v915 タブ可視化時に即 sync するリスナの参照 (剥がす用)
 // v408 「ちょうど 0 になった瞬間」を 1 回だけ鳴らすためのフラグ。
 // resync で復活してしまうので必要。リピートでサーバが次サイクルに
 // 切替えたら tmLastCycleIdx 変化で再 false 化 (下の loadTimerDetail で処理)。
@@ -410,9 +410,9 @@ let tmStatus = 'running';
 function stopTimerLoops() {
   if (tmTickTimer) { clearInterval(tmTickTimer); tmTickTimer = null; }
   if (tmSyncTimer) { clearTimeout(tmSyncTimer); tmSyncTimer = null; }
-  // v915 visibilitychange リスナ を 剥がす (別ページ に 遷移した時 の 漏れ 防止)。
+  // v915 visibilitychange リスナを剥がす (別ページに遷移した時の漏れ防止)。
   if (tmVisHandler) { document.removeEventListener('visibilitychange', tmVisHandler); tmVisHandler = null; }
-  // v1341 cast の 自動更新 も 停止 (二重 setInterval 防止)
+  // v1341 cast の自動更新も停止 (二重 setInterval 防止)
   if (tmLiveImg) { tmLiveImg.stop(); tmLiveImg = null; tmLiveImgUrl = null; }
   // v405 wake lock release
   releaseWakeLock('timer');
@@ -431,7 +431,7 @@ export async function renderTimerDetail({ params }) {
         <button id="tmd-test-bell" class="btn" style="font-size:11px; padding:2px 8px" title="チーン (端末で鳴るか確認)">🔊 試聴</button>
         <button id="tmd-fs" class="btn" style="font-size:11px; padding:2px 8px" title="フルスクリーン (発表者に時間を見せる)">🖥 フル</button>
         <button id="tmd-public" class="btn" style="font-size:11px; padding:2px 8px" title="認証不要の公開 URL をコピー (タブレットに開いて演台に置く)">🔗 公開 URL</button>
-        <!-- v1337 公開 URL の QR コード。 中村さん要望「自分のスマホとかで見れるように、押すと画面の右側にでも QR を出す」 -->
+        <!-- v1337 公開 URL の QR コード。中村さん要望「自分のスマホとかで見れるように、押すと画面の右側にでも QR を出す」 -->
         <button id="tmd-qr" class="btn" style="font-size:11px; padding:2px 8px" title="公開 URL の QR コード (スマホでスキャンして開ける)">🔳 公開 QR</button>
       </div>
       <button id="tmd-fs-exit" type="button">✕ 終了</button>
@@ -444,23 +444,23 @@ export async function renderTimerDetail({ params }) {
         <div id="tmd-bar" style="background:var(--primary); height:100%; width:0%; transition:width 0.4s linear"></div>
       </div>
       <div id="tmd-status" style="margin-top:14px; font-weight:700"></div>
-      <!-- v1335 タイマー画像 (ハッカソン 等 で 「今 何 を やっている か」 表示)。 fullscreen mode でも 一緒 に 大きく 表示 される。 -->
+      <!-- v1335 タイマー画像 (ハッカソン等で「今何をやっているか」表示)。 fullscreen mode でも一緒に大きく表示される。 -->
       <div id="tmd-image-wrap" hidden style="margin-top:14px">
         <img id="tmd-image" src="" alt="" style="max-width:100%; max-height:40vh; border-radius:8px; object-fit:contain">
       </div>
       <div id="tmd-image-ctrl" class="no-print" style="margin-top:6px" hidden>
         <div class="row" style="gap:6px; justify-content:center">
           <input type="file" id="tmd-image-file" accept="image/*" hidden>
-          <button id="tmd-image-change" class="btn" style="font-size:11px; padding:2px 8px">🖼 画像 追加/変更</button>
-          <button id="tmd-image-url-btn" class="btn" style="font-size:11px; padding:2px 8px" title="cast の画像URL 等 を 直接 入力 (5秒毎 に 自動更新)">🔗 URL で 指定</button>
+          <button id="tmd-image-change" class="btn" style="font-size:11px; padding:2px 8px">🖼 画像追加/変更</button>
+          <button id="tmd-image-url-btn" class="btn" style="font-size:11px; padding:2px 8px" title="cast の画像URL 等を直接入力 (5秒毎に自動更新)">🔗 URL で指定</button>
           <button id="tmd-image-remove" class="btn" style="font-size:11px; padding:2px 8px; color:#c00" hidden>🗑 削除</button>
         </div>
-        <div class="hint-sm" style="margin-top:4px; text-align:center">💡 <a href="https://cast.nkmr.io/" target="_blank" rel="noopener" style="color:var(--primary)">cast.nkmr.io</a> の 「最新の1枚の画像URL」 を 貼る と 発表者 の 画面 が 5秒 毎 に 更新 されます</div>
+        <div class="hint-sm" style="margin-top:4px; text-align:center">💡 <a href="https://cast.nkmr.io/" target="_blank" rel="noopener" style="color:var(--primary)">cast.nkmr.io</a> の「最新の1枚の画像URL」を貼ると発表者の画面が 5秒毎に更新されます</div>
       </div>
-      <!-- v1337 公開 URL の QR コード 表示 area (toggle) -->
+      <!-- v1337 公開 URL の QR コード表示 area (toggle) -->
       <div id="tmd-qr-wrap" hidden style="margin-top:14px; display:flex; flex-direction:column; align-items:center; gap:6px">
         <div id="tmd-qr-svg" style="background:#fff; padding:12px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1)"></div>
-        <div class="hint-sm" style="text-align:center">スマホの カメラ で スキャン → 公開タイマー</div>
+        <div class="hint-sm" style="text-align:center">スマホのカメラでスキャン → 公開タイマー</div>
       </div>
     </div>
     <details class="card">
@@ -475,7 +475,7 @@ export async function renderTimerDetail({ params }) {
         <!-- v1183 中村さん要望「タイマーから離脱する機能が欲しい」 -->
         <button id="tmd-leave" class="btn" hidden style="margin-left:auto; color:#c00">🚪 離脱</button>
       </div>
-      <p class="hint-sm" style="margin:6px 0 0">操作は参加者全員 (起案者含む) が可能。 離脱すると自分だけ通知/表示対象から外れる。</p>
+      <p class="hint-sm" style="margin:6px 0 0">操作は参加者全員 (起案者含む) が可能。離脱すると自分だけ通知/表示対象から外れる。</p>
     </div>
     <div class="card" id="tmd-admin-card" hidden>
       <div class="row" style="gap:6px; flex-wrap:wrap">
@@ -489,9 +489,9 @@ export async function renderTimerDetail({ params }) {
   // 1 秒刻みで表示更新 (offset とサーバの終了時刻から計算)
   tmTickTimer = setInterval(() => tickTimer(), 1000);
   tickTimer();
-  // v915 タブ が visible に 戻った 瞬間に 即 sync (background 中の 遅延を 一度に 追いつく)。
-  //   これで 「他人が リセットしたのに 自分の 端末は 数秒 遅れる」 も 短縮。 renderTimerDetail が
-  //   再エントリー されても 二重登録 防止のため 名前付きで、 stopTimerLoops で 剥がす。
+  // v915 タブが visible に戻った瞬間に即 sync (background 中の遅延を一度に追いつく)。
+  //   これで「他人がリセットしたのに自分の端末は数秒遅れる」も短縮。 renderTimerDetail が
+  //   再エントリーされても二重登録防止のため名前付きで、 stopTimerLoops で剥がす。
   if (tmVisHandler) document.removeEventListener('visibilitychange', tmVisHandler);
   tmVisHandler = () => {
     if (document.hidden) return;
@@ -531,7 +531,7 @@ export async function renderTimerDetail({ params }) {
       prompt('この URL をコピーしてタブレットで開いてください:', url);
     }
   });
-  // v1337 公開 URL の QR コード (toggle 表示、 スマホ で スキャン して 開く)
+  // v1337 公開 URL の QR コード (toggle 表示、スマホでスキャンして開く)
   document.getElementById('tmd-qr')?.addEventListener('click', async () => {
     const wrap = document.getElementById('tmd-qr-wrap');
     const svgHost = document.getElementById('tmd-qr-svg');
@@ -553,8 +553,8 @@ export async function renderTimerDetail({ params }) {
   });
 }
 
-// v1337 QR ライブラリ の 遅延 ロード (公開 QR button を 押した 時 のみ vendor/qrcode-generator.min.js を fetch)。
-//   MIT license 、 純 JS 、 依存 なし 、 ~20KB。 window.qrcode を 露出 する UMD/plain script。
+// v1337 QR ライブラリの遅延ロード (公開 QR button を押した時のみ vendor/qrcode-generator.min.js を fetch)。
+//   MIT license 、純 JS 、依存なし、 ~20KB。 window.qrcode を露出する UMD/plain script。
 let _qrLibPromise = null;
 function loadQrLib() {
   if (_qrLibPromise) return _qrLibPromise;
@@ -658,7 +658,7 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
         if (leaveBtn) {
           leaveBtn.hidden = false;
           leaveBtn.addEventListener('click', async () => {
-            if (!confirm('このタイマーから離脱しますか? (通知や表示対象から外れます、 他の参加者は影響なし)')) return;
+            if (!confirm('このタイマーから離脱しますか? (通知や表示対象から外れます、他の参加者は影響なし)')) return;
             try {
               await del(`/api/timers/${id}/leave`);
               toast('離脱しました');
@@ -692,7 +692,7 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
           try { await del('/api/timers/' + id); toast('削除しました'); navigate('#/timers'); }
           catch (e) { toast('失敗: ' + e.message); }
         });
-        // v1335 画像 の 追加/変更/削除 (作成者 のみ)。 change → 実 file input を発火。
+        // v1335 画像の追加/変更/削除 (作成者のみ)。 change → 実 file input を発火。
         document.getElementById('tmd-image-ctrl').hidden = false;
         const fileInput = document.getElementById('tmd-image-file');
         document.getElementById('tmd-image-change').addEventListener('click', () => fileInput.click());
@@ -714,10 +714,10 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
             await loadTimerDetail(id, { isResync: true });
           } catch (e) { toast('失敗: ' + e.message); }
         });
-        // v1341 URL 直接 入力 (cast 連携 の 本命)。 prompt で URL を 受けて PATCH。
+        // v1341 URL 直接入力 (cast 連携の本命)。 prompt で URL を受けて PATCH。
         document.getElementById('tmd-image-url-btn').addEventListener('click', async () => {
           const cur = d.timer.image_url || '';
-          const url = prompt('画像 URL を 入力 (cast の shot URL でも OK、 5秒毎 に 自動更新)\n空欄 で 削除:', cur);
+          const url = prompt('画像 URL を入力 (cast の shot URL でも OK、 5秒毎に自動更新)\n空欄で削除:', cur);
           if (url === null) return;
           try {
             await patch(`/api/timers/${id}/image`, { image_url: url.trim() || null });
@@ -726,8 +726,8 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
           } catch (e) { toast('失敗: ' + e.message); }
         });
       }
-      // v1335 画像 URL の 反映 (作成者 でなくても 表示 だけ は 全参加者)。
-      // v1341 cast の URL の 場合 は 5秒毎 に 自動更新 (live_image.js 経由)
+      // v1335 画像 URL の反映 (作成者でなくても表示だけは全参加者)。
+      // v1341 cast の URL の場合は 5秒毎に自動更新 (live_image.js 経由)
       const imgWrap = document.getElementById('tmd-image-wrap');
       const imgEl   = document.getElementById('tmd-image');
       const rmBtn   = document.getElementById('tmd-image-remove');
@@ -740,12 +740,12 @@ async function loadTimerDetail(id, { isResync = false } = {}) {
         }
         imgWrap.hidden = false;
         if (rmBtn) rmBtn.hidden = false;
-        if (chBtn) chBtn.textContent = '🖼 画像 変更';
+        if (chBtn) chBtn.textContent = '🖼 画像変更';
       } else {
         if (tmLiveImg) { tmLiveImg.stop(); tmLiveImg = null; tmLiveImgUrl = null; }
         imgWrap.hidden = true;
         if (rmBtn) rmBtn.hidden = true;
-        if (chBtn) chBtn.textContent = '🖼 画像 追加';
+        if (chBtn) chBtn.textContent = '🖼 画像追加';
       }
     }
     // v446 ボタン表示の出し分けは resync でも走らせる (status 変化を反映)。
@@ -769,18 +769,18 @@ function pickSyncIntervalMs() {
   const now = Date.now() + tmOffsetMs;
   const since = (now - tmStartedMs) / 1000;
   const remaining = (tmEndsMs - now) / 1000;
-  // v915 「タイマー超過中や paused 中に 他人が リセットした のを 拾えず、 自分の端末だけ 延々 超過表示 が進む」
-  //   問題を修正 (ユーザ報告)。 cancelled 以外は 全部 定期 sync に。 これで 誰かが reset/start/pause した
-  //   のを 数秒 内に 全端末が 検知して 追随する。
-  if (tmStatus === 'cancelled') return 0;    // 中止済 は 変化しない (削除しか ない)
-  // ユーザ要望: 停止中 / リセット後 は 「他人が スタートしたら すぐ 把握」 したいので 1s ポーリング。
+  // v915 「タイマー超過中や paused 中に他人がリセットしたのを拾えず、自分の端末だけ延々超過表示が進む」
+  //   問題を修正 (ユーザ報告)。 cancelled 以外は全部定期 sync に。これで誰かが reset/start/pause した
+  //   のを数秒内に全端末が検知して追随する。
+  if (tmStatus === 'cancelled') return 0;    // 中止済は変化しない (削除しかない)
+  // ユーザ要望: 停止中 / リセット後は「他人がスタートしたらすぐ把握」したいので 1s ポーリング。
   if (tmStatus === 'paused')    return 1_000;
-  if (tmStatus === 'done')      return 1_000;  // done 状態 も 誰かが reset → paused に 遷移する 可能性
+  if (tmStatus === 'done')      return 1_000;  // done 状態も誰かが reset → paused に遷移する可能性
   // running 中:
-  if (remaining <= 0)  return 3_000;  // 超過中 は 3 秒 (他人リセット 追随 + 遅れ ずれ 補正)
-  if (since < 30)      return 3_000;  // 開始直後 30 秒 は 3 秒 (ズレ補正)
-  if (remaining < 30)  return 3_000;  // 終了直前 30 秒 も 3 秒 (精度大事)
-  return 15_000;                      // それ以外 は 15 秒
+  if (remaining <= 0)  return 3_000;  // 超過中は 3 秒 (他人リセット追随 + 遅れずれ補正)
+  if (since < 30)      return 3_000;  // 開始直後 30 秒は 3 秒 (ズレ補正)
+  if (remaining < 30)  return 3_000;  // 終了直前 30 秒も 3 秒 (精度大事)
+  return 15_000;                      // それ以外は 15 秒
 }
 
 function scheduleSyncNext(id) {
@@ -835,10 +835,26 @@ function tickTimer() {
   // v446 paused: 残りを固定表示。 tick で減らさない。
   if (tmStatus === 'paused') {
     const modeEl = document.getElementById('tmd-mode');
-    countEl.textContent = fmtDuration(tmRemainingSec);
+    // v1352 fb 中村さん要望「タイマー、開始するまではカウントアップかカウントダウン化を切り替えることができない」
+    //   → 未開始/一時停止中でも tmDisplayMode を反映して、タップで mode 切替できるように見せる。
+    //   'elapsed' なら「0:00 (未開始) or ここまでの経過」、'remain' なら残り時間。
+    const isNotStarted = !tmStartedMs;
+    if (tmDisplayMode === 'elapsed') {
+      // 未開始なら 0:00、一時停止なら現時点までの経過 (duration - remaining)
+      const shownElapsed = isNotStarted ? 0 : Math.max(0, tmDurationSec - tmRemainingSec);
+      countEl.textContent = fmtDuration(shownElapsed);
+    } else {
+      countEl.textContent = fmtDuration(tmRemainingSec);
+    }
     // v725 #329 paused の数字色を橙 #e65100 → 落ち着いた緑 #0e7c63 に。赤い感じが気を引きすぎるため。
     countEl.style.color = '#0e7c63';
-    if (modeEl) modeEl.textContent = '⏸ 一時停止中 — ▶ 開始を押すとカウントダウン';
+    if (modeEl) {
+      const stateLabel  = isNotStarted ? '未開始' : '一時停止中';
+      const modeLabel   = tmDisplayMode === 'elapsed'
+        ? '↑ 経過時間 (タップで残り時間)'
+        : '↓ 残り時間 (タップで経過時間)';
+      modeEl.textContent = `⏸ ${stateLabel} · ${modeLabel} — ▶ 開始で計測開始`;
+    }
     elEl.textContent = `残り ${fmtDuration(tmRemainingSec)} / 合計 ${fmtDuration(tmDurationSec)}`;
     const usedSec = Math.max(0, tmDurationSec - tmRemainingSec);
     const pct = tmDurationSec ? Math.min(100, (usedSec / tmDurationSec) * 100) : 0;
@@ -849,7 +865,7 @@ function tickTimer() {
   }
   // v684 #267 3 フェーズ表示:
   //   ① 発表終了 (= end_bell) まで: 通常のカウントダウン
-  //   ② 発表終了 〜 最後のベル: カウントアップモードではそのまま経過、カウントダウン
+  //   ② 発表終了〜最後のベル: カウントアップモードではそのまま経過、カウントダウン
   //      モードでは 0:00 から上にカウント (= 質疑時間等の経過)
   //   ③ 最後のベルを越えたら「+MM:SS 超過」
   const maxBellSec    = tmBells.length ? Math.max(...tmBells) : 0;
@@ -893,12 +909,12 @@ function tickTimer() {
   //   背景に縦線で一鈴 / 二鈴 / 発表終了を示す (= tickStyle inline gradient で表示)。
   const pct = visualEndSec ? Math.min(100, (elapsedSec / visualEndSec) * 100) : 0;
   barEl.style.width = pct.toFixed(1) + '%';
-  // v917 「発表終了 後は 全部 黄色に なってしまう / ベル区切り が 消える」 修正 (ユーザ報告)。
-  //   従来: bar 全体を 1 色 (primary → 発表終了で 一気に 全部 orange → 超過で 全部 red) に 塗ってた。
-  //     視覚的に 「発表中の 進捗 (=青)」 が 質疑帯 に 入った 瞬間 消えて 混乱。
+  // v917 「発表終了後は全部黄色になってしまう / ベル区切りが消える」修正 (ユーザ報告)。
+  //   従来: bar 全体を 1 色 (primary → 発表終了で一気に全部 orange → 超過で全部 red) に塗ってた。
+  //     視覚的に「発表中の進捗 (=青)」が質疑帯に入った瞬間消えて混乱。
   //   修正: bar 内部を multi-color gradient に。 0 → endBell は primary、 endBell → maxBell は orange、
-  //     maxBell → tip は red。 加えて ベル区切り 縦線 (parent の 背景 で 描いていた もの) を bar coord に 再マップして
-  //     bar の 上にも 重ねる → 進捗が 塗り 潰しても 区切り が 消えない。
+  //     maxBell → tip は red。加えてベル区切り縦線 (parent の背景で描いていたもの) を bar coord に再マップして
+  //     bar の上にも重ねる → 進捗が塗り潰しても区切りが消えない。
   {
     const primaryCol = 'var(--primary)';
     const orangeCol  = '#f59e0b';
@@ -919,13 +935,13 @@ function tickTimer() {
       const endInBar = Math.min(100, (endBellSec / visualEndSec) * 100);
       const maxInBar = Math.min(100, (maxBellSec / visualEndSec) * 100);
       if (maxInBar >= 99.5) {
-        // maxBell == visualEnd の 一般ケース: red 区間 は ゼロ (bar 上に 超過 は 出ない、 数字 だけが 赤に)
+        // maxBell == visualEnd の一般ケース: red 区間はゼロ (bar 上に超過は出ない、数字だけが赤に)
         colorGradient = `${primaryCol} 0%, ${primaryCol} ${endInBar.toFixed(2)}%, ${orangeCol} ${endInBar.toFixed(2)}%, ${orangeCol} 100%`;
       } else {
         colorGradient = `${primaryCol} 0%, ${primaryCol} ${endInBar.toFixed(2)}%, ${orangeCol} ${endInBar.toFixed(2)}%, ${orangeCol} ${maxInBar.toFixed(2)}%, ${redCol} ${maxInBar.toFixed(2)}%, ${redCol} 100%`;
       }
     }
-    // ベル区切り縦線 を bar 内部 に 再マップ。 bar の 幅 = barWidthSec に 対する 相対位置。
+    // ベル区切り縦線を bar 内部に再マップ。 bar の幅 = barWidthSec に対する相対位置。
     const barTicks = [];
     if (tmBells && tmBells.length && barWidthSec > 0) {
       for (const b of tmBells) {
