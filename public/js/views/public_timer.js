@@ -9,7 +9,7 @@ let _tickTimer = null;
 let _pollTimer = null;
 let _state = null;
 let _serverOffsetMs = 0;
-let _liveImg = null;   // v1341 cast の 自動更新 ハンドル (stop 用)
+let _liveImg = null;   // v1341 cast の自動更新ハンドル (stop 用)
 let _liveImgUrl = null;
 
 function stopAll() {
@@ -70,10 +70,10 @@ export async function renderPublicTimer({ params }) {
       #pt-bar-bg { width:80vw; max-width:1100px; height:clamp(10px, 1.6vw, 22px);
                    margin:18px 0 4px; border-radius:8px; overflow:hidden; position:relative; background:#222 }
       #pt-bar-fill { height:100%; width:0%; transition:width 0.4s linear; background:#3b82f6 }
-      /* v1335 タイマー画像 (ハッカソン 等 で 「今 何 を やっている か」 の 表示)。
-         画面 幅 に 応じて time の 下 (狭い) or right area で 大きく (広い) 表示 したい が、
-         MVP は time の 下 に 中央 揃え で 出す (中村さん 「下 とか 右 とか スペース の ある ところ」)。
-         画像 有り の 時 は time サイズ を 少し 抑えて 縦 に 収める。 */
+      /* v1335 タイマー画像 (ハッカソン等で「今何をやっているか」の表示)。
+         画面幅に応じて time の下 (狭い) or right area で大きく (広い) 表示したいが、
+         MVP は time の下に中央揃えで出す (中村さん「下とか右とかスペースのあるところ」)。
+         画像有りの時は time サイズを少し抑えて縦に収める。 */
       #pt-image-wrap { display:flex; justify-content:center; margin:14px 0 0; width:100vw }
       #pt-image { max-width:min(80vw, 1000px); max-height:35vh; border-radius:10px; object-fit:contain; box-shadow:0 4px 20px rgba(0,0,0,0.4) }
       body.pt-has-image #pt-time { font-size:min(20vw, 55vh) }
@@ -86,9 +86,31 @@ export async function renderPublicTimer({ params }) {
       <div class="bell-row" id="pt-bells"></div>
       <div id="pt-image-wrap" hidden><img id="pt-image" src="" alt=""></div>
     </div>
+    <!-- v1353 fb#525 中村さん報告「パブリックタイマーがスクリーンロックかかってしまう」
+         navigator.wakeLock.request('screen') は user gesture 直後でないと iOS/Safari で
+         NotAllowedError で silently失敗する。default表示のbuttonを一度タップしてもらって
+         wakeLock を確実に取る。armed後は自動でhide + visibilitychange で再取得。 -->
+    <button id="pt-wake-arm" style="position:fixed; top:10px; right:10px; z-index:100;
+      padding:10px 16px; background:rgba(251,191,36,0.95); color:#000; border:none;
+      border-radius:8px; font-size:15px; font-weight:700; cursor:pointer;
+      box-shadow:0 2px 8px rgba(0,0,0,0.4)">⚠ タップでスリープ防止ON</button>
   `;
-  // v683 #266 タブレットを演台に置く想定なので常時 wake lock を取得
+  // v1353 wakelock は user gesture 直後でないと iOS Safari 等で失敗するので、
+  //   button/画面タップで acquire に切替。初回にも念のため呼ぶ (PC ブラウザは通る)。
   acquireWakeLock('public-timer');
+  const armBtn = document.getElementById('pt-wake-arm');
+  const armWake = async () => {
+    await acquireWakeLock('public-timer');
+    if (armBtn) {
+      armBtn.textContent = '🔒 スリープ防止ON';
+      armBtn.style.background = 'rgba(16,185,129,0.85)';
+      armBtn.style.color = '#fff';
+      setTimeout(() => { if (armBtn) armBtn.style.display = 'none'; }, 2500);
+    }
+  };
+  if (armBtn) armBtn.addEventListener('click', armWake);
+  // 画面 (pt-wrap) のどこをタップしても arm される (button 非表示後の保険)
+  document.getElementById('pt-wrap')?.addEventListener('click', armWake, { once: false });
   try {
     const d = await fetchState(id);
     _state = d.timer;
@@ -99,11 +121,11 @@ export async function renderPublicTimer({ params }) {
     render();
     _tickTimer = setInterval(() => {
       render();
-      // v971.1 「画面 が スリープ してしまう」 対策: OS が sentinel を 解放 して いた 場合、
-      //   毎 tick 見に行って 再取得 (acquire は cheap — 既に 保持 中 なら 即 return)。
+      // v971.1 「画面がスリープしてしまう」対策: OS が sentinel を解放していた場合、
+      //   毎 tick 見に行って再取得 (acquire は cheap — 既に保持中なら即 return)。
       if (document.visibilityState === 'visible') acquireWakeLock('public-timer');
     }, 1000);
-    // v971.1 poll を 5s → 2s に (「更新頻度 低い、 もう少し 上げて」)
+    // v971.1 poll を 5s → 2s に (「更新頻度低い、もう少し上げて」)
     _pollTimer = setInterval(async () => {
       try {
         const d2 = await fetchState(id);
@@ -136,8 +158,8 @@ function render() {
   if (!_state) return;
   const t = _state;
   document.getElementById('pt-title').textContent = t.title || '🛎 タイマー';
-  // v1335 タイマー画像 (ハッカソン 等 で 「今 何 を やっている か」 の 参加者 向け 表示)
-  // v1341 cast (cast.nkmr.io/shot/<token>.jpg) の 場合 は 5秒毎 に 自動更新 (live_image.js)
+  // v1335 タイマー画像 (ハッカソン等で「今何をやっているか」の参加者向け表示)
+  // v1341 cast (cast.nkmr.io/shot/<token>.jpg) の場合は 5秒毎に自動更新 (live_image.js)
   const imgWrap = document.getElementById('pt-image-wrap');
   const imgEl   = document.getElementById('pt-image');
   if (t.image_url) {
@@ -156,7 +178,7 @@ function render() {
 
   // v684 #267 3 フェーズ表示:
   //   ① 発表終了 (= end_bell) まで: カウントダウン
-  //   ② 発表終了 〜 最後のベル: 0:00 から上にカウント
+  //   ② 発表終了〜最後のベル: 0:00 から上にカウント
   //   ③ 最後のベルを越えたら「+MM:SS」超過
   const allBells = [t.bell1_seconds, t.bell2_seconds, t.bell3_seconds];
   const bells = allBells.filter(b => b !== null && b !== undefined && b > 0);
