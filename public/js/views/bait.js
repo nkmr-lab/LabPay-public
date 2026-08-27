@@ -454,9 +454,17 @@ async function openBaitFundModal({ assignmentId, title, hours, period }) {
     </div>
   `;
   const close = () => { root.innerHTML = ''; };
-  root.querySelectorAll('[data-bf-close]').forEach(el => el.addEventListener('click', (e) => {
-    if (e.target === el || e.currentTarget === el) close();
-  }));
+  // v1356 fb#526 メンバー15さん報告「選択とかをクリックしようとすると消えてしまいます」
+  //   原因: 旧コード `if (e.target === el || e.currentTarget === el) close()` は
+  //   `e.currentTarget === el` が 常に true (currentTarget は listener の el 自身)
+  //   なので、 内側の select/input を クリック→bubble up→overlay の handler 発火→
+  //   常に close 実行。 button (× / やめる) と overlay を分離、 overlay は
+  //   「背景自身の クリック」 (= e.target === overlay、 内側の bubble は除外) のみ close。
+  root.querySelectorAll('button[data-bf-close]').forEach(el => el.addEventListener('click', close));
+  const overlay = root.querySelector('div[data-bf-close]');
+  if (overlay) overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
   // amount preview
   const updatePreview = () => {
     const h  = Number(document.getElementById('bf-hourly').value) || 0;
