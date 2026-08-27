@@ -133,7 +133,7 @@ export async function renderSell() {
         <label class="field">
           <span class="lbl">販売期限 (任意・無指定なら無期限)</span>
           <input type="datetime-local" id="expires_at">
-          <span class="hint-sm">期限を過ぎると自動で「取り下げ」になります。</span>
+          <span class="hint-sm">期限を過ぎると自動で「削除」されます (削除済み一覧から復元可)。</span>
         </label>
         <h3 style="margin:6px 0">出品条件</h3>
         <label style="display:flex; align-items:center; gap:10px; margin:4px 0 10px">
@@ -225,14 +225,14 @@ export async function renderSell() {
     <!-- ============= 出品管理 ============= -->
     <div class="card">
       <h3>出品管理</h3>
-      <p class="hint">価格変更・在庫補充・取り下げ。</p>
+      <p class="hint">価格変更・在庫補充・削除。</p>
       <!-- v1354 fb 中村さん要望「自分が出品しているもので、今切れている商品一覧を見れるように」
            status で絞り込むフィルタ chip。デフォルトは販売中+在庫切れ (取り下げは除く)。 -->
       <div id="my-list-filter" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:8px; font-size:12px">
         <button class="btn" data-mlf="active"    style="padding:2px 10px">🛒 販売中+切れ</button>
         <button class="btn" data-mlf="on_sale"   style="padding:2px 10px">🟢 販売中のみ</button>
         <button class="btn" data-mlf="sold_out"  style="padding:2px 10px">⚠ 在庫切れのみ</button>
-        <button class="btn" data-mlf="withdrawn" style="padding:2px 10px">🗑 取り下げ</button>
+        <button class="btn" data-mlf="withdrawn" style="padding:2px 10px">🗑 削除済み</button>
         <button class="btn" data-mlf="all"       style="padding:2px 10px">📋 全部</button>
         <span class="hint-sm" id="my-list-count" style="margin-left:auto; color:#6b7280"></span>
       </div>
@@ -643,7 +643,7 @@ function listingTags(l) {
   const statusTag = ({
     on_sale:   '<span class="tag">販売中</span>',
     sold_out:  '<span class="tag warn">在庫切れ</span>',
-    withdrawn: '<span class="tag muted">取り下げ</span>',
+    withdrawn: '<span class="tag muted">削除済み</span>',
   })[l.status] || '';
   const locTag = l.location ? `<span class="tag muted" style="margin-left:4px">📍 ${escapeHtml(l.location)}</span>` : '';
   const giftTag = l.is_gift ? `<span class="tag" style="margin-left:4px; background:#fce4ec; color:#b71c50">🎁</span>` : '';
@@ -670,10 +670,10 @@ function renderSummaryRow(l) {
        </div>`
     : `<div style="width:48px; height:48px; border-radius:6px; background:#f1f1f4; flex:0 0 auto"></div>`;
   const actions = l.status === 'withdrawn'
-    ? `<button data-action="repost" data-id="${l.id}" class="primary">再出品</button>
+    ? `<button data-action="repost" data-id="${l.id}" class="primary">🔄 復元</button>
        <button data-action="hard_delete" data-id="${l.id}" class="danger">完全削除</button>`
     : `<button data-action="edit-start" data-id="${l.id}">編集</button>
-       <button data-action="withdraw" data-id="${l.id}" class="danger">取り下げ</button>`;
+       <button data-action="withdraw" data-id="${l.id}" class="danger">🗑 削除</button>`;
   return `
     <div class="list-item sell-row" data-id="${l.id}" style="align-items:center; gap:10px">
       ${thumb}
@@ -848,12 +848,12 @@ async function onAction(btn) {
       const res = await post('/api/listings/' + id + '/consume', { qty: 1 });
       toast(`消費しました (在庫 ${res.qty_remaining})`);
     } else if (action === 'withdraw') {
-      if (!confirm('この出品を取り下げますか? (購入実績が無ければ後で完全削除も可能)')) return;
+      if (!confirm('この出品を削除しますか? (販売中の一覧から見えなくなります。「🗑 削除済み」フィルタから 復元 or 完全削除できます)')) return;
       await del('/api/listings/' + id);
-      toast('取り下げました');
+      toast('削除しました');
     } else if (action === 'repost') {
       await patch('/api/listings/' + id, { status: 'on_sale' });
-      toast('再出品しました');
+      toast('復元しました');
     } else if (action === 'hard_delete') {
       if (!confirm('この出品を完全削除しますか? (DB から行ごと消去。購入実績があるものは削除できません)')) return;
       await del('/api/listings/' + id, { hard: 1 });
