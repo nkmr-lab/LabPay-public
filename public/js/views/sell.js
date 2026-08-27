@@ -47,6 +47,29 @@ function readLocation(prefix) {
   return sel.value;
 }
 
+// v1354 fb 中村さん要望「出品したものの置き場所を変更したいときにテキストボックスになってしまう。
+//   リストから選択したい」。 renderEditRow 用の select+「その他」自由入力の HTML を生成。
+//   現在値が LOCATIONS にあればその option を selected、無ければ「その他」を selected + text 表示。
+function locationEditFieldHtml(l) {
+  const cur = String(l.location ?? '');
+  const isPreset = LOCATIONS.includes(cur);
+  const opts = LOCATIONS.map(loc =>
+    `<option value="${escapeHtml(loc)}"${loc === cur ? ' selected' : ''}>${escapeHtml(loc)}</option>`
+  ).join('');
+  const otherSelected = cur !== '' && !isPreset;
+  return `
+    <select data-loc-sel="${l.id}" style="width:100%">
+      <option value=""${cur === '' ? ' selected' : ''}>— 未設定 —</option>
+      ${opts}
+      <option value="__other__"${otherSelected ? ' selected' : ''}>その他 (自由入力)</option>
+    </select>
+    <input type="text" maxlength="100" data-loc-other="${l.id}"
+           value="${otherSelected ? escapeHtml(cur) : ''}"
+           placeholder="場所を自由に入力"
+           style="width:100%; margin-top:6px${otherSelected ? '' : '; display:none'}">
+  `;
+}
+
 // Bind the "これどうぞ!" checkbox to the price field visibility. When checked,
 // the price input is hidden; submitListing passes is_gift=true and the server
 // forces price=0.
@@ -203,6 +226,16 @@ export async function renderSell() {
     <div class="card">
       <h3>出品管理</h3>
       <p class="hint">価格変更・在庫補充・取り下げ。</p>
+      <!-- v1354 fb 中村さん要望「自分が出品しているもので、今切れている商品一覧を見れるように」
+           status で絞り込むフィルタ chip。デフォルトは販売中+在庫切れ (取り下げは除く)。 -->
+      <div id="my-list-filter" class="row" style="gap:6px; flex-wrap:wrap; margin-bottom:8px; font-size:12px">
+        <button class="btn" data-mlf="active"    style="padding:2px 10px">🛒 販売中+切れ</button>
+        <button class="btn" data-mlf="on_sale"   style="padding:2px 10px">🟢 販売中のみ</button>
+        <button class="btn" data-mlf="sold_out"  style="padding:2px 10px">⚠ 在庫切れのみ</button>
+        <button class="btn" data-mlf="withdrawn" style="padding:2px 10px">🗑 取り下げ</button>
+        <button class="btn" data-mlf="all"       style="padding:2px 10px">📋 全部</button>
+        <span class="hint-sm" id="my-list-count" style="margin-left:auto; color:#6b7280"></span>
+      </div>
       <div id="my-list" class="list"><div class="muted">読み込み中…</div></div>
     </div>
   `;
@@ -220,6 +253,15 @@ export async function renderSell() {
   document.getElementById('nj-submit'    ).addEventListener('click', () => submitListing('no_jan'));
   document.getElementById('preview-listing').addEventListener('click', () => openSellPreview('jan'));
   document.getElementById('nj-preview'    ).addEventListener('click', () => openSellPreview('no_jan'));
+
+  // v1354 filter chip の click bind (1度で十分)
+  document.querySelectorAll('#my-list-filter [data-mlf]').forEach(b => {
+    b.addEventListener('click', async () => {
+      myListingsFilter = b.dataset.mlf;
+      try { localStorage.setItem('labpay-my-listings-filter', myListingsFilter); } catch (_) {}
+      await loadMyListings();
+    });
+  });
 
   await loadMyListings();
   window.addEventListener('hashchange', stopCurrent, { once: true });
@@ -498,20 +540,62 @@ async function doLookup(jan) {
 // the rest render a compact summary with [編集] / [取り下げ]. Module-level so
 // the state survives re-renders triggered by 更新 etc.
 const editingIds = new Set();
+// v1354 fb 中村さん要望「在庫切れ商品を見えるように」。デフォルトは販売中+在庫切れを出す。
+let myListingsFilter = (() => {
+  try { return localStorage.getItem('labpay-my-listings-filter') || 'active'; }
+  catch (_) { return 'active'; }
+})();
+
+function myListingsFilterFn(l) {
+  switch (myListingsFilter) {
+    case 'on_sale':   return l.status === 'on_sale';
+    case 'sold_out':  return l.status === 'sold_out';
+    case 'withdrawn': return l.status === 'withdrawn';
+    case 'all':       return true;
+    case 'active':
+    default:          return l.status === 'on_sale' || l.status === 'sold_out';
+  }
+}
 
 async function loadMyListings() {
   try {
     const data = await get('/api/me/listings');
     const root = document.getElementById('my-list');
+    // v1354 filter chip の active見た目とカウント表示を同期
+    document.querySelectorAll('#my-list-filter [data-mlf]').forEach(b => {
+      b.classList.toggle('primary', b.dataset.mlf === myListingsFilter);
+    });
     if (!data.items.length) {
       root.innerHTML = `<div class="empty">まだ出品がありません</div>`;
+      const cEl = document.getElementById('my-list-count');
+      if (cEl) cEl.textContent = '';
       return;
     }
-    root.innerHTML = data.items.map(l =>
+    const total = data.items.length;
+    const soldOutTotal = data.items.filter(l => l.status === 'sold_out').length;
+    const shown = data.items.filter(myListingsFilterFn);
+    const cEl = document.getElementById('my-list-count');
+    if (cEl) cEl.textContent = `表示 ${shown.length} / 全 ${total}${soldOutTotal ? ` (⚠ 在庫切れ ${soldOutTotal})` : ''}`;
+    if (!shown.length) {
+      root.innerHTML = `<div class="empty">この条件に合う出品はありません</div>`;
+      return;
+    }
+    root.innerHTML = shown.map(l =>
       editingIds.has(l.id) ? renderEditRow(l) : renderSummaryRow(l)
     ).join('');
     root.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => onAction(btn));
+    });
+    // v1354 置き場所 select の「その他」切替 (自由入力 text を toggle)
+    root.querySelectorAll('[data-loc-sel]').forEach(sel => {
+      const id = sel.dataset.locSel;
+      const other = root.querySelector(`[data-loc-other="${id}"]`);
+      const sync = () => {
+        if (!other) return;
+        other.style.display = sel.value === '__other__' ? '' : 'none';
+        if (sel.value !== '__other__') other.value = '';
+      };
+      sel.addEventListener('change', sync);
     });
     // 画像差し替え: ファイル選択するだけで自動 upload + PATCH。
     root.querySelectorAll('[data-img-file]').forEach(input => {
@@ -666,7 +750,7 @@ function renderEditRow(l) {
         ${fieldRow('在庫',     `<input type="number" min="0" value="${l.qty}" data-qty="${l.id}">`)}
         ${fieldRow('出品名',   `<input type="text" maxlength="200" value="${escapeHtml(l.display_name ?? '')}" data-dname="${l.id}" placeholder="空欄なら「${escapeHtml(productName)}」">`)}
         ${fieldRow('商品名',   `<input type="text" maxlength="200" value="${escapeHtml(productName)}" data-pname="${l.id}">`)}
-        ${fieldRow('置き場所', `<input type="text" maxlength="100" value="${escapeHtml(l.location ?? '')}" data-loc="${l.id}" placeholder="例: 10階冷蔵庫">`)}
+        ${fieldRow('置き場所', locationEditFieldHtml(l), 'flex-start')}
         ${fieldRow('メッセージ',
           `<textarea data-cmsg="${l.id}" maxlength="2000" rows="2" placeholder="購入時のメッセージ (任意)">${escapeHtml(l.completion_message ?? '')}</textarea>`,
           'flex-start')}
@@ -712,15 +796,22 @@ async function onAction(btn) {
       const priceEl = document.querySelector(`[data-price="${id}"]`);
       const dnameEl = document.querySelector(`[data-dname="${id}"]`);
       const pnameEl = document.querySelector(`[data-pname="${id}"]`);
-      const locEl   = document.querySelector(`[data-loc="${id}"]`);
+      // v1354 置き場所は select + 「その他」で自由入力。 select 値が __other__ なら
+      //   text 側を採用、それ以外は select 値 (空 or preset) をそのまま。
+      const locSelEl   = document.querySelector(`[data-loc-sel="${id}"]`);
+      const locOtherEl = document.querySelector(`[data-loc-other="${id}"]`);
       const cmsgEl  = document.querySelector(`[data-cmsg="${id}"]`);
 
       const qty = Number(qtyEl.value);
       if (!(qty >= 0)) return toast('在庫は0以上');
+      let locVal = '';
+      if (locSelEl) {
+        locVal = locSelEl.value === '__other__' ? (locOtherEl?.value || '').trim() : (locSelEl.value || '');
+      }
       const listingPatch = {
         qty,
         display_name:       dnameEl.value.trim() || null,
-        location:           locEl.value.trim()   || null,
+        location:           locVal || null,
         completion_message: cmsgEl.value.trim()  || null,
       };
       // Gift listings hide the price input; only attach price when it's there.
